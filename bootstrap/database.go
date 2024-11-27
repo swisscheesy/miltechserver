@@ -1,25 +1,20 @@
 package bootstrap
 
 import (
-	"context"
+	"fmt"
+	"log"
 	"miltechserver/prisma/db"
 )
 
-type PrismaDB struct {
-	Client  *db.PrismaClient
-	Context context.Context
-}
-
-var PClient = &PrismaDB{}
-
-func ConnectDB() (*PrismaDB, error) {
+func NewPrismaClient(env *Env) *db.PrismaClient {
 	client := db.NewClient()
-	if err := client.Prisma.Connect(); err != nil {
-		return nil, err
+	_ = fmt.Sprintf("Connecgting to Database: %s", env.ServerAddress)
+
+	if err := client.Connect(); err != nil {
+		log.Fatalf("Unable to connect to database: %s", err)
 	}
 
-	PClient.Client = client
-	PClient.Context = context.Background()
-	return PClient, nil
+	log.Println("Connected to Database!")
 
+	return client
 }

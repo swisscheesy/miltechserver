@@ -6,8 +6,7 @@ generator db {
 
 datasource db {
   provider = "postgresql"
-  //url      = "postgresql://postgres:potato123@127.0.0.1:5432/miltech_ng"
-  url = "postgresql://postgres:potato123@192.168.20.70:5432/rel_test"
+  url = env("DATABASE_URL")
 }
 
 model air_force_management {
