@@ -19,13 +19,6 @@ func main() {
 
 	route.Setup(env, timeout, db, server)
 
-	//pDB, dbErr := bootstrap.ConnectDB()
-	//if dbErr != nil {
-	//	log.Fatal("Cannot connect to database")
-	//}
-
-	//defer pDB.Client.Disconnect()
-
 	err := server.Run(":8080")
 	if err != nil {
 		return

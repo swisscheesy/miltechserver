@@ -11,4 +11,5 @@ func Setup(env *bootstrap.Env, timeout time.Duration, db *db.PrismaClient, gin *
 	publicRouter := gin.Group("")
 	// All Public Routes
 	NewDebugRouter(env, timeout, db, publicRouter)
+	NewItemQueryRouter(db, publicRouter)
 }
