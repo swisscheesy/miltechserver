@@ -2,14 +2,14 @@ package route
 
 import (
 	"github.com/gin-gonic/gin"
-	"miltechserver/bootstrap"
+	"miltechserver/api/middleware"
 	"miltechserver/prisma/db"
-	"time"
 )
 
-func Setup(env *bootstrap.Env, timeout time.Duration, db *db.PrismaClient, gin *gin.Engine) {
+func Setup(db *db.PrismaClient, gin *gin.Engine) {
 	publicRouter := gin.Group("")
+	publicRouter.Use(middleware.ErrorHandler)
+	//publicRouter.Use(middleware.LoggerMiddleware())
 	// All Public Routes
-	NewDebugRouter(env, timeout, db, publicRouter)
 	NewItemQueryRouter(db, publicRouter)
 }

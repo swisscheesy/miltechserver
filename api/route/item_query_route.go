@@ -14,7 +14,7 @@ func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 		ItemQueryService: service.NewItemQueryServiceImpl(
 			ur),
 	}
-	group.GET("/item_query/niin", pc.FindShortByNiin)
+	group.GET("/item_query/", pc.FindShort)
 
 	//router.GET("/item_query", func(c *gin.Context) {
 	//	c.JSON(200, gin.H{

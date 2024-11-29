@@ -1,12 +1,11 @@
-
-
 generator db {
-  provider = "go run github.com/steebchen/prisma-client-go"
+  provider        = "go run github.com/steebchen/prisma-client-go"
+  previewFeatures = ["views"]
 }
 
 datasource db {
   provider = "postgresql"
-  url = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 model air_force_management {
@@ -848,4 +847,18 @@ model users {
   user_items_categorized user_items_categorized[]
   user_items_quick       user_items_quick[]
   user_items_serialized  user_items_serialized[]
+}
+
+view niin_lookup {
+  niin      String   @unique @db.VarChar(10)
+  fsc       String?  @db.VarChar(255)
+  item_name String?  @db.VarChar(255)
+  has_amdf  Boolean?
+  has_flis  Boolean?
+}
+
+view lookup_lin_niin {
+  niin      String  @unique @db.VarChar(10)
+  item_name String? @db.VarChar(255)
+  lin       String? @db.VarChar(255)
 }
