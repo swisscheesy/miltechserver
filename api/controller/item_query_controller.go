@@ -2,15 +2,16 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"miltechserver/api/service"
+	"miltechserver/model"
 	"miltechserver/model/response"
-	"miltechserver/service"
 )
 
 type ItemQueryController struct {
-	ItemQueryService service.ItemQueryService
+	ItemQueryService service.ItemShortService
 }
 
-func NewItemQueryController(itemQueryService service.ItemQueryService) *ItemQueryController {
+func NewItemQueryController(itemQueryService service.ItemShortService) *ItemQueryController {
 	return &ItemQueryController{ItemQueryService: itemQueryService}
 }
 
@@ -18,7 +19,8 @@ func (controller *ItemQueryController) FindShort(c *gin.Context) {
 	method := c.Query("method")
 	value := c.Query("value")
 
-	if method == "niin" {
+	switch method {
+	case "niin":
 		result, err := controller.ItemQueryService.FindShortByNiin(c, value)
 		if err != nil {
 			c.Error(err)
@@ -29,8 +31,7 @@ func (controller *ItemQueryController) FindShort(c *gin.Context) {
 				Data:    result,
 			})
 		}
-
-	} else if method == "part" {
+	case "part":
 		result, err := controller.ItemQueryService.FindShortByPart(c, value)
 		if err != nil {
 			c.Error(err)
@@ -54,6 +55,23 @@ func (controller *ItemQueryController) FindShortByNiin(c *gin.Context, niin stri
 			Status:  200,
 			Message: "",
 			Data:    result,
+		})
+	}
+
+}
+
+func (controller *ItemQueryController) FindDetailed(c *gin.Context) {
+	niin := c.Query("niin")
+	_, err := controller.ItemQueryService.FindAmdfData(c, niin)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		amdf := model.DetailedItem{}
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    amdf,
 		})
 	}
 

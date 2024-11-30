@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"miltechserver/model"
 	"miltechserver/prisma/db"
 )
@@ -43,6 +44,8 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(ctx context.Context, pa
 
 	if err != nil {
 		return []model.ShortItem{}, err
+	} else if len(parts) == 0 {
+		return []model.ShortItem{}, errors.New(db.ErrNotFound.Error())
 	} else {
 		var items []model.ShortItem
 
@@ -73,6 +76,24 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(ctx context.Context, pa
 	}
 }
 
+func (repo *ItemQueryRepositoryImpl) DetailedItemSearchNiin(ctx context.Context, niin string) (model.DetailedItem, error) {
+	_, err := repo.GetAmdfData(ctx, niin)
+	data := model.DetailedItem{
+		//Amdf: amdf,
+	}
+	return data, err
+}
+
+func (repo *ItemQueryRepositoryImpl) GetAmdfData(ctx context.Context, niin string) (db.ArmyMasterDataFileModel, error) {
+	data, err := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
+
+	if err != nil {
+		return db.ArmyMasterDataFileModel{}, err
+	} else {
+		return *data, nil
+	}
+}
+
 // DoesAmdfExist Helper function to query the database for the existence of AMDF data for a given NIIN
 func (repo *ItemQueryRepositoryImpl) DoesAmdfExist(ctx context.Context, niin string) (bool, error) {
 	amdf, err := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
@@ -94,8 +115,3 @@ func (repo *ItemQueryRepositoryImpl) DoesFlisExist(ctx context.Context, niin str
 		return flis != nil, nil
 	}
 }
-
-//func (repo *ItemQueryRepositoryImpl) DetailedItemSearchNiin(ctx context.Context, niin string) (response.StandardResponse, error) {
-//	// Implementation here
-//	return response.StandardResponse{}, nil
-//}

@@ -7,9 +7,9 @@ import (
 )
 
 func Setup(db *db.PrismaClient, gin *gin.Engine) {
-	publicRouter := gin.Group("")
-	publicRouter.Use(middleware.ErrorHandler)
-	//publicRouter.Use(middleware.LoggerMiddleware())
+	v1Route := gin.Group("/api/v1")
+	v1Route.Use(middleware.ErrorHandler)
+	//v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
-	NewItemQueryRouter(db, publicRouter)
+	NewItemQueryRouter(db, v1Route)
 }

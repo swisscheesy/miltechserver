@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"miltechserver/api/controller"
 	"miltechserver/api/repository"
+	"miltechserver/api/service"
 	"miltechserver/prisma/db"
-	"miltechserver/service"
 )
 
 func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
@@ -14,7 +14,8 @@ func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 		ItemQueryService: service.NewItemQueryServiceImpl(
 			ur),
 	}
-	group.GET("/item_query/", pc.FindShort)
+	group.GET("/queries/items/initial", pc.FindShort)
+	group.GET("/queries/items/detailed", pc.FindDetailed)
 
 	//router.GET("/item_query", func(c *gin.Context) {
 	//	c.JSON(200, gin.H{
