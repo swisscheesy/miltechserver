@@ -9,10 +9,13 @@ import (
 )
 
 func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
-	ur := repository.NewItemQueryRepositoryImpl(db)
+	itemQueryRepo := repository.NewItemQueryRepositoryImpl(db)
+	itemDetailedRepo := repository.NewItemDetailedRepositoryImpl(db)
 	pc := &controller.ItemQueryController{
 		ItemQueryService: service.NewItemQueryServiceImpl(
-			ur),
+			itemQueryRepo),
+		ItemDetailedService: service.NewItemDetailedServiceImpl(
+			itemDetailedRepo),
 	}
 	group.GET("/queries/items/initial", pc.FindShort)
 	group.GET("/queries/items/detailed", pc.FindDetailed)

@@ -3,16 +3,16 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"miltechserver/api/service"
-	"miltechserver/model"
 	"miltechserver/model/response"
 )
 
 type ItemQueryController struct {
-	ItemQueryService service.ItemShortService
+	ItemQueryService    service.ItemShortService
+	ItemDetailedService service.ItemDetailedService
 }
 
-func NewItemQueryController(itemQueryService service.ItemShortService) *ItemQueryController {
-	return &ItemQueryController{ItemQueryService: itemQueryService}
+func NewItemQueryController(itemQueryService service.ItemShortService, itemDetailedService service.ItemDetailedService) *ItemQueryController {
+	return &ItemQueryController{ItemQueryService: itemQueryService, ItemDetailedService: itemDetailedService}
 }
 
 func (controller *ItemQueryController) FindShort(c *gin.Context) {
@@ -62,16 +62,15 @@ func (controller *ItemQueryController) FindShortByNiin(c *gin.Context, niin stri
 
 func (controller *ItemQueryController) FindDetailed(c *gin.Context) {
 	niin := c.Query("niin")
-	_, err := controller.ItemQueryService.FindAmdfData(c, niin)
+	itemData, err := controller.ItemDetailedService.FindDetailedItem(c, niin)
 
 	if err != nil {
 		c.Error(err)
 	} else {
-		amdf := model.DetailedItem{}
 		c.JSON(200, response.StandardResponse{
 			Status:  200,
 			Message: "",
-			Data:    amdf,
+			Data:    itemData,
 		})
 	}
 
