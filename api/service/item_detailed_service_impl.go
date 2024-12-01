@@ -22,23 +22,10 @@ func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx context.Context, ni
 	identification, _ := service.ItemDetailedRepository.GetIdentification(ctx, niin)
 	management, _ := service.ItemDetailedRepository.GetManagement(ctx, niin)
 	reference, _ := service.ItemDetailedRepository.GetReference(ctx, niin)
-
-	//freight, err := service.GetFreight(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
-	//packaging, err := service.GetPackaging(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
-	//characteristics, err := service.GetCharacteristics(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
-	//disposition, err := service.GetDisposition(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
+	freight, _ := service.ItemDetailedRepository.GetFreight(ctx, niin)
+	packaging, _ := service.ItemDetailedRepository.GetPackaging(ctx, niin)
+	characteristics, _ := service.ItemDetailedRepository.GetCharacteristics(ctx, niin)
+	disposition, _ := service.ItemDetailedRepository.GetDisposition(ctx, niin)
 
 	return model.DetailedItem{
 		Amdf:                    amdf,
@@ -47,10 +34,10 @@ func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx context.Context, ni
 		Identification:          identification,
 		Management:              management,
 		Reference:               reference,
-		//Freight:                 freight,
-		//Packaging:               packaging,
-		//Characteristics:         characteristics,
-		//Disposition:             disposition,
+		Freight:                 freight,
+		Packaging:               packaging,
+		Characteristics:         characteristics,
+		Disposition:             disposition,
 	}, nil
 
 }

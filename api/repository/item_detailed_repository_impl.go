@@ -167,42 +167,57 @@ func (repo *ItemDetailedRepositoryImpl) GetReference(ctx context.Context, niin s
 
 }
 
-//func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx context.Context, niin string) (details.Freight, error) {
-//	data, err := repo.Db.Freight.FindFirst(db.Freight.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Freight{}, err
-//	}
-//	return details.Freight{
-//		// Map fields from data to details.Freight
-//	}, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx context.Context, niin string) (details.Packaging, error) {
-//	data, err := repo.Db.Packaging.FindFirst(db.Packaging.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Packaging{}, err
-//	}
-//	return details.Packaging{
-//		// Map fields from data to details.Packaging
-//	}, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx context.Context, niin string) (details.Characteristics, error) {
-//	data, err := repo.Db.Characteristics.FindFirst(db.Characteristics.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Characteristics{}, err
-//	}
-//	return details.Characteristics{
-//		// Map fields from data to details.Characteristics
-//	}, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx context.Context, niin string) (details.Disposition, error) {
-//	data, err := repo.Db.Disposition.FindFirst(db.Disposition.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Disposition{}, err
-//	}
-//	return details.Disposition{
-//		// Map fields from data to details.Disposition
-//	}, nil
-//}
+func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx context.Context, niin string) (details.Freight, error) {
+	flisFreightData, _ := repo.Db.FlisFreight.FindFirst(db.FlisFreight.Niin.Equals(niin)).Exec(ctx)
+
+	data := details.Freight{
+		FlisFreight: *flisFreightData,
+	}
+
+	return data, nil
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx context.Context, niin string) (details.Packaging, error) {
+	var cageAddressPlaceholder []db.CageAddressModel
+
+	flisPackaging1Data, _ := repo.Db.FlisPackaging1.FindMany(db.FlisPackaging1.Niin.Equals(niin)).Exec(ctx)
+	flisPackaging2Data, _ := repo.Db.FlisPackaging2.FindMany(db.FlisPackaging2.Niin.Equals(niin)).Exec(ctx)
+	dssWeightAndCubeData, _ := repo.Db.DssWeightAndCube.FindFirst(db.DssWeightAndCube.Niin.Equals(niin)).Exec(ctx)
+
+	if flisPackaging1Data != nil {
+		for _, part := range flisPackaging1Data {
+			cage, _ := part.PkgDesignActy()
+			cageData, _ := repo.Db.CageAddress.FindFirst(db.CageAddress.CageCode.Equals(cage)).Exec(ctx)
+			cageAddressPlaceholder = append(cageAddressPlaceholder, *cageData)
+		}
+	}
+
+	data := details.Packaging{
+		FlisPackaging1:   flisPackaging1Data,
+		FlisPackaging2:   flisPackaging2Data,
+		CageAddress:      cageAddressPlaceholder,
+		DssWeightAndCube: *dssWeightAndCubeData,
+	}
+
+	return data, nil
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx context.Context, niin string) (details.Characteristics, error) {
+	characteristicsData, _ := repo.Db.FlisItemCharacteristics.FindMany(db.FlisItemCharacteristics.Niin.Equals(niin)).Exec(ctx)
+
+	data := details.Characteristics{
+		Characteristics: characteristicsData,
+	}
+	return data, nil
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx context.Context, niin string) (details.Disposition, error) {
+	dispositionData, _ := repo.Db.Disposition.FindFirst(db.Disposition.Niin.Equals(niin)).Exec(ctx)
+
+	data := details.Disposition{
+		Disposition: dispositionData,
+	}
+
+	return data, nil
+}
