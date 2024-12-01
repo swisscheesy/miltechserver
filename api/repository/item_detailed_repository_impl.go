@@ -81,36 +81,92 @@ func (repo *ItemDetailedRepositoryImpl) GetSarsscat(ctx context.Context, niin st
 
 }
 
-//func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx context.Context, niin string) (details.Identification, error) {
-//	data, err := repo.Db.Identification.FindFirst(db.Identification.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Identification{}, err
-//	}
-//	return details.Identification{
-//		// Map fields from data to details.Identification
-//	}, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx context.Context, niin string) (details.Management, error) {
-//	data, err := repo.Db.Management.FindFirst(db.Management.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Management{}, err
-//	}
-//	return details.Management{
-//		// Map fields from data to details.Management
-//	}, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetReference(ctx context.Context, niin string) (details.Reference, error) {
-//	data, err := repo.Db.Reference.FindFirst(db.Reference.Niin.Equals(niin)).Exec(ctx)
-//	if err != nil {
-//		return details.Reference{}, err
-//	}
-//	return details.Reference{
-//		// Map fields from data to details.Reference
-//	}, nil
-//}
-//
+func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx context.Context, niin string) (details.Identification, error) {
+	var colloqNames []db.ColloquialNameModel
+	flisManagementIdData, _ := repo.Db.FlisManagementID.FindFirst(db.FlisManagementID.Niin.Equals(niin)).Exec(ctx)
+	flisStandardizationData, _ := repo.Db.FlisStandardization.FindMany(db.FlisStandardization.Niin.Equals(niin)).Exec(ctx)
+	FlisCancelledNiinData, _ := repo.Db.FlisCancelledNiin.FindMany(db.FlisCancelledNiin.Niin.Equals(niin)).Exec(ctx)
+
+	if flisManagementIdData != nil {
+		incPlacerholder, _ := flisManagementIdData.Inc()
+		if len(incPlacerholder) == 5 {
+			colloqNameData, _ := repo.Db.ColloquialName.FindMany(db.ColloquialName.Inc.Equals(incPlacerholder)).Exec(ctx)
+
+			for _, name := range colloqNameData {
+				colloqNames = append(colloqNames, name)
+			}
+		}
+	}
+
+	if flisManagementIdData == nil {
+		flisManagementIdData = &db.FlisManagementIDModel{}
+	}
+
+	data := details.Identification{
+		FlisManagementId:    *flisManagementIdData,
+		ColloquialNames:     colloqNames,
+		FlisStandardization: flisStandardizationData,
+		FlisCancelledNiin:   FlisCancelledNiinData,
+	}
+
+	return data, nil
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx context.Context, niin string) (details.Management, error) {
+	flisManData, _ := repo.Db.FlisManagement.FindMany(db.FlisManagement.Niin.Equals(niin)).Exec(ctx)
+	flisPhraseData, _ := repo.Db.FlisPhrase.FindMany(db.FlisPhrase.Niin.Equals(niin)).Exec(ctx)
+	componentEndItemData, _ := repo.Db.ComponentEndItem.FindMany(db.ComponentEndItem.Niin.Equals(niin)).Exec(ctx)
+	armyManagementData, _ := repo.Db.ArmyManagement.FindMany(db.ArmyManagement.Niin.Equals(niin)).Exec(ctx)
+	airForceManagementData, _ := repo.Db.AirForceManagement.FindFirst(db.AirForceManagement.Niin.Equals(niin)).Exec(ctx)
+	marineManagementData, _ := repo.Db.MarineCorpsManagement.FindMany(db.MarineCorpsManagement.Niin.Equals(niin)).Exec(ctx)
+	navyManagementData, _ := repo.Db.NavyManagement.FindFirst(db.NavyManagement.Niin.Equals(niin)).Exec(ctx)
+	faaManagementData, _ := repo.Db.FaaManagement.FindMany(db.FaaManagement.Niin.Equals(niin)).Exec(ctx)
+
+	data := details.Management{
+		FLisManagement:        flisManData,
+		FlisPhrase:            flisPhraseData,
+		ComponentEndItem:      componentEndItemData,
+		ArmyManagement:        armyManagementData,
+		AirForceManagement:    airForceManagementData,
+		MarineCorpsManagement: marineManagementData,
+		NavyManagement:        navyManagementData,
+		FaaManagement:         faaManagementData,
+	}
+
+	return data, nil
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetReference(ctx context.Context, niin string) (details.Reference, error) {
+	flisRefData, _ := repo.Db.FlisIdentification.FindUnique(db.FlisIdentification.Niin.Equals(niin)).Exec(ctx)
+	refAndPartData, _ := repo.Db.FlisReference.FindMany(db.FlisReference.Niin.Equals(niin)).Exec(ctx)
+
+	var cageAdressPlaceholder []db.CageAddressModel
+	var cageStatusAndTypePlaceholder []db.CageStatusAndTypeModel
+
+	if refAndPartData != nil {
+		for _, part := range refAndPartData {
+			cage, _ := part.CageCode()
+			cageData, _ := repo.Db.CageAddress.FindFirst(db.CageAddress.CageCode.Equals(cage)).Exec(ctx)
+			cageAdressPlaceholder = append(cageAdressPlaceholder, *cageData)
+
+			cageStatusData, _ := repo.Db.CageStatusAndType.FindFirst(db.CageStatusAndType.CageCode.Equals(cage)).Exec(ctx)
+			cageStatusAndTypePlaceholder = append(cageStatusAndTypePlaceholder, *cageStatusData)
+		}
+	}
+
+	data := details.Reference{
+		FlisReference:          flisRefData,
+		ReferenceAndPartNumber: refAndPartData,
+		CageAddresses:          cageAdressPlaceholder,
+		CageStatusAndType:      cageStatusAndTypePlaceholder,
+	}
+
+	return data, nil
+
+}
+
 //func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx context.Context, niin string) (details.Freight, error) {
 //	data, err := repo.Db.Freight.FindFirst(db.Freight.Niin.Equals(niin)).Exec(ctx)
 //	if err != nil {

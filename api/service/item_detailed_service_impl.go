@@ -19,19 +19,10 @@ func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx context.Context, ni
 
 	armypack, _ := service.ItemDetailedRepository.GetArmyPackagingAndFreight(ctx, niin)
 	sarsscat, _ := service.ItemDetailedRepository.GetSarsscat(ctx, niin)
+	identification, _ := service.ItemDetailedRepository.GetIdentification(ctx, niin)
+	management, _ := service.ItemDetailedRepository.GetManagement(ctx, niin)
+	reference, _ := service.ItemDetailedRepository.GetReference(ctx, niin)
 
-	//identification, err := service.GetIdentification(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
-	//management, err := service.GetManagement(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
-	//reference, err := service.GetReference(ctx, niin)
-	//if err != nil {
-	//	return model.DetailedItem{}, err
-	//}
 	//freight, err := service.GetFreight(ctx, niin)
 	//if err != nil {
 	//	return model.DetailedItem{}, err
@@ -53,9 +44,9 @@ func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx context.Context, ni
 		Amdf:                    amdf,
 		ArmyPackagingAndFreight: armypack,
 		Sarsscat:                sarsscat,
-		//Identification:          identification,
-		//Management:              management,
-		//Reference:               reference,
+		Identification:          identification,
+		Management:              management,
+		Reference:               reference,
 		//Freight:                 freight,
 		//Packaging:               packaging,
 		//Characteristics:         characteristics,
