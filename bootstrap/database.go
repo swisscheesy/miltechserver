@@ -7,7 +7,7 @@ import (
 
 func NewPrismaClient(env *Env) *db.PrismaClient {
 	client := db.NewClient()
-	slog.Info("Connecting to Database: %s", env.ServerAddress)
+	slog.Info("Connecting to Database")
 
 	if err := client.Connect(); err != nil {
 		slog.Error("Unable to connect to database: %s", err)

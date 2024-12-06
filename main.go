@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 	"log"
 	"miltechserver/api/route"
@@ -12,7 +13,8 @@ import (
 
 func main() {
 
-	app := bootstrap.App()
+	ctx := context.Background()
+	app := bootstrap.App(ctx)
 	db := app.PostgresDB
 
 	server := gin.Default()
