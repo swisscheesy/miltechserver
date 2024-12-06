@@ -8,7 +8,6 @@ import (
 )
 
 type Application struct {
-	Env        *Env
 	PostgresDB *db.PrismaClient
 	FireAuth   *auth.Client
 }
@@ -16,8 +15,7 @@ type Application struct {
 func App(ctx context.Context) Application {
 	slog.Info("Creating application")
 	app := &Application{}
-	app.Env = NewEnv()
-	app.PostgresDB = NewPrismaClient(app.Env)
+	app.PostgresDB = NewPrismaClient()
 	app.FireAuth = NewFireAuth(ctx)
 
 	return *app

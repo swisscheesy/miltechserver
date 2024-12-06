@@ -5,7 +5,7 @@ import (
 	"miltechserver/prisma/db"
 )
 
-func NewPrismaClient(env *Env) *db.PrismaClient {
+func NewPrismaClient() *db.PrismaClient {
 	client := db.NewClient()
 	slog.Info("Connecting to Database")
 

@@ -10,6 +10,12 @@ import (
 	"os"
 )
 
+type User struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Role     string `json:"role"`
+}
+
 func NewFirebaseApp(ctx context.Context) (*firebase.App, error) {
 	accountKey := os.Getenv("FIREBASE_AUTH_KEY")
 

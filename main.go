@@ -12,14 +12,25 @@ import (
 )
 
 func main() {
+	// Start the engine
 
+	engine := SetupEngine()
+
+	err := engine.Run(":8080")
+	if err != nil {
+		return
+	}
+
+}
+
+func SetupEngine() *gin.Engine {
 	ctx := context.Background()
 	app := bootstrap.App(ctx)
 	db := app.PostgresDB
 
 	server := gin.Default()
 
-	route.Setup(db, server)
+	route.Setup(db, server, app.FireAuth)
 
 	// Cleanup server on crash or interrupt
 	c := make(chan os.Signal, 1)
@@ -34,10 +45,5 @@ func main() {
 		os.Exit(1)
 	}()
 
-	// Start the server
-	err := server.Run(":8080")
-	if err != nil {
-		return
-	}
-
+	return server
 }
