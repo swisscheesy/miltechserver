@@ -17,7 +17,12 @@ func NewTestRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 	} **/
 
 	group.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"message": "You have access to this route"})
+		user, ok := c.Get("user")
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Unauthorized"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "You have access to this route", "user": user})
 	})
 
 	//router.GET("/item_query", func(c *gin.Context) {

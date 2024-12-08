@@ -5,6 +5,7 @@ import (
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
 	"log/slog"
+	"miltechserver/bootstrap"
 	"strings"
 	"time"
 )
@@ -15,14 +16,14 @@ func AuthenticationMiddleware(client *auth.Client) gin.HandlerFunc {
 
 		header := c.Request.Header.Get("Authorization")
 		if header == "" {
-			slog.Error("No Authorization header found")
+			slog.Error("", "auth_error", "no authorization header found")
 			c.JSON(401, gin.H{"message": "No Authorization header found"})
 			c.Abort()
 			return
 		}
 		idToken := strings.Split(header, "Bearer ")
 		if len(idToken) != 2 || len(idToken) == 0 {
-			slog.Error("Invalid Authorization header")
+			slog.Error("", "auth_error", "invalid authorization header")
 			c.JSON(401, gin.H{"message": "Invalid Authorization header"})
 			c.Abort()
 			return
@@ -30,15 +31,38 @@ func AuthenticationMiddleware(client *auth.Client) gin.HandlerFunc {
 
 		tokenID := idToken[1]
 
-		_, err := client.VerifyIDToken(context.Background(), tokenID)
+		token, err := client.VerifyIDToken(context.Background(), tokenID)
 		if err != nil {
-			slog.Error("Invalid token: %v", err)
+			slog.Error("Invalid token: ", "auth_error", err)
 			c.JSON(401, gin.H{"message": "Invalid token"})
 			c.Abort()
 			return
 		}
-		slog.Info("Auth time:", time.Since(startTime))
 
-		c.Next()
+		slog.Info("Auth process completed ", "auth_time", time.Since(startTime))
+
+		ProcessToken(c, client, token)
+		//c.Next()
 	}
+}
+
+func ProcessToken(c *gin.Context, auth *auth.Client, token *auth.Token) {
+	email, ok := token.Claims["email"].(string)
+	if !ok {
+		slog.Error("", "auth_error", "email not found in token")
+		c.JSON(401, gin.H{"message": "Email not found in token"})
+		c.Abort()
+		return
+	}
+
+	// role, ok := token.Claims["role"].(string)
+
+	user := &bootstrap.User{
+		UserID: token.UID,
+		Email:  email,
+	}
+	c.Set("user", user)
+
+	c.Next()
+
 }

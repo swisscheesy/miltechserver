@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"miltechserver/bootstrap"
 	"miltechserver/prisma/db"
+	"net/http"
 	"time"
 )
 
@@ -11,6 +12,7 @@ func NewDebugRouter(env *bootstrap.Env, timeout time.Duration, db *db.PrismaClie
 	// All Public Routes
 
 	group.GET("/ping", func(ctx *gin.Context) {
+		ctx.String(http.StatusOK, "user")
 		ctx.JSON(200, gin.H{
 			"message": "pong",
 		})
