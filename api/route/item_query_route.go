@@ -20,9 +20,4 @@ func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 	group.GET("/queries/items/initial", pc.FindShort)
 	group.GET("/queries/items/detailed", pc.FindDetailed)
 
-	//router.GET("/item_query", func(c *gin.Context) {
-	//	c.JSON(200, gin.H{
-	//		"message": "Hello World",
-	//	})
-	//})
 }

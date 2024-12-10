@@ -18,4 +18,5 @@ func Setup(db *db.PrismaClient, gin *gin.Engine, authClient *auth.Client) {
 	//v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
 	NewItemQueryRouter(db, v1Route)
+	NewItemLookupRouter(db, v1Route)
 }
