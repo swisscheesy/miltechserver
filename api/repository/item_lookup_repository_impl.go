@@ -6,6 +6,7 @@ import (
 	"miltechserver/model"
 	"miltechserver/prisma/db"
 	"strconv"
+	"strings"
 )
 
 var returnCount = 20
@@ -53,8 +54,54 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx context.Context, page i
 
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(ctx context.Context, lin string) ([]db.LookupLinNiinModel, error) {
-	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Niin.Contains(lin)).Exec(ctx)
+func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(ctx context.Context, niin string) ([]db.LookupLinNiinModel, error) {
+	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Niin.Contains(niin)).Exec(ctx)
 
 	return linData, nil
+}
+
+func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(ctx context.Context, lin string) ([]db.LookupLinNiinModel, error) {
+	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Lin.Contains(lin)).Exec(ctx)
+
+	return linData, nil
+}
+
+func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx context.Context, page int) (model.UOCPageResponse, error) {
+	uocData, _ := repo.Db.LookupUoc.
+		FindMany().
+		Take(returnCount).
+		Skip(returnCount * (page - 1)).
+		Exec(ctx)
+
+	var res []struct {
+		Count db.RawString
+	}
+	// TODO: Cache this count to avoid querying the database every time
+	// Also check error properly
+	_ = repo.Db.Prisma.QueryRaw("SELECT COUNT(*) FROM public.lookup_uoc").Exec(ctx, &res)
+
+	// TODO Handle this error properly as well
+	count, _ := strconv.Atoi(string(res[0].Count))
+
+	totalPages := math.Ceil(float64(count / 20))
+
+	return model.UOCPageResponse{
+		UOCs:       uocData,
+		Count:      count,
+		Page:       page,
+		TotalPages: int(totalPages),
+		IsLastPage: page == int(totalPages),
+	}, nil
+}
+
+func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(ctx context.Context, uoc string) ([]db.LookupUocModel, error) {
+	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Uoc.Contains(strings.ToUpper(uoc))).Exec(ctx)
+
+	return uocData, nil
+}
+
+func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx context.Context, model string) ([]db.LookupUocModel, error) {
+	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Model.Contains(strings.ToUpper(model))).Exec(ctx)
+
+	return uocData, nil
 }

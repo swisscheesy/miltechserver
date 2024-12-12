@@ -17,5 +17,10 @@ func NewItemLookupRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 	}
 	group.GET("/lookup/lin", pc.LookupLINByPage)
 	group.GET("/lookup/lin/:niin", pc.LookupLINByNIIN)
+	group.GET("/lookup/niin/:lin", pc.LookupNIINByLIN)
+
+	group.GET("/lookup/uoc", pc.LookupUOCByPage)
+	group.GET("/lookup/uoc/:uoc", pc.LookupSpecificUOC)
+	group.GET("/lookup/uoc/model/:model", pc.LookupUOCByModel)
 
 }
