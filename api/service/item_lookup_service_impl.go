@@ -1,7 +1,7 @@
 package service
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"miltechserver/api/repository"
 	"miltechserver/model"
 	"miltechserver/prisma/db"
@@ -16,7 +16,7 @@ func NewItemLookupServiceImpl(itemLookupRepository repository.ItemLookupReposito
 	return &ItemLookupServiceImpl{ItemLookupService: itemLookupRepository}
 }
 
-func (service *ItemLookupServiceImpl) LookupLINByPage(ctx context.Context, page int) (model.LINPageResponse, error) {
+func (service *ItemLookupServiceImpl) LookupLINByPage(ctx *gin.Context, page int) (model.LINPageResponse, error) {
 	linData, err := service.ItemLookupService.SearchLINByPage(ctx, page)
 
 	if err != nil {
@@ -27,7 +27,7 @@ func (service *ItemLookupServiceImpl) LookupLINByPage(ctx context.Context, page 
 
 }
 
-func (service *ItemLookupServiceImpl) LookupLINByNIIN(ctx context.Context, niin string) ([]db.LookupLinNiinModel, error) {
+func (service *ItemLookupServiceImpl) LookupLINByNIIN(ctx *gin.Context, niin string) ([]db.LookupLinNiinModel, error) {
 	linData, err := service.ItemLookupService.SearchLINByNIIN(ctx, niin)
 
 	if err != nil {
@@ -38,7 +38,7 @@ func (service *ItemLookupServiceImpl) LookupLINByNIIN(ctx context.Context, niin 
 
 }
 
-func (service *ItemLookupServiceImpl) LookupNIINByLIN(ctx context.Context, lin string) ([]db.LookupLinNiinModel, error) {
+func (service *ItemLookupServiceImpl) LookupNIINByLIN(ctx *gin.Context, lin string) ([]db.LookupLinNiinModel, error) {
 	niinData, err := service.ItemLookupService.SearchNIINByLIN(ctx, strings.ToUpper(lin))
 
 	if err != nil {
@@ -48,7 +48,7 @@ func (service *ItemLookupServiceImpl) LookupNIINByLIN(ctx context.Context, lin s
 	return niinData, nil
 }
 
-func (service *ItemLookupServiceImpl) LookupUOCByPage(ctx context.Context, page int) (model.UOCPageResponse, error) {
+func (service *ItemLookupServiceImpl) LookupUOCByPage(ctx *gin.Context, page int) (model.UOCPageResponse, error) {
 	uocData, err := service.ItemLookupService.SearchUOCByPage(ctx, page)
 
 	if err != nil {
@@ -58,7 +58,7 @@ func (service *ItemLookupServiceImpl) LookupUOCByPage(ctx context.Context, page 
 	return uocData, nil
 }
 
-func (service *ItemLookupServiceImpl) LookupSpecificUOC(ctx context.Context, uoc string) ([]db.LookupUocModel, error) {
+func (service *ItemLookupServiceImpl) LookupSpecificUOC(ctx *gin.Context, uoc string) ([]db.LookupUocModel, error) {
 	uocData, err := service.ItemLookupService.SearchSpecificUOC(ctx, uoc)
 
 	if err != nil {
@@ -68,7 +68,7 @@ func (service *ItemLookupServiceImpl) LookupSpecificUOC(ctx context.Context, uoc
 	return uocData, nil
 }
 
-func (service *ItemLookupServiceImpl) LookupUOCByModel(ctx context.Context, model string) ([]db.LookupUocModel, error) {
+func (service *ItemLookupServiceImpl) LookupUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error) {
 	uocData, err := service.ItemLookupService.SearchUOCByModel(ctx, model)
 
 	if err != nil {

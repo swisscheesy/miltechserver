@@ -1,7 +1,7 @@
 package service
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"miltechserver/api/repository"
 	"miltechserver/model"
 )
@@ -14,7 +14,7 @@ func NewItemDetailedServiceImpl(itemDetailedServiceRepository repository.ItemDet
 	return &ItemDetailedServiceImpl{ItemDetailedRepository: itemDetailedServiceRepository}
 }
 
-func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx context.Context, niin string) (model.DetailedItem, error) {
+func (service *ItemDetailedServiceImpl) FindDetailedItem(ctx *gin.Context, niin string) (model.DetailedItem, error) {
 	amdf, _ := service.ItemDetailedRepository.GetAmdfData(ctx, niin)
 
 	armyPack, _ := service.ItemDetailedRepository.GetArmyPackagingAndFreight(ctx, niin)

@@ -19,4 +19,8 @@ func Setup(db *db.PrismaClient, gin *gin.Engine, authClient *auth.Client) {
 	// All Public Routes
 	NewItemQueryRouter(db, v1Route)
 	NewItemLookupRouter(db, v1Route)
+
+	// All Authenticated Routes
+	authRoutes := gin.Group("/api/v1/auth")
+	NewUserSavesRouter(db, authRoutes)
 }

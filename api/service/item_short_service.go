@@ -1,11 +1,11 @@
 package service
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"miltechserver/model"
 )
 
 type ItemShortService interface {
-	FindShortByNiin(ctx context.Context, niin string) (model.ShortItem, error)
-	FindShortByPart(ctx context.Context, part string) ([]model.ShortItem, error)
+	FindShortByNiin(ctx *gin.Context, niin string) (model.ShortItem, error)
+	FindShortByPart(ctx *gin.Context, part string) ([]model.ShortItem, error)
 }

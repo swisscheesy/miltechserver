@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"math"
 	"miltechserver/model"
 	"miltechserver/prisma/db"
@@ -24,7 +24,7 @@ func NewItemLookupRepositoryImpl(db *db.PrismaClient) *ItemLokupRepositoryImpl {
 // \param page - the page number to retrieve.
 // \return a LINPageResponse containing the LIN data, count, page, total pages, and whether it is the last page.
 // \return an error if the operation fails.
-func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx context.Context, page int) (model.LINPageResponse, error) {
+func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx *gin.Context, page int) (model.LINPageResponse, error) {
 
 	linData, _ := repo.Db.ArmyLineItemNumber.
 		FindMany().
@@ -54,19 +54,19 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx context.Context, page i
 
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(ctx context.Context, niin string) ([]db.LookupLinNiinModel, error) {
+func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(ctx *gin.Context, niin string) ([]db.LookupLinNiinModel, error) {
 	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Niin.Contains(niin)).Exec(ctx)
 
 	return linData, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(ctx context.Context, lin string) ([]db.LookupLinNiinModel, error) {
+func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(ctx *gin.Context, lin string) ([]db.LookupLinNiinModel, error) {
 	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Lin.Contains(lin)).Exec(ctx)
 
 	return linData, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx context.Context, page int) (model.UOCPageResponse, error) {
+func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx *gin.Context, page int) (model.UOCPageResponse, error) {
 	uocData, _ := repo.Db.LookupUoc.
 		FindMany().
 		Take(returnCount).
@@ -94,13 +94,13 @@ func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx context.Context, page i
 	}, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(ctx context.Context, uoc string) ([]db.LookupUocModel, error) {
+func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(ctx *gin.Context, uoc string) ([]db.LookupUocModel, error) {
 	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Uoc.Contains(strings.ToUpper(uoc))).Exec(ctx)
 
 	return uocData, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx context.Context, model string) ([]db.LookupUocModel, error) {
+func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error) {
 	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Model.Contains(strings.ToUpper(model))).Exec(ctx)
 
 	return uocData, nil

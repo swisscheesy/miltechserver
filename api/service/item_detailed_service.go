@@ -1,12 +1,12 @@
 package service
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"miltechserver/model"
 )
 
 type ItemDetailedService interface {
-	FindDetailedItem(ctx context.Context, niin string) (model.DetailedItem, error)
+	FindDetailedItem(ctx *gin.Context, niin string) (model.DetailedItem, error)
 
 	//GetAmdfData(ctx context.Context, niin string) (details.Amdf, error)
 	//GetArmyPackagingAndFreight(ctx context.Context, niin string) (details.ArmyPackagingAndFreight, error)

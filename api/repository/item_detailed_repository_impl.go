@@ -1,7 +1,7 @@
 package repository
 
 import (
-	"context"
+	"github.com/gin-gonic/gin"
 	"miltechserver/model/details"
 	"miltechserver/prisma/db"
 )
@@ -16,7 +16,7 @@ func NewItemDetailedRepositoryImpl(db *db.PrismaClient) *ItemDetailedRepositoryI
 
 // GetAmdfData retrieves the AMDF field data for a given NIIN
 // || ArmyMasterDataFile, AmdfManagement, AmdfCredit, AmdfBilling, AmdfMatcat, AmdfPhrases, AmdfIAndS, ArmyLin
-func (repo *ItemDetailedRepositoryImpl) GetAmdfData(ctx context.Context, niin string) (details.Amdf, error) {
+func (repo *ItemDetailedRepositoryImpl) GetAmdfData(ctx *gin.Context, niin string) (details.Amdf, error) {
 	var linData *db.ArmyLineItemNumberModel
 
 	amdfData, _ := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
@@ -47,7 +47,7 @@ func (repo *ItemDetailedRepositoryImpl) GetAmdfData(ctx context.Context, niin st
 	return data, nil
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(ctx context.Context, niin string) (details.ArmyPackagingAndFreight, error) {
+func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(ctx *gin.Context, niin string) (details.ArmyPackagingAndFreight, error) {
 	armyPackingAndFreightData, _ := repo.Db.ArmyPackagingAndFreight.FindFirst(db.ArmyPackagingAndFreight.Niin.Equals(niin)).Exec(ctx)
 	armyPackaging1Data, _ := repo.Db.ArmyPackaging1.FindUnique(db.ArmyPackaging1.Niin.Equals(niin)).Exec(ctx)
 	armyPackaging2Data, _ := repo.Db.ArmyPackaging2.FindUnique(db.ArmyPackaging2.Niin.Equals(niin)).Exec(ctx)
@@ -66,7 +66,7 @@ func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(ctx context.C
 	return data, nil
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetSarsscat(ctx context.Context, niin string) (details.Sarsscat, error) {
+func (repo *ItemDetailedRepositoryImpl) GetSarsscat(ctx *gin.Context, niin string) (details.Sarsscat, error) {
 	sarsscatData, _ := repo.Db.ArmySarsscat.FindUnique(db.ArmySarsscat.Niin.Equals(niin)).Exec(ctx)
 	moeRuleData, _ := repo.Db.MoeRule.FindMany(db.MoeRule.Niin.Equals(niin)).Exec(ctx)
 	amdfFreightData, _ := repo.Db.AmdfFreight.FindUnique(db.AmdfFreight.Niin.Equals(niin)).Exec(ctx)
@@ -81,7 +81,7 @@ func (repo *ItemDetailedRepositoryImpl) GetSarsscat(ctx context.Context, niin st
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx context.Context, niin string) (details.Identification, error) {
+func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx *gin.Context, niin string) (details.Identification, error) {
 	var colloqNames []db.ColloquialNameModel
 	flisManagementIdData, _ := repo.Db.FlisManagementID.FindFirst(db.FlisManagementID.Niin.Equals(niin)).Exec(ctx)
 	flisStandardizationData, _ := repo.Db.FlisStandardization.FindMany(db.FlisStandardization.Niin.Equals(niin)).Exec(ctx)
@@ -113,7 +113,7 @@ func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx context.Context, n
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx context.Context, niin string) (details.Management, error) {
+func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx *gin.Context, niin string) (details.Management, error) {
 	flisManData, _ := repo.Db.FlisManagement.FindMany(db.FlisManagement.Niin.Equals(niin)).Exec(ctx)
 	flisPhraseData, _ := repo.Db.FlisPhrase.FindMany(db.FlisPhrase.Niin.Equals(niin)).Exec(ctx)
 	componentEndItemData, _ := repo.Db.ComponentEndItem.FindMany(db.ComponentEndItem.Niin.Equals(niin)).Exec(ctx)
@@ -138,7 +138,7 @@ func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx context.Context, niin 
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetReference(ctx context.Context, niin string) (details.Reference, error) {
+func (repo *ItemDetailedRepositoryImpl) GetReference(ctx *gin.Context, niin string) (details.Reference, error) {
 	flisRefData, _ := repo.Db.FlisIdentification.FindUnique(db.FlisIdentification.Niin.Equals(niin)).Exec(ctx)
 	refAndPartData, _ := repo.Db.FlisReference.FindMany(db.FlisReference.Niin.Equals(niin)).Exec(ctx)
 
@@ -167,7 +167,7 @@ func (repo *ItemDetailedRepositoryImpl) GetReference(ctx context.Context, niin s
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx context.Context, niin string) (details.Freight, error) {
+func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx *gin.Context, niin string) (details.Freight, error) {
 	flisFreightData, _ := repo.Db.FlisFreight.FindFirst(db.FlisFreight.Niin.Equals(niin)).Exec(ctx)
 
 	data := details.Freight{
@@ -177,7 +177,7 @@ func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx context.Context, niin str
 	return data, nil
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx context.Context, niin string) (details.Packaging, error) {
+func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx *gin.Context, niin string) (details.Packaging, error) {
 	var cageAddressPlaceholder []db.CageAddressModel
 
 	flisPackaging1Data, _ := repo.Db.FlisPackaging1.FindMany(db.FlisPackaging1.Niin.Equals(niin)).Exec(ctx)
@@ -202,7 +202,7 @@ func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx context.Context, niin s
 	return data, nil
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx context.Context, niin string) (details.Characteristics, error) {
+func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx *gin.Context, niin string) (details.Characteristics, error) {
 	characteristicsData, _ := repo.Db.FlisItemCharacteristics.FindMany(db.FlisItemCharacteristics.Niin.Equals(niin)).Exec(ctx)
 
 	data := details.Characteristics{
@@ -212,7 +212,7 @@ func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx context.Context, 
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx context.Context, niin string) (details.Disposition, error) {
+func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx *gin.Context, niin string) (details.Disposition, error) {
 	dispositionData, _ := repo.Db.Disposition.FindFirst(db.Disposition.Niin.Equals(niin)).Exec(ctx)
 
 	data := details.Disposition{
