@@ -22,5 +22,6 @@ func Setup(db *db.PrismaClient, gin *gin.Engine, authClient *auth.Client) {
 
 	// All Authenticated Routes
 	authRoutes := gin.Group("/api/v1/auth")
+	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
 	NewUserSavesRouter(db, authRoutes)
 }

@@ -11,6 +11,7 @@ func NewPrismaClient() *db.PrismaClient {
 
 	if err := client.Connect(); err != nil {
 		slog.Error("Unable to connect to database: %s", err)
+		panic(nil)
 	}
 
 	slog.Info("Connected to Database!")

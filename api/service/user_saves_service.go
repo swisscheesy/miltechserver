@@ -1,15 +1,11 @@
 package service
 
 import (
-	"firebase.google.com/go/v4/auth"
+	"github.com/gin-gonic/gin"
+	"miltechserver/bootstrap"
 	"miltechserver/prisma/db"
 )
 
-type UserSavesService struct {
-	Db       *db.PrismaClient
-	FireAuth *auth.Client
-}
-
-func NewUserSavesService(db *db.PrismaClient, fireAuth *auth.Client) *UserSavesService {
-	return &UserSavesService{Db: db, FireAuth: fireAuth}
+type UserSavesService interface {
+	GetQuickSaveItemsByUser(c *gin.Context, user *bootstrap.User) ([]db.UserItemsQuickModel, error)
 }

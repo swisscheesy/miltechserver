@@ -16,6 +16,6 @@ func NewUserSavesRouter(db *db.PrismaClient, group *gin.RouterGroup) {
 			userSavesRepository),
 	}
 
-	group.GET("/user/saves/items/quick/:id", pc.GetQuickSaveItemsByUser)
+	group.GET("/user/saves/quick_items", pc.GetQuickSaveItemsByUser)
 
 }
