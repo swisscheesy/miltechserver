@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"log"
-	"miltechserver/model/response"
+	"miltechserver/api/response"
 	"miltechserver/prisma/db"
 )
 

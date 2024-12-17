@@ -1,12 +1,12 @@
 package route
 
 import (
+	"database/sql"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"net/http"
 )
 
-func NewTestRouter(db *gorm.DB, group *gin.RouterGroup) {
+func NewTestRouter(db *sql.DB, group *gin.RouterGroup) {
 
 	group.GET("/", func(c *gin.Context) {
 		user, ok := c.Get("user")

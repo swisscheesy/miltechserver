@@ -6,6 +6,7 @@ import (
 	"log"
 	"miltechserver/api/route"
 	"miltechserver/bootstrap"
+	"miltechserver/helper"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,9 +18,7 @@ func main() {
 	engine := SetupEngine()
 
 	err := engine.Run(":8080")
-	if err != nil {
-		return
-	}
+	helper.PanicOnError(err)
 
 }
 
@@ -39,8 +38,7 @@ func SetupEngine() *gin.Engine {
 
 	go func() {
 		<-c
-		dbInstance, _ := db.DB()
-		if err := dbInstance.Close(); err != nil {
+		if err := db.Close(); err != nil {
 			log.Fatalf("Unable to disconnect from database: %s", err)
 		}
 		log.Println("Disconnected from database")

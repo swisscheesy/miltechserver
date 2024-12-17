@@ -1,13 +1,13 @@
 package route
 
 import (
+	"database/sql"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"miltechserver/api/middleware"
 )
 
-func Setup(db *gorm.DB, gin *gin.Engine, authClient *auth.Client) {
+func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client) {
 	v1Route := gin.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 

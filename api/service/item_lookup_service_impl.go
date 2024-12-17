@@ -3,7 +3,7 @@ package service
 import (
 	"github.com/gin-gonic/gin"
 	"miltechserver/api/repository"
-	"miltechserver/model"
+	"miltechserver/api/response"
 	"miltechserver/prisma/db"
 	"strings"
 )
@@ -16,11 +16,11 @@ func NewItemLookupServiceImpl(itemLookupRepository repository.ItemLookupReposito
 	return &ItemLookupServiceImpl{ItemLookupService: itemLookupRepository}
 }
 
-func (service *ItemLookupServiceImpl) LookupLINByPage(ctx *gin.Context, page int) (model.LINPageResponse, error) {
+func (service *ItemLookupServiceImpl) LookupLINByPage(ctx *gin.Context, page int) (response.LINPageResponse, error) {
 	linData, err := service.ItemLookupService.SearchLINByPage(ctx, page)
 
 	if err != nil {
-		return model.LINPageResponse{}, err
+		return response.LINPageResponse{}, err
 	}
 
 	return linData, nil
@@ -48,11 +48,11 @@ func (service *ItemLookupServiceImpl) LookupNIINByLIN(ctx *gin.Context, lin stri
 	return niinData, nil
 }
 
-func (service *ItemLookupServiceImpl) LookupUOCByPage(ctx *gin.Context, page int) (model.UOCPageResponse, error) {
+func (service *ItemLookupServiceImpl) LookupUOCByPage(ctx *gin.Context, page int) (response.UOCPageResponse, error) {
 	uocData, err := service.ItemLookupService.SearchUOCByPage(ctx, page)
 
 	if err != nil {
-		return model.UOCPageResponse{}, err
+		return response.UOCPageResponse{}, err
 	}
 
 	return uocData, nil

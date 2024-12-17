@@ -2,8 +2,8 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	"miltechserver/api/response"
 	"miltechserver/api/service"
-	"miltechserver/model/response"
 )
 
 type ItemQueryController struct {
@@ -61,31 +61,31 @@ func (controller *ItemQueryController) FindShortByNiin(c *gin.Context, niin stri
 }
 
 func (controller *ItemQueryController) FindDetailed(c *gin.Context) {
-	niin := c.Query("niin")
-	itemData, err := controller.ItemDetailedService.FindDetailedItem(c, niin)
-
-	if err != nil {
-		c.Error(err)
-	} else {
-		c.JSON(200, response.StandardResponse{
-			Status:  200,
-			Message: "",
-			Data:    itemData,
-		})
-	}
+	//niin := c.Query("niin")
+	//itemData, err := controller.ItemDetailedService.FindDetailedItem(c, niin)
+	//
+	//if err != nil {
+	//	c.Error(err)
+	//} else {
+	//	c.JSON(200, response.StandardResponse{
+	//		Status:  200,
+	//		Message: "",
+	//		Data:    itemData,
+	//	})
+	//}
 
 }
 
 func (controller *ItemQueryController) FindShortByPart(c *gin.Context, part string) {
-	result, err := controller.ItemQueryService.FindShortByPart(c, part)
-
-	if err != nil {
-		c.Error(err)
-	} else {
-		c.JSON(200, response.StandardResponse{
-			Status:  200,
-			Message: "",
-			Data:    result,
-		})
-	}
+	//result, err := controller.ItemQueryService.FindShortByPart(c, part)
+	//
+	//if err != nil {
+	//	c.Error(err)
+	//} else {
+	//	c.JSON(200, response.StandardResponse{
+	//		Status:  200,
+	//		Message: "",
+	//		Data:    result,
+	//	})
+	//}
 }

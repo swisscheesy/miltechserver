@@ -3,7 +3,7 @@ package repository
 import (
 	"github.com/gin-gonic/gin"
 	"math"
-	"miltechserver/model"
+	"miltechserver/api/response"
 	"miltechserver/prisma/db"
 	"strconv"
 	"strings"
@@ -24,7 +24,7 @@ func NewItemLookupRepositoryImpl(db *db.PrismaClient) *ItemLokupRepositoryImpl {
 // \param page - the page number to retrieve.
 // \return a LINPageResponse containing the LIN data, count, page, total pages, and whether it is the last page.
 // \return an error if the operation fails.
-func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx *gin.Context, page int) (model.LINPageResponse, error) {
+func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx *gin.Context, page int) (response.LINPageResponse, error) {
 
 	linData, _ := repo.Db.ArmyLineItemNumber.
 		FindMany().
@@ -44,7 +44,7 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx *gin.Context, page int)
 
 	totalPages := math.Ceil(float64(count / 20))
 
-	return model.LINPageResponse{
+	return response.LINPageResponse{
 		Lins:       linData,
 		Count:      count,
 		Page:       page,
@@ -66,7 +66,7 @@ func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(ctx *gin.Context, lin strin
 	return linData, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx *gin.Context, page int) (model.UOCPageResponse, error) {
+func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx *gin.Context, page int) (response.UOCPageResponse, error) {
 	uocData, _ := repo.Db.LookupUoc.
 		FindMany().
 		Take(returnCount).
@@ -85,7 +85,7 @@ func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx *gin.Context, page int)
 
 	totalPages := math.Ceil(float64(count / 20))
 
-	return model.UOCPageResponse{
+	return response.UOCPageResponse{
 		UOCs:       uocData,
 		Count:      count,
 		Page:       page,

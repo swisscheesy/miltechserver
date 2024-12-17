@@ -1,16 +1,20 @@
 package bootstrap
 
 import (
+	"database/sql"
 	"fmt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	_ "github.com/lib/pq"
 	"log/slog"
+	"miltechserver/helper"
 )
 
-func NewGormClient(env *Env) *gorm.DB {
-	dsnStr := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=America/Phoenix", env.Host, env.Username, env.Password, env.DBName, env.Port)
-	db, err := gorm.Open(postgres.Open(dsnStr), &gorm.Config{})
+func NewSqlClient(env *Env) *sql.DB {
+	dsnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", env.Host, env.Port, env.Username, env.Password, env.DBName)
 	slog.Info("Connecting to Database")
+	db, err := sql.Open("postgres", dsnStr)
+	helper.PanicOnError(err)
+
+	err = db.Ping()
 
 	if err != nil {
 		slog.Error("Unable to connect to database: %s", err)

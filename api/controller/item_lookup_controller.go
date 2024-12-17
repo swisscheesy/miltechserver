@@ -2,8 +2,8 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
+	response2 "miltechserver/api/response"
 	"miltechserver/api/service"
-	"miltechserver/model/response"
 	"strconv"
 )
 
@@ -30,7 +30,7 @@ func (controller *ItemLookupController) LookupLINByPage(c *gin.Context) {
 
 	linData, err := controller.ItemLookupService.LookupLINByPage(c, page)
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
 		Data:    linData,
@@ -50,10 +50,10 @@ func (controller *ItemLookupController) LookupLINByNIIN(c *gin.Context) {
 	}
 	retCount := len(linData)
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response.LinSearchResponse{
+		Data: response2.LinSearchResponse{
 			Count: retCount,
 			Lins:  linData,
 		},
@@ -72,10 +72,10 @@ func (controller *ItemLookupController) LookupNIINByLIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response.NiinSearchResponse{
+		Data: response2.NiinSearchResponse{
 			Count: len(niinData),
 			Niins: niinData,
 		},
@@ -94,7 +94,7 @@ func (controller *ItemLookupController) LookupUOCByPage(c *gin.Context) {
 
 	uocData, err := controller.ItemLookupService.LookupUOCByPage(c, page)
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
 		Data:    uocData,
@@ -113,10 +113,10 @@ func (controller *ItemLookupController) LookupSpecificUOC(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response.UOCPLookupResponse{
+		Data: response2.UOCPLookupResponse{
 			Count: len(uocData),
 			UOCs:  uocData,
 		},
@@ -135,10 +135,10 @@ func (controller *ItemLookupController) LookupUOCByModel(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
+	c.JSON(200, response2.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response.UOCPLookupResponse{
+		Data: response2.UOCPLookupResponse{
 			Count: len(uocData),
 			UOCs:  uocData,
 		},

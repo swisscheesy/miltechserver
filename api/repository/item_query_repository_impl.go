@@ -1,46 +1,43 @@
 package repository
 
 import (
+	"database/sql"
 	"errors"
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	"miltechserver/model"
+	. "github.com/go-jet/jet/v2/postgres"
+	"miltechserver/miltech_ng/public/model"
+	"miltechserver/miltech_ng/public/view"
 	"miltechserver/prisma/db"
 )
 
 type ItemQueryRepositoryImpl struct {
-	Db *gorm.DB
+	Db *sql.DB
 }
 
-func NewItemQueryRepositoryImpl(db *gorm.DB) *ItemQueryRepositoryImpl {
+func NewItemQueryRepositoryImpl(db *sql.DB) *ItemQueryRepositoryImpl {
 	return &ItemQueryRepositoryImpl{Db: db}
 }
 
-func (repo *ItemQueryRepositoryImpl) ShortItemSearchNiin(ctx *gin.Context, niin string) (model.ShortItem, error) {
-	item, err := repo.Db.NiinLookup.FindFirst(db.NiinLookup.Niin.Equals(niin)).Exec(ctx)
+func (repo *ItemQueryRepositoryImpl) ShortItemSearchNiin(ctx *gin.Context, niin string) (model.NiinLookup, error) {
+	item := model.NiinLookup{}
+
+	stmt := SELECT(
+		view.NiinLookup.AllColumns).FROM(view.NiinLookup).WHERE(view.NiinLookup.Niin.EQ(String(niin)))
+
+	err := stmt.Query(repo.Db, &item)
 
 	if err != nil {
-		return model.ShortItem{}, err
+		return model.NiinLookup{}, err
 	} else {
-		name, _ := item.ItemName()
-		itemNiin := item.Niin
-		fsc, _ := item.Fsc()
-		hasAmdfData, _ := item.HasAmdf()
-		hasFlisData, _ := item.HasFlis()
-
-		itemData := model.ShortItem{
-			ItemName:    name,
-			Niin:        itemNiin,
-			Fsc:         fsc,
-			HasAmdfData: hasAmdfData,
-			HasFlisData: hasFlisData,
-		}
-		return itemData, nil
+		return item, nil
 	}
 
 }
 
-func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(ctx *gin.Context, part string) ([]model.ShortItem, error) {
+func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(ctx *gin.Context, part string) ([]model.NiinLookup, error) {
+
+	var items []model.NiinLookup
+
 	parts, err := repo.Db.PartNumber.FindMany(db.PartNumber.PartNumber.Equals(part)).Exec(ctx)
 
 	if err != nil {
@@ -83,36 +80,4 @@ func (repo *ItemQueryRepositoryImpl) DetailedItemSearchNiin(ctx *gin.Context, ni
 		//Amdf: amdf,
 	}
 	return data, err
-}
-
-func (repo *ItemQueryRepositoryImpl) GetAmdfData(ctx *gin.Context, niin string) (db.ArmyMasterDataFileModel, error) {
-	data, err := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
-
-	if err != nil {
-		return db.ArmyMasterDataFileModel{}, err
-	} else {
-		return *data, nil
-	}
-}
-
-// DoesAmdfExist Helper function to query the database for the existence of AMDF data for a given NIIN
-func (repo *ItemQueryRepositoryImpl) DoesAmdfExist(ctx *gin.Context, niin string) (bool, error) {
-	amdf, err := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
-
-	if err != nil {
-		return false, err
-	} else {
-		return amdf != nil, nil
-	}
-}
-
-// DoesFlisExist Helper function to query the database for the existence of FLIS data for a given NIIN
-func (repo *ItemQueryRepositoryImpl) DoesFlisExist(ctx *gin.Context, niin string) (bool, error) {
-	flis, err := repo.Db.FlisManagementID.FindFirst(db.FlisManagementID.Niin.Equals(niin)).Exec(ctx)
-
-	if err != nil {
-		return false, err
-	} else {
-		return flis != nil, nil
-	}
 }

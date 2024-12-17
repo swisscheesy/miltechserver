@@ -8,12 +8,12 @@ import (
 func ReadRequest(r *http.Request, result interface{}) {
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(result)
-	ErrorPanic(err)
+	PanicOnError(err)
 }
 
 func WriteResponse(w http.ResponseWriter, response interface{}) {
 	w.Header().Add("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 	err := encoder.Encode(response)
-	ErrorPanic(err)
+	PanicOnError(err)
 }
