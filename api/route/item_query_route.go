@@ -2,13 +2,13 @@ package route
 
 import (
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"miltechserver/api/controller"
 	"miltechserver/api/repository"
 	"miltechserver/api/service"
-	"miltechserver/prisma/db"
 )
 
-func NewItemQueryRouter(db *db.PrismaClient, group *gin.RouterGroup) {
+func NewItemQueryRouter(db *gorm.DB, group *gin.RouterGroup) {
 	itemQueryRepo := repository.NewItemQueryRepositoryImpl(db)
 	itemDetailedRepo := repository.NewItemDetailedRepositoryImpl(db)
 	pc := &controller.ItemQueryController{

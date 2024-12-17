@@ -3,11 +3,11 @@ package route
 import (
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"miltechserver/api/middleware"
-	"miltechserver/prisma/db"
 )
 
-func Setup(db *db.PrismaClient, gin *gin.Engine, authClient *auth.Client) {
+func Setup(db *gorm.DB, gin *gin.Engine, authClient *auth.Client) {
 	v1Route := gin.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -18,10 +18,10 @@ func Setup(db *db.PrismaClient, gin *gin.Engine, authClient *auth.Client) {
 	//v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
 	NewItemQueryRouter(db, v1Route)
-	NewItemLookupRouter(db, v1Route)
+	//NewItemLookupRouter(db, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := gin.Group("/api/v1/auth")
 	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
-	NewUserSavesRouter(db, authRoutes)
+	//NewUserSavesRouter(db, authRoutes)
 }

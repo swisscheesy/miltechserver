@@ -3,15 +3,16 @@ package repository
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"miltechserver/model"
 	"miltechserver/prisma/db"
 )
 
 type ItemQueryRepositoryImpl struct {
-	Db *db.PrismaClient
+	Db *gorm.DB
 }
 
-func NewItemQueryRepositoryImpl(db *db.PrismaClient) *ItemQueryRepositoryImpl {
+func NewItemQueryRepositoryImpl(db *gorm.DB) *ItemQueryRepositoryImpl {
 	return &ItemQueryRepositoryImpl{Db: db}
 }
 

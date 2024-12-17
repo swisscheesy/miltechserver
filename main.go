@@ -25,8 +25,9 @@ func main() {
 
 func SetupEngine() *gin.Engine {
 	ctx := context.Background()
-	app := bootstrap.App(ctx)
-	db := app.PostgresDB
+	env := bootstrap.NewEnv()
+	app := bootstrap.App(ctx, env)
+	db := app.Db
 
 	server := gin.Default()
 
@@ -38,7 +39,8 @@ func SetupEngine() *gin.Engine {
 
 	go func() {
 		<-c
-		if err := app.PostgresDB.Disconnect(); err != nil {
+		dbInstance, _ := db.DB()
+		if err := dbInstance.Close(); err != nil {
 			log.Fatalf("Unable to disconnect from database: %s", err)
 		}
 		log.Println("Disconnected from database")

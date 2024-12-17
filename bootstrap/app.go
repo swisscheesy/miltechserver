@@ -3,19 +3,19 @@ package bootstrap
 import (
 	"context"
 	"firebase.google.com/go/v4/auth"
+	"gorm.io/gorm"
 	"log/slog"
-	"miltechserver/prisma/db"
 )
 
 type Application struct {
-	PostgresDB *db.PrismaClient
-	FireAuth   *auth.Client
+	Db       *gorm.DB
+	FireAuth *auth.Client
 }
 
-func App(ctx context.Context) Application {
+func App(ctx context.Context, env *Env) Application {
 	slog.Info("Creating application")
 	app := &Application{}
-	app.PostgresDB = NewPrismaClient()
+	app.Db = NewGormClient(env)
 	app.FireAuth = NewFireAuth(ctx)
 
 	return *app
