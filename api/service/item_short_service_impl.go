@@ -1,9 +1,8 @@
 package service
 
 import (
-	"github.com/gin-gonic/gin"
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
-	"miltechserver/miltech_ng/public/model"
 )
 
 type ItemShortServiceImpl struct {
@@ -14,11 +13,11 @@ func NewItemQueryServiceImpl(itemQueryRepository repository.ItemQueryRepository)
 	return &ItemShortServiceImpl{ItemQueryRepository: itemQueryRepository}
 }
 
-func (service *ItemShortServiceImpl) FindShortByNiin(ctx *gin.Context, niin string) (model.NiinLookup, error) {
-	return service.ItemQueryRepository.ShortItemSearchNiin(ctx, niin)
+func (service *ItemShortServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, error) {
+	return service.ItemQueryRepository.ShortItemSearchNiin(niin)
 
 }
 
-func (service *ItemShortServiceImpl) FindShortByPart(ctx *gin.Context, part string) ([]model.NiinLookup, error) {
-	return service.ItemQueryRepository.ShortItemSearchPart(ctx, part)
+func (service *ItemShortServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, error) {
+	return service.ItemQueryRepository.ShortItemSearchPart(part)
 }

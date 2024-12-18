@@ -21,6 +21,8 @@ func NewItemQueryRouter(db *sql.DB, group *gin.RouterGroup) {
 	//group.GET("/queries/items/initial", pc.FindShortByNiin)
 
 	group.GET("/queries/items/initial", pc.FindShort)
+
+	group.GET("/queries/items/detailed", pc.FindDetailedTest)
 	//group.GET("/queries/items/detailed", pc.FindDetailed)
 
 }

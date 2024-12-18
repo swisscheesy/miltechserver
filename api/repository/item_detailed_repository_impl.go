@@ -2,6 +2,9 @@ package repository
 
 import (
 	"database/sql"
+	. "github.com/go-jet/jet/v2/postgres"
+	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/.gen/miltech_ng/public/table"
 )
 
 type ItemDetailedRepositoryImpl struct {
@@ -10,6 +13,84 @@ type ItemDetailedRepositoryImpl struct {
 
 func NewItemDetailedRepositoryImpl(db *sql.DB) *ItemDetailedRepositoryImpl {
 	return &ItemDetailedRepositoryImpl{Db: db}
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interface{}, error) {
+	// Get data from each table
+	// Call helper methods to get data from each table
+	// Return a DetailedItem struct with all the data
+
+	var dest []struct {
+		Amdf struct {
+			ArmyMasterDataFile model.ArmyMasterDataFile
+			AmdfManagement     model.AmdfManagement
+			AmdfCredit         model.AmdfCredit
+			AmdfBilling        model.AmdfBilling
+			AmdfMatcat         model.AmdfMatcat
+			AmdfPhrases        []model.AmdfPhrase
+			AmdfIAndS          []model.AmdfIAndS
+			ArmyLineItemNumber model.ArmyLineItemNumber
+		}
+
+		//ArmyPackagingAndFreight struct {
+		ArmyPackagingAndFreight      model.ArmyPackagingAndFreight
+		ArmyPackaging1               model.ArmyPackaging1
+		ArmyPackaging2               model.ArmyPackaging2
+		ArmyPackSpecialInstruct      model.ArmyPackagingSpecialInstruct
+		ArmyFreight                  model.ArmyFreight
+		ArmyPackSupplementalInstruct []model.ArmyPackSupplementalInstruct
+		//}
+	}
+
+	stmt := SELECT(
+		table.ArmyMasterDataFile.AllColumns,
+		table.AmdfManagement.AllColumns,
+		table.AmdfCredit.AllColumns,
+		table.AmdfBilling.AllColumns,
+		table.AmdfMatcat.AllColumns,
+		table.AmdfPhrase.AllColumns,
+		table.AmdfIAndS.AllColumns,
+		table.ArmyLineItemNumber.AllColumns,
+	).FROM(
+		table.ArmyMasterDataFile.LEFT_JOIN(
+			// Amdf JOINS
+			table.AmdfManagement, table.ArmyMasterDataFile.Niin.EQ(table.AmdfManagement.Niin)).
+			LEFT_JOIN(
+				table.AmdfCredit, table.ArmyMasterDataFile.Niin.EQ(table.AmdfCredit.Niin)).
+			LEFT_JOIN(
+				table.AmdfBilling, table.ArmyMasterDataFile.Niin.EQ(table.AmdfBilling.Niin)).
+			LEFT_JOIN(
+				table.AmdfMatcat, table.ArmyMasterDataFile.Niin.EQ(table.AmdfMatcat.Niin)).
+			LEFT_JOIN(
+				table.AmdfPhrase, table.ArmyMasterDataFile.Niin.EQ(table.AmdfPhrase.Niin)).
+			LEFT_JOIN(table.AmdfIAndS, table.ArmyMasterDataFile.Niin.EQ(table.AmdfIAndS.Niin)).
+			LEFT_JOIN(table.ArmyLineItemNumber, table.AmdfManagement.Lin.EQ(table.ArmyLineItemNumber.Lin)).
+			// Army Packaging and Freight JOINS
+			LEFT_JOIN(
+				table.ArmyPackagingAndFreight, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackagingAndFreight.Niin)).
+			LEFT_JOIN(
+				table.ArmyPackaging1, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackaging1.Niin)).
+			LEFT_JOIN(
+				table.ArmyPackaging2, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackaging2.Niin)).
+			LEFT_JOIN(
+				table.ArmyPackagingSpecialInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackagingSpecialInstruct.Niin)).
+			LEFT_JOIN(
+				table.ArmyFreight, table.ArmyMasterDataFile.Niin.EQ(table.ArmyFreight.Niin)).
+			LEFT_JOIN(
+				table.ArmyPackSupplementalInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackSupplementalInstruct.Niin)),
+	).WHERE(
+		table.AmdfManagement.Niin.EQ(String(niin)),
+	)
+
+	//debugSql := stmt.DebugSql()
+	//slog.Info(debugSql)
+
+	err := stmt.Query(repo.Db, &dest)
+	if err != nil {
+		return nil, err
+	} else {
+		return dest, nil
+	}
 }
 
 // GetAmdfData retrieves the AMDF field data for a given NIIN

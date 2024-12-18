@@ -39,3 +39,7 @@ func NewItemDetailedServiceImpl(itemDetailedServiceRepository repository.ItemDet
 //	}, nil
 
 //}
+
+func (service *ItemDetailedServiceImpl) GetDetailedItemTest(niin string) (interface{}, error) {
+	return service.ItemDetailedRepository.GetDetailedItemData(niin)
+}

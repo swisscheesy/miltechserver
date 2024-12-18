@@ -13,4 +13,6 @@ type ItemDetailedService interface {
 	//GetPackaging(ctx context.Context, niin string) (details.Packaging, error)
 	//GetCharacteristics(ctx context.Context, niin string) (details.Characteristics, error)
 	//GetDisposition(ctx context.Context, niin string) (details.Disposition, error)
+
+	GetDetailedItemTest(niin string) (interface{}, error)
 }

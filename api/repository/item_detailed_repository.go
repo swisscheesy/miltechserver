@@ -14,4 +14,5 @@ type ItemDetailedRepository interface {
 
 	// Helper methods to pull individual table data
 
+	GetDetailedItemData(niin string) (interface{}, error)
 }
