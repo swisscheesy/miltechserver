@@ -31,15 +31,20 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 			AmdfIAndS          []model.AmdfIAndS
 			ArmyLineItemNumber model.ArmyLineItemNumber
 		}
+		Packaging struct {
+			ArmyPackagingAndFreight      model.ArmyPackagingAndFreight
+			ArmyPackaging1               model.ArmyPackaging1
+			ArmyPackaging2               model.ArmyPackaging2
+			ArmyPackSpecialInstruct      model.ArmyPackagingSpecialInstruct
+			ArmyFreight                  model.ArmyFreight
+			ArmyPackSupplementalInstruct []model.ArmyPackSupplementalInstruct
+		}
 
-		//ArmyPackagingAndFreight struct {
-		ArmyPackagingAndFreight      model.ArmyPackagingAndFreight
-		ArmyPackaging1               model.ArmyPackaging1
-		ArmyPackaging2               model.ArmyPackaging2
-		ArmyPackSpecialInstruct      model.ArmyPackagingSpecialInstruct
-		ArmyFreight                  model.ArmyFreight
-		ArmyPackSupplementalInstruct []model.ArmyPackSupplementalInstruct
-		//}
+		Sarsscat struct {
+			Sarsscat    model.ArmySarsscat
+			MoeRule     model.MoeRule
+			AmdfFreight model.AmdfFreight
+		}
 	}
 
 	stmt := SELECT(
@@ -51,6 +56,15 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 		table.AmdfPhrase.AllColumns,
 		table.AmdfIAndS.AllColumns,
 		table.ArmyLineItemNumber.AllColumns,
+		table.ArmyPackagingAndFreight.AllColumns,
+		table.ArmyPackaging1.AllColumns,
+		table.ArmyPackaging2.AllColumns,
+		table.ArmyPackagingSpecialInstruct.AllColumns,
+		table.ArmyFreight.AllColumns,
+		table.ArmyPackSupplementalInstruct.AllColumns,
+		table.ArmySarsscat.AllColumns,
+		table.MoeRule.AllColumns,
+		table.AmdfFreight.AllColumns,
 	).FROM(
 		table.ArmyMasterDataFile.LEFT_JOIN(
 			// Amdf JOINS
@@ -77,7 +91,11 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 			LEFT_JOIN(
 				table.ArmyFreight, table.ArmyMasterDataFile.Niin.EQ(table.ArmyFreight.Niin)).
 			LEFT_JOIN(
-				table.ArmyPackSupplementalInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackSupplementalInstruct.Niin)),
+				table.ArmyPackSupplementalInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackSupplementalInstruct.Niin)).
+			// Sarsscat JOINS
+			LEFT_JOIN(table.ArmySarsscat, table.ArmyMasterDataFile.Niin.EQ(table.ArmySarsscat.Niin)).
+			LEFT_JOIN(table.MoeRule, table.ArmyMasterDataFile.Niin.EQ(table.MoeRule.Niin)).
+			LEFT_JOIN(table.AmdfFreight, table.ArmyMasterDataFile.Niin.EQ(table.AmdfFreight.Niin)),
 	).WHERE(
 		table.AmdfManagement.Niin.EQ(String(niin)),
 	)
