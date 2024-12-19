@@ -42,8 +42,15 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 
 		Sarsscat struct {
 			Sarsscat    model.ArmySarsscat
-			MoeRule     model.MoeRule
+			MoeRule     []model.MoeRule
 			AmdfFreight model.AmdfFreight
+		}
+
+		Identification struct {
+			FlisManagementId    model.FlisManagementID
+			ColloquialNames     []model.ColloquialName
+			FlisStandardization []model.FlisStandardization
+			FlisCancelledNiins  []model.FlisCancelledNiin
 		}
 	}
 
@@ -65,6 +72,10 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 		table.ArmySarsscat.AllColumns,
 		table.MoeRule.AllColumns,
 		table.AmdfFreight.AllColumns,
+		table.FlisManagementID.AllColumns,
+		table.ColloquialName.AllColumns,
+		table.FlisStandardization.AllColumns,
+		table.FlisCancelledNiin.AllColumns,
 	).FROM(
 		table.ArmyMasterDataFile.LEFT_JOIN(
 			// Amdf JOINS
@@ -95,7 +106,12 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 			// Sarsscat JOINS
 			LEFT_JOIN(table.ArmySarsscat, table.ArmyMasterDataFile.Niin.EQ(table.ArmySarsscat.Niin)).
 			LEFT_JOIN(table.MoeRule, table.ArmyMasterDataFile.Niin.EQ(table.MoeRule.Niin)).
-			LEFT_JOIN(table.AmdfFreight, table.ArmyMasterDataFile.Niin.EQ(table.AmdfFreight.Niin)),
+			LEFT_JOIN(table.AmdfFreight, table.ArmyMasterDataFile.Niin.EQ(table.AmdfFreight.Niin)).
+			// Identification JOINS
+			LEFT_JOIN(table.FlisManagementID, table.ArmyMasterDataFile.Niin.EQ(table.FlisManagementID.Niin)).
+			LEFT_JOIN(table.ColloquialName, table.FlisManagementID.Inc.EQ(table.ColloquialName.Inc)).
+			LEFT_JOIN(table.FlisStandardization, table.ArmyMasterDataFile.Niin.EQ(table.FlisStandardization.Niin)).
+			LEFT_JOIN(table.FlisCancelledNiin, table.ArmyMasterDataFile.Niin.EQ(table.FlisCancelledNiin.Niin)),
 	).WHERE(
 		table.AmdfManagement.Niin.EQ(String(niin)),
 	)
