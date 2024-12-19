@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	. "github.com/go-jet/jet/v2/postgres"
+	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/.gen/miltech_ng/public/table"
 )
@@ -52,6 +53,24 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 			FlisStandardization []model.FlisStandardization
 			FlisCancelledNiins  []model.FlisCancelledNiin
 		}
+
+		Management struct {
+			FlisManagement        []model.FlisManagement
+			FlisPhrase            []model.FlisPhrase
+			ComponentEndItem      []model.ComponentEndItem
+			ArmyManagement        []model.ArmyManagement
+			AirForceManagement    model.AirForceManagement
+			MarineCorpsManagement []model.MarineCorpsManagement
+			NavyManagement        model.NavyManagement
+			FaaManagement         []model.FaaManagement
+		}
+
+		Reference struct {
+			FlisReference          model.FlisIdentification
+			ReferenceAndPartNumber []model.FlisReference
+			CageAddresses          []model.CageAddress
+			CageStatusAndType      []model.CageStatusAndType
+		}
 	}
 
 	stmt := SELECT(
@@ -76,48 +95,73 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 		table.ColloquialName.AllColumns,
 		table.FlisStandardization.AllColumns,
 		table.FlisCancelledNiin.AllColumns,
+		table.FlisManagement.AllColumns,
+		table.FlisPhrase.AllColumns,
+		table.ComponentEndItem.AllColumns,
+		table.ArmyManagement.AllColumns,
+		table.AirForceManagement.AllColumns,
+		table.MarineCorpsManagement.AllColumns,
+		table.NavyManagement.AllColumns,
+		table.FaaManagement.AllColumns,
+		table.FlisIdentification.AllColumns,
+		table.FlisReference.AllColumns,
+		table.CageAddress.AllColumns,
+		table.CageStatusAndType.AllColumns,
 	).FROM(
-		table.ArmyMasterDataFile.LEFT_JOIN(
-			// Amdf JOINS
-			table.AmdfManagement, table.ArmyMasterDataFile.Niin.EQ(table.AmdfManagement.Niin)).
+		table.ArmyMasterDataFile.
 			LEFT_JOIN(
-				table.AmdfCredit, table.ArmyMasterDataFile.Niin.EQ(table.AmdfCredit.Niin)).
+				table.AmdfCredit, table.AmdfCredit.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.AmdfManagement, table.AmdfManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.AmdfBilling, table.ArmyMasterDataFile.Niin.EQ(table.AmdfBilling.Niin)).
+				table.AmdfBilling, table.AmdfBilling.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.AmdfMatcat, table.ArmyMasterDataFile.Niin.EQ(table.AmdfMatcat.Niin)).
+				table.AmdfMatcat, table.AmdfMatcat.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.AmdfPhrase, table.ArmyMasterDataFile.Niin.EQ(table.AmdfPhrase.Niin)).
-			LEFT_JOIN(table.AmdfIAndS, table.ArmyMasterDataFile.Niin.EQ(table.AmdfIAndS.Niin)).
-			LEFT_JOIN(table.ArmyLineItemNumber, table.AmdfManagement.Lin.EQ(table.ArmyLineItemNumber.Lin)).
+				table.AmdfPhrase, table.AmdfPhrase.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.AmdfIAndS, table.AmdfIAndS.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.ArmyLineItemNumber, table.ArmyLineItemNumber.Lin.EQ(table.ArmyLineItemNumber.Lin)).
 			// Army Packaging and Freight JOINS
 			LEFT_JOIN(
-				table.ArmyPackagingAndFreight, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackagingAndFreight.Niin)).
+				table.ArmyPackagingAndFreight, table.ArmyPackagingAndFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.ArmyPackaging1, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackaging1.Niin)).
+				table.ArmyPackaging1, table.ArmyPackaging1.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.ArmyPackaging2, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackaging2.Niin)).
+				table.ArmyPackaging2, table.ArmyPackaging2.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.ArmyPackagingSpecialInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackagingSpecialInstruct.Niin)).
+				table.ArmyPackagingSpecialInstruct, table.ArmyPackagingSpecialInstruct.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.ArmyFreight, table.ArmyMasterDataFile.Niin.EQ(table.ArmyFreight.Niin)).
+				table.ArmyFreight, table.ArmyFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			LEFT_JOIN(
-				table.ArmyPackSupplementalInstruct, table.ArmyMasterDataFile.Niin.EQ(table.ArmyPackSupplementalInstruct.Niin)).
+				table.ArmyPackSupplementalInstruct, table.ArmyPackSupplementalInstruct.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			// Sarsscat JOINS
-			LEFT_JOIN(table.ArmySarsscat, table.ArmyMasterDataFile.Niin.EQ(table.ArmySarsscat.Niin)).
-			LEFT_JOIN(table.MoeRule, table.ArmyMasterDataFile.Niin.EQ(table.MoeRule.Niin)).
-			LEFT_JOIN(table.AmdfFreight, table.ArmyMasterDataFile.Niin.EQ(table.AmdfFreight.Niin)).
+			LEFT_JOIN(table.ArmySarsscat, table.ArmySarsscat.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.MoeRule, table.MoeRule.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.AmdfFreight, table.AmdfFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
 			// Identification JOINS
-			LEFT_JOIN(table.FlisManagementID, table.ArmyMasterDataFile.Niin.EQ(table.FlisManagementID.Niin)).
-			LEFT_JOIN(table.ColloquialName, table.FlisManagementID.Inc.EQ(table.ColloquialName.Inc)).
-			LEFT_JOIN(table.FlisStandardization, table.ArmyMasterDataFile.Niin.EQ(table.FlisStandardization.Niin)).
-			LEFT_JOIN(table.FlisCancelledNiin, table.ArmyMasterDataFile.Niin.EQ(table.FlisCancelledNiin.Niin)),
+			LEFT_JOIN(table.FlisManagementID, table.FlisManagementID.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.ColloquialName, table.ColloquialName.Inc.EQ(table.ColloquialName.Inc)).
+			LEFT_JOIN(table.FlisStandardization, table.FlisStandardization.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.FlisCancelledNiin, table.FlisCancelledNiin.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			// Management JOINS
+			LEFT_JOIN(table.FlisManagement, table.FlisManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.FlisPhrase, table.FlisPhrase.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.ComponentEndItem, table.ComponentEndItem.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.ArmyManagement, table.ArmyManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.AirForceManagement, table.AirForceManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.MarineCorpsManagement, table.MarineCorpsManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.NavyManagement, table.NavyManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.FaaManagement, table.FaaManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			//Reference JOINS
+			LEFT_JOIN(table.FlisIdentification, table.FlisIdentification.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.FlisReference, table.FlisReference.Niin.EQ(table.ArmyMasterDataFile.Niin)).
+			LEFT_JOIN(table.CageAddress, table.CageAddress.CageCode.EQ(table.FlisReference.CageCode)).
+			LEFT_JOIN(table.CageStatusAndType, table.CageStatusAndType.CageCode.EQ(table.FlisReference.CageCode)),
 	).WHERE(
-		table.AmdfManagement.Niin.EQ(String(niin)),
+		table.ArmyMasterDataFile.Niin.EQ(String(niin)),
 	)
 
-	//debugSql := stmt.DebugSql()
-	//slog.Info(debugSql)
+	debugSql := stmt.DebugSql()
+	slog.Info(debugSql)
 
 	err := stmt.Query(repo.Db, &dest)
 	if err != nil {
@@ -126,6 +170,10 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 		return dest, nil
 	}
 }
+
+//table.ArmyMasterDataFile.LEFT_JOIN(
+//// Amdf JOINS
+//table.AmdfManagement, table.ArmyMasterDataFile.Niin.EQ(table.AmdfManagement.Niin)).
 
 // GetAmdfData retrieves the AMDF field data for a given NIIN
 // || ArmyMasterDataFile, AmdfManagement, AmdfCredit, AmdfBilling, AmdfMatcat, AmdfPhrases, AmdfIAndS, ArmyLin
