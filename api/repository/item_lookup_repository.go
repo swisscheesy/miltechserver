@@ -12,5 +12,5 @@ type ItemLookupRepository interface {
 
 	SearchUOCByPage(page int) (response.UOCPageResponse, error)
 	SearchSpecificUOC(uoc string) ([]model.LookupUoc, error)
-	//SearchUOCByModel(model string) ([]db.LookupUocModel, error)
+	SearchUOCByModel(model string) ([]model.LookupUoc, error)
 }

@@ -17,6 +17,10 @@ func NewItemQueryRepositoryImpl(db *sql.DB) *ItemQueryRepositoryImpl {
 	return &ItemQueryRepositoryImpl{Db: db}
 }
 
+// ShortItemSearchNiin searches for a short item by NIIN (National Item Identification Number).
+// \param niin - the NIIN to search for.
+// \return a NiinLookup containing the item data.
+// \return an error if the operation fails.
 func (repo *ItemQueryRepositoryImpl) ShortItemSearchNiin(niin string) (model.NiinLookup, error) {
 	item := model.NiinLookup{}
 
@@ -33,6 +37,10 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchNiin(niin string) (model.Nii
 
 }
 
+// ShortItemSearchPart searches for short items by part number.
+// \param part - the part number to search for.
+// \return a slice of NiinLookup containing the item data.
+// \return an error if the operation fails.
 func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(part string) ([]model.NiinLookup, error) {
 	var items []model.NiinLookup
 

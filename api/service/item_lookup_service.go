@@ -12,5 +12,5 @@ type ItemLookupService interface {
 
 	LookupUOCByPage(page int) (response.UOCPageResponse, error)
 	LookupSpecificUOC(uoc string) ([]model.LookupUoc, error)
-	//LookupUOCByModel(model string) ([]db.LookupUocModel, error)
+	LookupUOCByModel(model string) ([]model.LookupUoc, error)
 }

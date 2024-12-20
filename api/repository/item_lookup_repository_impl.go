@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	. "github.com/go-jet/jet/v2/postgres"
 	"math"
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -10,7 +11,7 @@ import (
 	"miltechserver/api/response"
 )
 
-var returnCount = 20
+var returnCount = int64(20)
 
 type ItemLokupRepositoryImpl struct {
 	Db *sql.DB
@@ -21,18 +22,17 @@ func NewItemLookupRepositoryImpl(db *sql.DB) *ItemLokupRepositoryImpl {
 }
 
 // SearchLINByPage searches for LIN (Line Item Number) by page.
-// \param ctx - the context for the request.
 // \param page - the page number to retrieve.
 // \return a LINPageResponse containing the LIN data, count, page, total pages, and whether it is the last page.
 // \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPageResponse, error) {
 
 	var linData []model.ArmyLineItemNumber
-	offset := int64(20 * (page - 1))
+	offset := returnCount * int64(page-1)
 	stmt := SELECT(
 		table.ArmyLineItemNumber.AllColumns,
 	).FROM(table.ArmyLineItemNumber).
-		LIMIT(20).
+		LIMIT(returnCount).
 		OFFSET(offset)
 
 	err := stmt.Query(repo.Db, &linData)
@@ -47,8 +47,8 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPage
 
 	err = countStmt.Query(repo.Db, &count)
 
-	if err != nil {
-		return response.LINPageResponse{}, err
+	if err != nil || len(linData) == 0 {
+		return response.LINPageResponse{}, errors.New("no items found")
 	} else {
 		totalPages := math.Ceil(float64(count.Count / 20))
 		return response.LINPageResponse{
@@ -62,6 +62,10 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPage
 
 }
 
+// SearchLINByNIIN searches for LIN (Line Item Number) by NIIN (National Item Identification Number).
+// \param niin - the NIIN to search for.
+// \return a slice of LookupLinNiin containing the LIN data.
+// \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(niin string) ([]model.LookupLinNiin, error) {
 	var linData []model.LookupLinNiin
 
@@ -72,13 +76,17 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(niin string) ([]model.Looku
 
 	err := stmt.Query(repo.Db, &linData)
 
-	if err != nil {
-		return []model.LookupLinNiin{}, err
+	if err != nil || len(linData) == 0 {
+		return []model.LookupLinNiin{}, errors.New("no items found")
 	} else {
 		return linData, nil
 	}
 }
 
+// SearchNIINByLIN searches for NIIN (National Item Identification Number) by LIN (Line Item Number).
+// \param lin - the LIN to search for.
+// \return a slice of LookupLinNiin containing the NIIN data.
+// \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(lin string) ([]model.LookupLinNiin, error) {
 	var linData []model.LookupLinNiin
 
@@ -89,21 +97,25 @@ func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(lin string) ([]model.Lookup
 
 	err := stmt.Query(repo.Db, &linData)
 
-	if err != nil {
-		return []model.LookupLinNiin{}, err
+	if err != nil || len(linData) == 0 {
+		return []model.LookupLinNiin{}, errors.New("no items found")
 	} else {
 		return linData, nil
 	}
 }
 
+// SearchUOCByPage searches for UOC (Unit of Consumption) by page.
+// \param page - the page number to retrieve.
+// \return a UOCPageResponse containing the UOC data, count, page, total pages, and whether it is the last page.
+// \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(page int) (response.UOCPageResponse, error) {
 
 	var uocData []model.LookupUoc
-	offset := int64(20 * (page - 1))
+	offset := returnCount * int64(page-1)
 	stmt := SELECT(
 		table.LookupUoc.AllColumns,
 	).FROM(table.LookupUoc).
-		LIMIT(20).
+		LIMIT(returnCount).
 		OFFSET(offset)
 
 	err := stmt.Query(repo.Db, &uocData)
@@ -118,8 +130,8 @@ func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(page int) (response.UOCPage
 
 	err = countStmt.Query(repo.Db, &count)
 
-	if err != nil {
-		return response.UOCPageResponse{}, err
+	if err != nil || len(uocData) == 0 {
+		return response.UOCPageResponse{}, errors.New("no items found")
 	} else {
 		totalPages := math.Ceil(float64(count.Count / 20))
 		return response.UOCPageResponse{
@@ -132,6 +144,10 @@ func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(page int) (response.UOCPage
 	}
 }
 
+// SearchSpecificUOC searches for a specific UOC (Unit of Consumption).
+// \param uoc - the UOC to search for.
+// \return a slice of LookupUoc containing the UOC data.
+// \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(uoc string) ([]model.LookupUoc, error) {
 	var uocData []model.LookupUoc
 
@@ -142,16 +158,32 @@ func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(uoc string) ([]model.Look
 
 	err := stmt.Query(repo.Db, &uocData)
 
-	if err != nil {
-		return nil, err
+	if err != nil || len(uocData) == 0 {
+		return nil, errors.New("no items found")
 	} else {
 		return uocData, nil
 	}
 
 }
 
-//func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error) {
-//	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Model.Contains(strings.ToUpper(model))).Exec(ctx)
-//
-//	return uocData, nil
-//}
+// SearchUOCByModel searches for UOC (Unit of Consumption) by vehicle model.
+// \param vehModel - the vehicle model to search for.
+// \return a slice of LookupUoc containing the UOC data.
+// \return an error if the operation fails.
+func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(vehModel string) ([]model.LookupUoc, error) {
+
+	var uocData []model.LookupUoc
+
+	stmt := SELECT(
+		table.LookupUoc.AllColumns,
+	).FROM(table.LookupUoc).
+		WHERE(table.LookupUoc.Model.LIKE(String("%" + vehModel + "%")))
+
+	err := stmt.Query(repo.Db, &uocData)
+
+	if err != nil || len(uocData) == 0 {
+		return nil, errors.New("no items found")
+	} else {
+		return uocData, nil
+	}
+}

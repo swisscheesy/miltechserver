@@ -21,6 +21,6 @@ func NewItemLookupRouter(db *sql.DB, group *gin.RouterGroup) {
 
 	group.GET("/lookup/uoc", pc.LookupUOCByPage)
 	group.GET("/lookup/uoc/:uoc", pc.LookupSpecificUOC)
-	//group.GET("/lookup/uoc/model/:model", pc.LookupUOCByModel)
+	group.GET("/lookup/uoc/model/:model", pc.LookupUOCByModel)
 
 }

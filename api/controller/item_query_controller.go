@@ -16,6 +16,8 @@ func NewItemQueryController(itemQueryService service.ItemShortService, itemDetai
 	return &ItemQueryController{ItemQueryService: itemQueryService, ItemDetailedService: itemDetailedService}
 }
 
+// FindShort handles the request to find a short item by method and value.
+// \param c - the Gin context for the request.
 func (controller *ItemQueryController) FindShort(c *gin.Context) {
 	method := c.Query("method")
 	value := c.Query("value")
@@ -54,6 +56,8 @@ func (controller *ItemQueryController) FindShort(c *gin.Context) {
 	}
 }
 
+// FindDetailed handles the request to find a detailed item by NIIN.
+// \param c - the Gin context for the request.
 func (controller *ItemQueryController) FindDetailed(c *gin.Context) {
 	niin := c.Query("niin")
 	itemData, err := controller.ItemDetailedService.FindDetailedItem(niin)
