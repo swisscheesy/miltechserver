@@ -1,8 +1,10 @@
 package response
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type UOCPLookupResponse struct {
-	UOCs  []db.LookupUocModel `json:"uocs"`
-	Count int                 `json:"count"`
+	UOCs  []model.LookupUoc `json:"uocs"`
+	Count int               `json:"count"`
 }

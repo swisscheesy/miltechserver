@@ -18,7 +18,7 @@ func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client) {
 	//v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
 	NewItemQueryRouter(db, v1Route)
-	//NewItemLookupRouter(db, v1Route)
+	NewItemLookupRouter(db, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := gin.Group("/api/v1/auth")

@@ -2,7 +2,7 @@ package controller
 
 import (
 	"github.com/gin-gonic/gin"
-	response2 "miltechserver/api/response"
+	"miltechserver/api/response"
 	"miltechserver/api/service"
 	"strconv"
 )
@@ -28,9 +28,9 @@ func (controller *ItemLookupController) LookupLINByPage(c *gin.Context) {
 		return
 	}
 
-	linData, err := controller.ItemLookupService.LookupLINByPage(c, page)
+	linData, err := controller.ItemLookupService.LookupLINByPage(page)
 
-	c.JSON(200, response2.StandardResponse{
+	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
 		Data:    linData,
@@ -42,7 +42,7 @@ func (controller *ItemLookupController) LookupLINByPage(c *gin.Context) {
 func (controller *ItemLookupController) LookupLINByNIIN(c *gin.Context) {
 	niin := c.Param("niin")
 
-	linData, err := controller.ItemLookupService.LookupLINByNIIN(c, niin)
+	linData, err := controller.ItemLookupService.LookupLINByNIIN(niin)
 
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -50,10 +50,10 @@ func (controller *ItemLookupController) LookupLINByNIIN(c *gin.Context) {
 	}
 	retCount := len(linData)
 
-	c.JSON(200, response2.StandardResponse{
+	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response2.LinSearchResponse{
+		Data: response.LinSearchResponse{
 			Count: retCount,
 			Lins:  linData,
 		},
@@ -65,17 +65,17 @@ func (controller *ItemLookupController) LookupLINByNIIN(c *gin.Context) {
 func (controller *ItemLookupController) LookupNIINByLIN(c *gin.Context) {
 	lin := c.Param("lin")
 
-	niinData, err := controller.ItemLookupService.LookupNIINByLIN(c, lin)
+	niinData, err := controller.ItemLookupService.LookupNIINByLIN(lin)
 
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, response2.StandardResponse{
+	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response2.NiinSearchResponse{
+		Data: response.NiinSearchResponse{
 			Count: len(niinData),
 			Niins: niinData,
 		},
@@ -92,9 +92,9 @@ func (controller *ItemLookupController) LookupUOCByPage(c *gin.Context) {
 		return
 	}
 
-	uocData, err := controller.ItemLookupService.LookupUOCByPage(c, page)
+	uocData, err := controller.ItemLookupService.LookupUOCByPage(page)
 
-	c.JSON(200, response2.StandardResponse{
+	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
 		Data:    uocData,
@@ -106,41 +106,41 @@ func (controller *ItemLookupController) LookupUOCByPage(c *gin.Context) {
 func (controller *ItemLookupController) LookupSpecificUOC(c *gin.Context) {
 	uoc := c.Param("uoc")
 
-	uocData, err := controller.ItemLookupService.LookupSpecificUOC(c, uoc)
+	uocData, err := controller.ItemLookupService.LookupSpecificUOC(uoc)
 
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, response2.StandardResponse{
+	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data: response2.UOCPLookupResponse{
+		Data: response.UOCPLookupResponse{
 			Count: len(uocData),
 			UOCs:  uocData,
 		},
 	})
 }
 
-// LookupUOCByModel handles the request to lookup UOC by model.
-// \param c - the Gin context for the request.
-func (controller *ItemLookupController) LookupUOCByModel(c *gin.Context) {
-	model := c.Param("model")
-
-	uocData, err := controller.ItemLookupService.LookupUOCByModel(c, model)
-
-	if err != nil {
-		c.JSON(400, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(200, response2.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data: response2.UOCPLookupResponse{
-			Count: len(uocData),
-			UOCs:  uocData,
-		},
-	})
-}
+//// LookupUOCByModel handles the request to lookup UOC by model.
+//// \param c - the Gin context for the request.
+//func (controller *ItemLookupController) LookupUOCByModel(c *gin.Context) {
+//	model := c.Param("model")
+//
+//	uocData, err := controller.ItemLookupService.LookupUOCByModel(model)
+//
+//	if err != nil {
+//		c.JSON(400, gin.H{"error": err.Error()})
+//		return
+//	}
+//
+//	c.JSON(200, response.StandardResponse{
+//		Status:  200,
+//		Message: "",
+//		Data: response.UOCPLookupResponse{
+//			Count: len(uocData),
+//			UOCs:  uocData,
+//		},
+//	})
+//}

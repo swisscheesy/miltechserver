@@ -1,21 +1,22 @@
 package repository
 
 import (
-	"github.com/gin-gonic/gin"
+	"database/sql"
+	. "github.com/go-jet/jet/v2/postgres"
 	"math"
+	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/.gen/miltech_ng/public/view"
 	"miltechserver/api/response"
-	"miltechserver/prisma/db"
-	"strconv"
-	"strings"
 )
 
 var returnCount = 20
 
 type ItemLokupRepositoryImpl struct {
-	Db *db.PrismaClient
+	Db *sql.DB
 }
 
-func NewItemLookupRepositoryImpl(db *db.PrismaClient) *ItemLokupRepositoryImpl {
+func NewItemLookupRepositoryImpl(db *sql.DB) *ItemLokupRepositoryImpl {
 	return &ItemLokupRepositoryImpl{Db: db}
 }
 
@@ -24,84 +25,133 @@ func NewItemLookupRepositoryImpl(db *db.PrismaClient) *ItemLokupRepositoryImpl {
 // \param page - the page number to retrieve.
 // \return a LINPageResponse containing the LIN data, count, page, total pages, and whether it is the last page.
 // \return an error if the operation fails.
-func (repo *ItemLokupRepositoryImpl) SearchLINByPage(ctx *gin.Context, page int) (response.LINPageResponse, error) {
+func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPageResponse, error) {
 
-	linData, _ := repo.Db.ArmyLineItemNumber.
-		FindMany().
-		Take(returnCount).
-		Skip(returnCount * (page - 1)).
-		Exec(ctx)
+	var linData []model.ArmyLineItemNumber
+	offset := int64(20 * (page - 1))
+	stmt := SELECT(
+		table.ArmyLineItemNumber.AllColumns,
+	).FROM(table.ArmyLineItemNumber).
+		LIMIT(20).
+		OFFSET(offset)
 
-	var res []struct {
-		Count db.RawString
+	err := stmt.Query(repo.Db, &linData)
+
+	var count struct {
+		Count int
 	}
-	// TODO: Cache this count to avoid querying the database every time
-	// Also check error properly
-	_ = repo.Db.Prisma.QueryRaw("SELECT COUNT(*) FROM public.army_line_item_number").Exec(ctx, &res)
 
-	// TODO Handle this error properly as well
-	count, _ := strconv.Atoi(string(res[0].Count))
+	countStmt := SELECT(
+		COUNT(table.ArmyLineItemNumber.Lin),
+	).FROM(table.ArmyLineItemNumber)
 
-	totalPages := math.Ceil(float64(count / 20))
+	err = countStmt.Query(repo.Db, &count)
 
-	return response.LINPageResponse{
-		Lins:       linData,
-		Count:      count,
-		Page:       page,
-		TotalPages: int(totalPages),
-		IsLastPage: page == int(totalPages),
-	}, nil
-
-}
-
-func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(ctx *gin.Context, niin string) ([]db.LookupLinNiinModel, error) {
-	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Niin.Contains(niin)).Exec(ctx)
-
-	return linData, nil
-}
-
-func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(ctx *gin.Context, lin string) ([]db.LookupLinNiinModel, error) {
-	linData, _ := repo.Db.LookupLinNiin.FindMany(db.LookupLinNiin.Lin.Contains(lin)).Exec(ctx)
-
-	return linData, nil
-}
-
-func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(ctx *gin.Context, page int) (response.UOCPageResponse, error) {
-	uocData, _ := repo.Db.LookupUoc.
-		FindMany().
-		Take(returnCount).
-		Skip(returnCount * (page - 1)).
-		Exec(ctx)
-
-	var res []struct {
-		Count db.RawString
+	if err != nil {
+		return response.LINPageResponse{}, err
+	} else {
+		totalPages := math.Ceil(float64(count.Count / 20))
+		return response.LINPageResponse{
+			Lins:       linData,
+			Count:      count.Count,
+			Page:       page,
+			TotalPages: int(totalPages),
+			IsLastPage: float64(page) == totalPages,
+		}, nil
 	}
-	// TODO: Cache this count to avoid querying the database every time
-	// Also check error properly
-	_ = repo.Db.Prisma.QueryRaw("SELECT COUNT(*) FROM public.lookup_uoc").Exec(ctx, &res)
 
-	// TODO Handle this error properly as well
-	count, _ := strconv.Atoi(string(res[0].Count))
-
-	totalPages := math.Ceil(float64(count / 20))
-
-	return response.UOCPageResponse{
-		UOCs:       uocData,
-		Count:      count,
-		Page:       page,
-		TotalPages: int(totalPages),
-		IsLastPage: page == int(totalPages),
-	}, nil
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(ctx *gin.Context, uoc string) ([]db.LookupUocModel, error) {
-	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Uoc.Contains(strings.ToUpper(uoc))).Exec(ctx)
+func (repo *ItemLokupRepositoryImpl) SearchLINByNIIN(niin string) ([]model.LookupLinNiin, error) {
+	var linData []model.LookupLinNiin
 
-	return uocData, nil
+	stmt := SELECT(
+		view.LookupLinNiin.AllColumns).
+		FROM(view.LookupLinNiin).
+		WHERE(view.LookupLinNiin.Niin.LIKE(String("%" + niin + "%")))
+
+	err := stmt.Query(repo.Db, &linData)
+
+	if err != nil {
+		return []model.LookupLinNiin{}, err
+	} else {
+		return linData, nil
+	}
 }
 
-func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error) {
-	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Model.Contains(strings.ToUpper(model))).Exec(ctx)
+func (repo *ItemLokupRepositoryImpl) SearchNIINByLIN(lin string) ([]model.LookupLinNiin, error) {
+	var linData []model.LookupLinNiin
 
-	return uocData, nil
+	stmt := SELECT(
+		view.LookupLinNiin.AllColumns).
+		FROM(view.LookupLinNiin).
+		WHERE(view.LookupLinNiin.Lin.LIKE(String("%" + lin + "%")))
+
+	err := stmt.Query(repo.Db, &linData)
+
+	if err != nil {
+		return []model.LookupLinNiin{}, err
+	} else {
+		return linData, nil
+	}
 }
+
+func (repo *ItemLokupRepositoryImpl) SearchUOCByPage(page int) (response.UOCPageResponse, error) {
+
+	var uocData []model.LookupUoc
+	offset := int64(20 * (page - 1))
+	stmt := SELECT(
+		table.LookupUoc.AllColumns,
+	).FROM(table.LookupUoc).
+		LIMIT(20).
+		OFFSET(offset)
+
+	err := stmt.Query(repo.Db, &uocData)
+
+	var count struct {
+		Count int
+	}
+
+	countStmt := SELECT(
+		COUNT(table.LookupUoc.Uoc),
+	).FROM(table.LookupUoc)
+
+	err = countStmt.Query(repo.Db, &count)
+
+	if err != nil {
+		return response.UOCPageResponse{}, err
+	} else {
+		totalPages := math.Ceil(float64(count.Count / 20))
+		return response.UOCPageResponse{
+			UOCs:       uocData,
+			Count:      count.Count,
+			Page:       page,
+			TotalPages: int(totalPages),
+			IsLastPage: float64(page) == totalPages,
+		}, nil
+	}
+}
+
+func (repo *ItemLokupRepositoryImpl) SearchSpecificUOC(uoc string) ([]model.LookupUoc, error) {
+	var uocData []model.LookupUoc
+
+	stmt := SELECT(
+		table.LookupUoc.AllColumns,
+	).FROM(table.LookupUoc).
+		WHERE(table.LookupUoc.Uoc.EQ(String(uoc)))
+
+	err := stmt.Query(repo.Db, &uocData)
+
+	if err != nil {
+		return nil, err
+	} else {
+		return uocData, nil
+	}
+
+}
+
+//func (repo *ItemLokupRepositoryImpl) SearchUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error) {
+//	uocData, _ := repo.Db.LookupUoc.FindMany(db.LookupUoc.Model.Contains(strings.ToUpper(model))).Exec(ctx)
+//
+//	return uocData, nil
+//}

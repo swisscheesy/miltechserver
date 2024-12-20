@@ -1,17 +1,16 @@
 package repository
 
 import (
-	"github.com/gin-gonic/gin"
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
-	"miltechserver/prisma/db"
 )
 
 type ItemLookupRepository interface {
-	SearchLINByPage(ctx *gin.Context, page int) (response.LINPageResponse, error)
-	SearchLINByNIIN(ctx *gin.Context, niin string) ([]db.LookupLinNiinModel, error)
-	SearchNIINByLIN(ctx *gin.Context, lin string) ([]db.LookupLinNiinModel, error)
+	SearchLINByPage(page int) (response.LINPageResponse, error)
+	SearchLINByNIIN(niin string) ([]model.LookupLinNiin, error)
+	SearchNIINByLIN(lin string) ([]model.LookupLinNiin, error)
 
-	SearchUOCByPage(ctx *gin.Context, page int) (response.UOCPageResponse, error)
-	SearchSpecificUOC(ctx *gin.Context, uoc string) ([]db.LookupUocModel, error)
-	SearchUOCByModel(ctx *gin.Context, model string) ([]db.LookupUocModel, error)
+	SearchUOCByPage(page int) (response.UOCPageResponse, error)
+	SearchSpecificUOC(uoc string) ([]model.LookupUoc, error)
+	//SearchUOCByModel(model string) ([]db.LookupUocModel, error)
 }
