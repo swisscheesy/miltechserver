@@ -1,10 +1,12 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Packaging struct {
-	FlisPackaging1   []db.FlisPackaging1Model `json:"flis_packaging_1"`
-	FlisPackaging2   []db.FlisPackaging2Model `json:"flis_packaging_2"`
-	CageAddress      []db.CageAddressModel    `json:"cage_addresses"`
-	DssWeightAndCube db.DssWeightAndCubeModel `json:"dss_weight_and_cube"`
+	FlisPackaging1   []model.FlisPackaging1 `json:"flis_packaging_1"`
+	FlisPackaging2   []model.FlisPackaging2 `json:"flis_packaging_2"`
+	CageAddress      []model.CageAddress    `json:"cage_addresses"`
+	DssWeightAndCube model.DssWeightAndCube `json:"dss_weight_and_cube"`
 }

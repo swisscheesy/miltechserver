@@ -1,10 +1,12 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Reference struct {
-	FlisReference          *db.FlisIdentificationModel `json:"flis_reference"`            // This isn't a mistake
-	ReferenceAndPartNumber []db.FlisReferenceModel     `json:"reference_and_part_number"` // Not a mistake
-	CageAddresses          []db.CageAddressModel       `json:"cage_addresses"`
-	CageStatusAndType      []db.CageStatusAndTypeModel `json:"cage_status"`
+	FlisReference          model.FlisIdentification  `json:"flis_reference"`            // This isn't a mistake
+	ReferenceAndPartNumber []model.FlisReference     `json:"reference_and_part_number"` // Not a mistake
+	CageAddresses          []model.CageAddress       `json:"cage_addresses"`
+	CageStatusAndType      []model.CageStatusAndType `json:"cage_status"`
 }

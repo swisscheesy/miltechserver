@@ -4,8 +4,9 @@ import (
 	"database/sql"
 	. "github.com/go-jet/jet/v2/postgres"
 	"log/slog"
-	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/api/details"
+	"miltechserver/api/response"
 )
 
 type ItemDetailedRepositoryImpl struct {
@@ -21,364 +22,303 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interf
 	// Call helper methods to get data from each table
 	// Return a DetailedItem struct with all the data
 
-	var dest []struct {
-		Amdf struct {
-			ArmyMasterDataFile model.ArmyMasterDataFile
-			AmdfManagement     model.AmdfManagement
-			AmdfCredit         model.AmdfCredit
-			AmdfBilling        model.AmdfBilling
-			AmdfMatcat         model.AmdfMatcat
-			AmdfPhrases        []model.AmdfPhrase
-			AmdfIAndS          []model.AmdfIAndS
-			ArmyLineItemNumber model.ArmyLineItemNumber
-		}
-		Packaging struct {
-			ArmyPackagingAndFreight      model.ArmyPackagingAndFreight
-			ArmyPackaging1               model.ArmyPackaging1
-			ArmyPackaging2               model.ArmyPackaging2
-			ArmyPackSpecialInstruct      model.ArmyPackagingSpecialInstruct
-			ArmyFreight                  model.ArmyFreight
-			ArmyPackSupplementalInstruct []model.ArmyPackSupplementalInstruct
-		}
+	test, _ := repo.GetAmdfData(niin)
+	test2, _ := repo.GetArmyPackagingAndFreight(niin)
+	test3, _ := repo.GetSarsscat(niin)
+	test4, _ := repo.GetIdentification(niin)
+	test5, _ := repo.GetManagement(niin)
+	test6, _ := repo.GetReference(niin)
 
-		Sarsscat struct {
-			Sarsscat    model.ArmySarsscat
-			MoeRule     []model.MoeRule
-			AmdfFreight model.AmdfFreight
-		}
-
-		Identification struct {
-			FlisManagementId    model.FlisManagementID
-			ColloquialNames     []model.ColloquialName
-			FlisStandardization []model.FlisStandardization
-			FlisCancelledNiins  []model.FlisCancelledNiin
-		}
-
-		Management struct {
-			FlisManagement        []model.FlisManagement
-			FlisPhrase            []model.FlisPhrase
-			ComponentEndItem      []model.ComponentEndItem
-			ArmyManagement        []model.ArmyManagement
-			AirForceManagement    model.AirForceManagement
-			MarineCorpsManagement []model.MarineCorpsManagement
-			NavyManagement        model.NavyManagement
-			FaaManagement         []model.FaaManagement
-		}
-
-		Reference struct {
-			FlisReference          model.FlisIdentification
-			ReferenceAndPartNumber []model.FlisReference
-			CageAddresses          []model.CageAddress
-			CageStatusAndType      []model.CageStatusAndType
-		}
+	fullDetailedItem := response.DetailedResponse{
+		Amdf:                    test,
+		ArmyPackagingAndFreight: test2,
+		Sarsscat:                test3,
+		Identification:          test4,
+		Management:              test5,
+		Reference:               test6,
 	}
 
-	stmt := SELECT(
-		table.ArmyMasterDataFile.AllColumns,
-		table.AmdfManagement.AllColumns,
-		table.AmdfCredit.AllColumns,
-		table.AmdfBilling.AllColumns,
-		table.AmdfMatcat.AllColumns,
-		table.AmdfPhrase.AllColumns,
-		table.AmdfIAndS.AllColumns,
-		table.ArmyLineItemNumber.AllColumns,
-		table.ArmyPackagingAndFreight.AllColumns,
-		table.ArmyPackaging1.AllColumns,
-		table.ArmyPackaging2.AllColumns,
-		table.ArmyPackagingSpecialInstruct.AllColumns,
-		table.ArmyFreight.AllColumns,
-		table.ArmyPackSupplementalInstruct.AllColumns,
-		table.ArmySarsscat.AllColumns,
-		table.MoeRule.AllColumns,
-		table.AmdfFreight.AllColumns,
-		table.FlisManagementID.AllColumns,
-		table.ColloquialName.AllColumns,
-		table.FlisStandardization.AllColumns,
-		table.FlisCancelledNiin.AllColumns,
-		table.FlisManagement.AllColumns,
-		table.FlisPhrase.AllColumns,
-		table.ComponentEndItem.AllColumns,
-		table.ArmyManagement.AllColumns,
-		table.AirForceManagement.AllColumns,
-		table.MarineCorpsManagement.AllColumns,
-		table.NavyManagement.AllColumns,
-		table.FaaManagement.AllColumns,
-		table.FlisIdentification.AllColumns,
-		table.FlisReference.AllColumns,
-		table.CageAddress.AllColumns,
-		table.CageStatusAndType.AllColumns,
-	).FROM(
-		table.ArmyMasterDataFile.
-			LEFT_JOIN(
-				table.AmdfCredit, table.AmdfCredit.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.AmdfManagement, table.AmdfManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.AmdfBilling, table.AmdfBilling.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.AmdfMatcat, table.AmdfMatcat.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.AmdfPhrase, table.AmdfPhrase.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.AmdfIAndS, table.AmdfIAndS.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.ArmyLineItemNumber, table.ArmyLineItemNumber.Lin.EQ(table.ArmyLineItemNumber.Lin)).
-			// Army Packaging and Freight JOINS
-			LEFT_JOIN(
-				table.ArmyPackagingAndFreight, table.ArmyPackagingAndFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.ArmyPackaging1, table.ArmyPackaging1.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.ArmyPackaging2, table.ArmyPackaging2.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.ArmyPackagingSpecialInstruct, table.ArmyPackagingSpecialInstruct.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.ArmyFreight, table.ArmyFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(
-				table.ArmyPackSupplementalInstruct, table.ArmyPackSupplementalInstruct.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			// Sarsscat JOINS
-			LEFT_JOIN(table.ArmySarsscat, table.ArmySarsscat.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.MoeRule, table.MoeRule.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.AmdfFreight, table.AmdfFreight.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			// Identification JOINS
-			LEFT_JOIN(table.FlisManagementID, table.FlisManagementID.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.ColloquialName, table.ColloquialName.Inc.EQ(table.ColloquialName.Inc)).
-			LEFT_JOIN(table.FlisStandardization, table.FlisStandardization.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.FlisCancelledNiin, table.FlisCancelledNiin.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			// Management JOINS
-			LEFT_JOIN(table.FlisManagement, table.FlisManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.FlisPhrase, table.FlisPhrase.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.ComponentEndItem, table.ComponentEndItem.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.ArmyManagement, table.ArmyManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.AirForceManagement, table.AirForceManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.MarineCorpsManagement, table.MarineCorpsManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.NavyManagement, table.NavyManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.FaaManagement, table.FaaManagement.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			//Reference JOINS
-			LEFT_JOIN(table.FlisIdentification, table.FlisIdentification.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.FlisReference, table.FlisReference.Niin.EQ(table.ArmyMasterDataFile.Niin)).
-			LEFT_JOIN(table.CageAddress, table.CageAddress.CageCode.EQ(table.FlisReference.CageCode)).
-			LEFT_JOIN(table.CageStatusAndType, table.CageStatusAndType.CageCode.EQ(table.FlisReference.CageCode)),
-	).WHERE(
-		table.ArmyMasterDataFile.Niin.EQ(String(niin)),
-	)
+	return fullDetailedItem, nil
+}
 
-	debugSql := stmt.DebugSql()
-	slog.Info(debugSql)
+func (repo *ItemDetailedRepositoryImpl) GetAmdfData(niin string) (details.Amdf, error) {
+	amdf := details.Amdf{}
 
-	err := stmt.Query(repo.Db, &dest)
+	amdfStmt :=
+		SELECT(
+			table.ArmyMasterDataFile.AllColumns,
+		).FROM(table.ArmyMasterDataFile).
+			WHERE(table.ArmyMasterDataFile.Niin.EQ(String(niin)))
+
+	err := amdfStmt.Query(repo.Db, &amdf.ArmyMasterDataFile)
+
+	amdfManagementStmt := SELECT(
+		table.AmdfManagement.AllColumns).FROM(table.AmdfManagement).
+		WHERE(table.AmdfManagement.Niin.EQ(String(niin)))
+
+	err = amdfManagementStmt.Query(repo.Db, &amdf.AmdfManagement)
+
+	amdfCreditStmt := SELECT(
+		table.AmdfCredit.AllColumns).FROM(table.AmdfCredit).
+		WHERE(table.AmdfCredit.Niin.EQ(String(niin)))
+
+	err = amdfCreditStmt.Query(repo.Db, &amdf.AmdfCredit)
+
+	amdfBillingStmt := SELECT(
+		table.AmdfBilling.AllColumns).FROM(table.AmdfBilling).
+		WHERE(table.AmdfBilling.Niin.EQ(String(niin)))
+
+	err = amdfBillingStmt.Query(repo.Db, &amdf.AmdfBilling)
+
+	amdfMatcatStmt := SELECT(
+		table.AmdfMatcat.AllColumns).FROM(table.AmdfMatcat).
+		WHERE(table.AmdfMatcat.Niin.EQ(String(niin)))
+
+	err = amdfMatcatStmt.Query(repo.Db, &amdf.AmdfMatcat)
+
+	amdfPhrasesStmt := SELECT(
+		table.AmdfPhrase.AllColumns).FROM(table.AmdfPhrase).
+		WHERE(table.AmdfPhrase.Niin.EQ(String(niin)))
+
+	err = amdfPhrasesStmt.Query(repo.Db, &amdf.AmdfPhrases)
+
+	amdfIandSStmt := SELECT(
+		table.AmdfIAndS.AllColumns).FROM(table.AmdfIAndS).
+		WHERE(table.AmdfIAndS.Niin.EQ(String(niin)))
+
+	err = amdfIandSStmt.Query(repo.Db, &amdf.AmdfIandS)
+
+	armyLinStmt := SELECT(
+		table.ArmyLineItemNumber.AllColumns).FROM(table.ArmyLineItemNumber).
+		WHERE(table.ArmyLineItemNumber.Lin.EQ(String(*amdf.AmdfManagement.Lin)))
+
+	err = armyLinStmt.Query(repo.Db, &amdf.ArmyLin)
+
 	if err != nil {
-		return nil, err
+		return details.Amdf{}, err
 	} else {
-		return dest, nil
+		return amdf, nil
+	}
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(niin string) (details.ArmyPackagingAndFreight, error) {
+	armyPackagingAndFreight := details.ArmyPackagingAndFreight{}
+
+	armyPackagingAndFreightStmt := SELECT(
+		table.ArmyPackagingAndFreight.AllColumns).FROM(table.ArmyPackagingAndFreight).
+		WHERE(table.ArmyPackagingAndFreight.Niin.EQ(String(niin)))
+
+	err := armyPackagingAndFreightStmt.Query(repo.Db, &armyPackagingAndFreight.ArmyPackagingAndFreight)
+
+	armyPackaging1Stmt := SELECT(
+		table.ArmyPackaging1.AllColumns).FROM(table.ArmyPackaging1).
+		WHERE(table.ArmyPackaging1.Niin.EQ(String(niin)))
+
+	err = armyPackaging1Stmt.Query(repo.Db, &armyPackagingAndFreight.ArmyPackaging1)
+
+	armyPackaging2Stmt := SELECT(
+		table.ArmyPackaging2.AllColumns).FROM(table.ArmyPackaging2).
+		WHERE(table.ArmyPackaging2.Niin.EQ(String(niin)))
+
+	err = armyPackaging2Stmt.Query(repo.Db, &armyPackagingAndFreight.ArmyPackaging2)
+
+	armyPackSpecialInstructStmt := SELECT(
+		table.ArmyPackagingSpecialInstruct.AllColumns).FROM(table.ArmyPackagingSpecialInstruct).
+		WHERE(table.ArmyPackagingSpecialInstruct.Niin.EQ(String(niin)))
+
+	err = armyPackSpecialInstructStmt.Query(repo.Db, &armyPackagingAndFreight.ArmyPackSpecialInstruct)
+
+	armyFreightStmt := SELECT(
+		table.ArmyFreight.AllColumns).FROM(table.ArmyFreight).
+		WHERE(table.ArmyFreight.Niin.EQ(String(niin)))
+
+	err = armyFreightStmt.Query(repo.Db, &armyPackagingAndFreight.ArmyFreight)
+
+	armyPackSupplementalInstructStmt := SELECT(
+		table.ArmyPackSupplementalInstruct.AllColumns).FROM(table.ArmyPackSupplementalInstruct).
+		WHERE(table.ArmyPackSupplementalInstruct.Niin.EQ(String(niin)))
+
+	err = armyPackSupplementalInstructStmt.Query(repo.Db, &armyPackagingAndFreight.ArmyPackSupplementalInstruct)
+
+	if err != nil {
+		return details.ArmyPackagingAndFreight{}, err
+	} else {
+		return armyPackagingAndFreight, nil
 	}
 }
 
-//table.ArmyMasterDataFile.LEFT_JOIN(
-//// Amdf JOINS
-//table.AmdfManagement, table.ArmyMasterDataFile.Niin.EQ(table.AmdfManagement.Niin)).
+func (repo *ItemDetailedRepositoryImpl) GetSarsscat(niin string) (details.Sarsscat, error) {
+	sarsscat := details.Sarsscat{}
 
-// GetAmdfData retrieves the AMDF field data for a given NIIN
-// || ArmyMasterDataFile, AmdfManagement, AmdfCredit, AmdfBilling, AmdfMatcat, AmdfPhrases, AmdfIAndS, ArmyLin
-//func (repo *ItemDetailedRepositoryImpl) GetAmdfData(ctx *gin.Context, niin string) (details.Amdf, error) {
-//	var linData *db.ArmyLineItemNumberModel
-//
-//	amdfData, _ := repo.Db.ArmyMasterDataFile.FindFirst(db.ArmyMasterDataFile.Niin.Equals(niin)).Exec(ctx)
-//	managementData, _ := repo.Db.AmdfManagement.FindFirst(db.AmdfManagement.Niin.Equals(niin)).Exec(ctx)
-//	creditData, _ := repo.Db.AmdfCredit.FindFirst(db.AmdfCredit.Niin.Equals(niin)).Exec(ctx)
-//	billingData, _ := repo.Db.AmdfBilling.FindFirst(db.AmdfBilling.Niin.Equals(niin)).Exec(ctx)
-//	matcatData, _ := repo.Db.AmdfMatcat.FindFirst(db.AmdfMatcat.Niin.Equals(niin)).Exec(ctx)
-//	phrasesData, _ := repo.Db.AmdfPhrase.FindMany(db.AmdfPhrase.Niin.Equals(niin)).Exec(ctx)
-//	iAndSData, _ := repo.Db.AmdfIAndS.FindMany(db.AmdfIAndS.Niin.Equals(niin)).Exec(ctx)
-//
-//	testLin, _ := managementData.Lin()
-//
-//	if testLin != "" {
-//		linData, _ = repo.Db.ArmyLineItemNumber.FindFirst(db.ArmyLineItemNumber.Lin.Equals(testLin)).Exec(ctx)
-//	}
-//
-//	data := details.Amdf{
-//		// Map fields from data to details.Amdf
-//		ArmyMasterDataFile: *amdfData,
-//		AmdfManagement:     *managementData,
-//		AmdfCredit:         *creditData,
-//		AmdfBilling:        *billingData,
-//		AmdfMatcat:         *matcatData,
-//		AmdfPhrases:        phrasesData,
-//		AmdfIandS:          iAndSData,
-//		ArmyLin:            linData,
-//	}
-//	return data, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(ctx *gin.Context, niin string) (details.ArmyPackagingAndFreight, error) {
-//	armyPackingAndFreightData, _ := repo.Db.ArmyPackagingAndFreight.FindFirst(db.ArmyPackagingAndFreight.Niin.Equals(niin)).Exec(ctx)
-//	armyPackaging1Data, _ := repo.Db.ArmyPackaging1.FindUnique(db.ArmyPackaging1.Niin.Equals(niin)).Exec(ctx)
-//	armyPackaging2Data, _ := repo.Db.ArmyPackaging2.FindUnique(db.ArmyPackaging2.Niin.Equals(niin)).Exec(ctx)
-//	armyPackSpecialInstructData, _ := repo.Db.ArmyPackagingSpecialInstruct.FindUnique(db.ArmyPackagingSpecialInstruct.Niin.Equals(niin)).Exec(ctx)
-//	armyFreightData, _ := repo.Db.ArmyFreight.FindUnique(db.ArmyFreight.Niin.Equals(niin)).Exec(ctx)
-//	armyPackSupplementalInstructData, _ := repo.Db.ArmyPackSupplementalInstruct.FindMany(db.ArmyPackSupplementalInstruct.Niin.Equals(niin)).Exec(ctx)
-//
-//	data := details.ArmyPackagingAndFreight{
-//		ArmyPackagingAndFreight:      *armyPackingAndFreightData,
-//		ArmyPackaging1:               *armyPackaging1Data,
-//		ArmyPackaging2:               *armyPackaging2Data,
-//		ArmyPackSpecialInstruct:      *armyPackSpecialInstructData,
-//		ArmyFreight:                  *armyFreightData,
-//		ArmyPackSupplementalInstruct: armyPackSupplementalInstructData,
-//	}
-//	return data, nil
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetSarsscat(ctx *gin.Context, niin string) (details.Sarsscat, error) {
-//	sarsscatData, _ := repo.Db.ArmySarsscat.FindUnique(db.ArmySarsscat.Niin.Equals(niin)).Exec(ctx)
-//	moeRuleData, _ := repo.Db.MoeRule.FindMany(db.MoeRule.Niin.Equals(niin)).Exec(ctx)
-//	amdfFreightData, _ := repo.Db.AmdfFreight.FindUnique(db.AmdfFreight.Niin.Equals(niin)).Exec(ctx)
-//
-//	data := details.Sarsscat{
-//		ArmySarsscat: *sarsscatData,
-//		MoeRule:      moeRuleData,
-//		AmdfFreight:  *amdfFreightData,
-//	}
-//
-//	return data, nil
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetIdentification(ctx *gin.Context, niin string) (details.Identification, error) {
-//	var colloqNames []db.ColloquialNameModel
-//	flisManagementIdData, _ := repo.Db.FlisManagementID.FindFirst(db.FlisManagementID.Niin.Equals(niin)).Exec(ctx)
-//	flisStandardizationData, _ := repo.Db.FlisStandardization.FindMany(db.FlisStandardization.Niin.Equals(niin)).Exec(ctx)
-//	FlisCancelledNiinData, _ := repo.Db.FlisCancelledNiin.FindMany(db.FlisCancelledNiin.Niin.Equals(niin)).Exec(ctx)
-//
-//	if flisManagementIdData != nil {
-//		incPlacerholder, _ := flisManagementIdData.Inc()
-//		if len(incPlacerholder) == 5 {
-//			colloqNameData, _ := repo.Db.ColloquialName.FindMany(db.ColloquialName.Inc.Equals(incPlacerholder)).Exec(ctx)
-//
-//			for _, name := range colloqNameData {
-//				colloqNames = append(colloqNames, name)
-//			}
-//		}
-//	}
-//
-//	if flisManagementIdData == nil {
-//		flisManagementIdData = &db.FlisManagementIDModel{}
-//	}
-//
-//	data := details.Identification{
-//		FlisManagementId:    *flisManagementIdData,
-//		ColloquialNames:     colloqNames,
-//		FlisStandardization: flisStandardizationData,
-//		FlisCancelledNiin:   FlisCancelledNiinData,
-//	}
-//
-//	return data, nil
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetManagement(ctx *gin.Context, niin string) (details.Management, error) {
-//	flisManData, _ := repo.Db.FlisManagement.FindMany(db.FlisManagement.Niin.Equals(niin)).Exec(ctx)
-//	flisPhraseData, _ := repo.Db.FlisPhrase.FindMany(db.FlisPhrase.Niin.Equals(niin)).Exec(ctx)
-//	componentEndItemData, _ := repo.Db.ComponentEndItem.FindMany(db.ComponentEndItem.Niin.Equals(niin)).Exec(ctx)
-//	armyManagementData, _ := repo.Db.ArmyManagement.FindMany(db.ArmyManagement.Niin.Equals(niin)).Exec(ctx)
-//	airForceManagementData, _ := repo.Db.AirForceManagement.FindFirst(db.AirForceManagement.Niin.Equals(niin)).Exec(ctx)
-//	marineManagementData, _ := repo.Db.MarineCorpsManagement.FindMany(db.MarineCorpsManagement.Niin.Equals(niin)).Exec(ctx)
-//	navyManagementData, _ := repo.Db.NavyManagement.FindFirst(db.NavyManagement.Niin.Equals(niin)).Exec(ctx)
-//	faaManagementData, _ := repo.Db.FaaManagement.FindMany(db.FaaManagement.Niin.Equals(niin)).Exec(ctx)
-//
-//	data := details.Management{
-//		FLisManagement:        flisManData,
-//		FlisPhrase:            flisPhraseData,
-//		ComponentEndItem:      componentEndItemData,
-//		ArmyManagement:        armyManagementData,
-//		AirForceManagement:    airForceManagementData,
-//		MarineCorpsManagement: marineManagementData,
-//		NavyManagement:        navyManagementData,
-//		FaaManagement:         faaManagementData,
-//	}
-//
-//	return data, nil
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetReference(ctx *gin.Context, niin string) (details.Reference, error) {
-//	flisRefData, _ := repo.Db.FlisIdentification.FindUnique(db.FlisIdentification.Niin.Equals(niin)).Exec(ctx)
-//	refAndPartData, _ := repo.Db.FlisReference.FindMany(db.FlisReference.Niin.Equals(niin)).Exec(ctx)
-//
-//	var cageAdressPlaceholder []db.CageAddressModel
-//	var cageStatusAndTypePlaceholder []db.CageStatusAndTypeModel
-//
-//	if refAndPartData != nil {
-//		for _, part := range refAndPartData {
-//			cage, _ := part.CageCode()
-//			cageData, _ := repo.Db.CageAddress.FindFirst(db.CageAddress.CageCode.Equals(cage)).Exec(ctx)
-//			cageAdressPlaceholder = append(cageAdressPlaceholder, *cageData)
-//
-//			cageStatusData, _ := repo.Db.CageStatusAndType.FindFirst(db.CageStatusAndType.CageCode.Equals(cage)).Exec(ctx)
-//			cageStatusAndTypePlaceholder = append(cageStatusAndTypePlaceholder, *cageStatusData)
-//		}
-//	}
-//
-//	data := details.Reference{
-//		FlisReference:          flisRefData,
-//		ReferenceAndPartNumber: refAndPartData,
-//		CageAddresses:          cageAdressPlaceholder,
-//		CageStatusAndType:      cageStatusAndTypePlaceholder,
-//	}
-//
-//	return data, nil
-//
-//}
-//
+	sarsscatStmt := SELECT(
+		table.ArmySarsscat.AllColumns).FROM(table.ArmySarsscat).
+		WHERE(table.ArmySarsscat.Niin.EQ(String(niin)))
+
+	err := sarsscatStmt.Query(repo.Db, &sarsscat.ArmySarsscat)
+
+	if err != nil {
+		return details.Sarsscat{}, err
+	} else {
+		return sarsscat, nil
+	}
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetIdentification(niin string) (details.Identification, error) {
+	identification := details.Identification{}
+
+	flisMgmtStmt := SELECT(
+		table.FlisManagementID.AllColumns).FROM(table.FlisManagementID).
+		WHERE(table.FlisManagementID.Niin.EQ(String(niin)))
+
+	err := flisMgmtStmt.Query(repo.Db, &identification.FlisManagementId)
+
+	colloquialNamesStmt := SELECT(
+		table.ColloquialName.AllColumns).FROM(table.ColloquialName).
+		WHERE(table.ColloquialName.Inc.EQ(String(*identification.FlisManagementId.Inc)))
+
+	err = colloquialNamesStmt.Query(repo.Db, &identification.ColloquialName)
+
+	flisStandardizationStmt := SELECT(
+		table.FlisStandardization.AllColumns).FROM(table.FlisStandardization).
+		WHERE(table.FlisStandardization.Niin.EQ(String(niin)))
+
+	err = flisStandardizationStmt.Query(repo.Db, &identification.FlisStandardization)
+
+	flisCancelledNiinStmt := SELECT(
+		table.FlisCancelledNiin.AllColumns).FROM(table.FlisCancelledNiin).
+		WHERE(table.FlisCancelledNiin.Niin.EQ(String(niin)))
+
+	err = flisCancelledNiinStmt.Query(repo.Db, &identification.FlisCancelledNiin)
+
+	if err != nil {
+		return details.Identification{}, err
+	} else {
+		return identification, nil
+	}
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetManagement(niin string) (details.Management, error) {
+	management := details.Management{}
+
+	flisManagementStmt := SELECT(
+		table.FlisManagement.AllColumns).FROM(table.FlisManagement).
+		WHERE(table.FlisManagement.Niin.EQ(String(niin)))
+
+	err := flisManagementStmt.Query(repo.Db, &management.FLisManagement)
+
+	flisPhraseStmt := SELECT(
+		table.FlisPhrase.AllColumns).FROM(table.FlisPhrase).
+		WHERE(table.FlisPhrase.Niin.EQ(String(niin)))
+
+	err = flisPhraseStmt.Query(repo.Db, &management.FlisPhrase)
+
+	componentEndItemStmt := SELECT(
+		table.ComponentEndItem.AllColumns).FROM(table.ComponentEndItem).
+		WHERE(table.ComponentEndItem.Niin.EQ(String(niin)))
+
+	err = componentEndItemStmt.Query(repo.Db, &management.ComponentEndItem)
+
+	armyManagementStmt := SELECT(
+		table.ArmyManagement.AllColumns).FROM(table.ArmyManagement).
+		WHERE(table.ArmyManagement.Niin.EQ(String(niin)))
+
+	err = armyManagementStmt.Query(repo.Db, &management.ArmyManagement)
+
+	airForceManagementStmt := SELECT(
+		table.AirForceManagement.AllColumns).FROM(table.AirForceManagement).
+		WHERE(table.AirForceManagement.Niin.EQ(String(niin)))
+
+	err = airForceManagementStmt.Query(repo.Db, &management.AirForceManagement)
+
+	marineCorpsManagementStmt := SELECT(
+		table.MarineCorpsManagement.AllColumns).FROM(table.MarineCorpsManagement).
+		WHERE(table.MarineCorpsManagement.Niin.EQ(String(niin)))
+
+	err = marineCorpsManagementStmt.Query(repo.Db, &management.MarineCorpsManagement)
+
+	navyManagementStmt := SELECT(
+		table.NavyManagement.AllColumns).FROM(table.NavyManagement).
+		WHERE(table.NavyManagement.Niin.EQ(String(niin)))
+
+	err = navyManagementStmt.Query(repo.Db, &management.NavyManagement)
+
+	faaManagementStmt := SELECT(
+		table.FaaManagement.AllColumns).FROM(table.FaaManagement).
+		WHERE(table.FaaManagement.Niin.EQ(String(niin)))
+
+	err = faaManagementStmt.Query(repo.Db, &management.FaaManagement)
+
+	if err != nil {
+		return details.Management{}, err
+	} else {
+		return management, nil
+	}
+}
+
+func (repo *ItemDetailedRepositoryImpl) GetReference(niin string) (details.Reference, error) {
+	reference := details.Reference{}
+
+	// FlisIdentification
+	flisReferenceStmt := SELECT(
+		table.FlisIdentification.AllColumns).FROM(table.FlisIdentification).
+		WHERE(table.FlisIdentification.Niin.EQ(String(niin)))
+
+	err := flisReferenceStmt.Query(repo.Db, &reference.FlisReference)
+
+	// This will be multiple returns
+	referenceAndPartNumberStmt := SELECT(
+		table.FlisReference.AllColumns).FROM(table.FlisReference).
+		WHERE(table.FlisReference.Niin.EQ(String(niin)))
+
+	err = referenceAndPartNumberStmt.Query(repo.Db, &reference.ReferenceAndPartNumber)
+
+	// Loop through all the referenceAndPartNumber results and get the CageCode
+
+	var cageCodes string
+	for _, ref := range reference.ReferenceAndPartNumber {
+		if ref.CageCode != nil {
+			if cageCodes != "" {
+				cageCodes += ","
+			}
+			cageCodes += *ref.CageCode
+		}
+	}
+	// The two following statements will have to use the multiple returns from the previous statement
+	cageAddressesStmt := SELECT(
+		table.CageAddress.AllColumns).FROM(table.CageAddress).
+		WHERE(table.CageAddress.CageCode.IN(String(cageCodes)))
+
+	test := cageAddressesStmt.DebugSql()
+	slog.Info(test)
+
+	err = cageAddressesStmt.Query(repo.Db, &reference.CageAddresses)
+
+	cageStatusAndTypeStmt := SELECT(
+		table.CageStatusAndType.AllColumns).FROM(table.CageStatusAndType).
+		WHERE(table.CageStatusAndType.CageCode.IN(String(cageCodes)))
+
+	err = cageStatusAndTypeStmt.Query(repo.Db, &reference.CageStatusAndType)
+
+	if err != nil {
+		return details.Reference{}, err
+	} else {
+		return reference, nil
+	}
+}
+
 //func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx *gin.Context, niin string) (details.Freight, error) {
-//	flisFreightData, _ := repo.Db.FlisFreight.FindFirst(db.FlisFreight.Niin.Equals(niin)).Exec(ctx)
 //
-//	data := details.Freight{
-//		FlisFreight: *flisFreightData,
-//	}
-//
-//	return data, nil
 //}
 //
 //func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx *gin.Context, niin string) (details.Packaging, error) {
-//	var cageAddressPlaceholder []db.CageAddressModel
 //
-//	flisPackaging1Data, _ := repo.Db.FlisPackaging1.FindMany(db.FlisPackaging1.Niin.Equals(niin)).Exec(ctx)
-//	flisPackaging2Data, _ := repo.Db.FlisPackaging2.FindMany(db.FlisPackaging2.Niin.Equals(niin)).Exec(ctx)
-//	dssWeightAndCubeData, _ := repo.Db.DssWeightAndCube.FindFirst(db.DssWeightAndCube.Niin.Equals(niin)).Exec(ctx)
-//
-//	if flisPackaging1Data != nil {
-//		for _, part := range flisPackaging1Data {
-//			cage, _ := part.PkgDesignActy()
-//			cageData, _ := repo.Db.CageAddress.FindFirst(db.CageAddress.CageCode.Equals(cage)).Exec(ctx)
-//			cageAddressPlaceholder = append(cageAddressPlaceholder, *cageData)
-//		}
-//	}
-//
-//	data := details.Packaging{
-//		FlisPackaging1:   flisPackaging1Data,
-//		FlisPackaging2:   flisPackaging2Data,
-//		CageAddress:      cageAddressPlaceholder,
-//		DssWeightAndCube: *dssWeightAndCubeData,
-//	}
-//
-//	return data, nil
 //}
 //
 //func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx *gin.Context, niin string) (details.Characteristics, error) {
-//	characteristicsData, _ := repo.Db.FlisItemCharacteristics.FindMany(db.FlisItemCharacteristics.Niin.Equals(niin)).Exec(ctx)
-//
-//	data := details.Characteristics{
-//		Characteristics: characteristicsData,
-//	}
-//	return data, nil
 //
 //}
 //
 //func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx *gin.Context, niin string) (details.Disposition, error) {
-//	dispositionData, _ := repo.Db.Disposition.FindFirst(db.Disposition.Niin.Equals(niin)).Exec(ctx)
 //
-//	data := details.Disposition{
-//		Disposition: dispositionData,
-//	}
-//
-//	return data, nil
 //}

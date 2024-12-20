@@ -1,7 +1,9 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Freight struct {
-	FlisFreight db.FlisFreightModel `json:"flis_freight"`
+	FlisFreight model.FlisFreight `json:"flis_freight"`
 }

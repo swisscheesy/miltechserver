@@ -1,7 +1,9 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Disposition struct {
-	Disposition *db.DispositionModel `json:"disposition"`
+	Disposition *model.Disposition `json:"disposition"`
 }

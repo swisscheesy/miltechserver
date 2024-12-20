@@ -1,10 +1,12 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Identification struct {
-	FlisManagementId    db.FlisManagementIDModel      `json:"flis_management_id"`
-	ColloquialNames     []db.ColloquialNameModel      `json:"colloquial_names"`
-	FlisStandardization []db.FlisStandardizationModel `json:"flis_standardization"`
-	FlisCancelledNiin   []db.FlisCancelledNiinModel   `json:"flis_cancelled_niin"`
+	FlisManagementId    model.FlisManagementID      `json:"flis_management_id"`
+	ColloquialName      []model.ColloquialName      `json:"colloquial_names"`
+	FlisStandardization []model.FlisStandardization `json:"flis_standardization"`
+	FlisCancelledNiin   []model.FlisCancelledNiin   `json:"flis_cancelled_niin"`
 }

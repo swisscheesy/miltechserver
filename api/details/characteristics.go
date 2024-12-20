@@ -1,7 +1,9 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Characteristics struct {
-	Characteristics []db.FlisItemCharacteristicsModel `json:"characteristics"`
+	Characteristics []model.FlisItemCharacteristics `json:"characteristics"`
 }

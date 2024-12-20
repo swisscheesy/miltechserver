@@ -1,9 +1,11 @@
 package details
 
-import "miltechserver/prisma/db"
+import (
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Sarsscat struct {
-	ArmySarsscat db.ArmySarsscatModel `json:"army_sarsscat"`
-	MoeRule      []db.MoeRuleModel    `json:"moe_rule"`
-	AmdfFreight  db.AmdfFreightModel  `json:"amdf_freight"`
+	ArmySarsscat model.ArmySarsscat `json:"army_sarsscat"`
+	MoeRule      []model.MoeRule    `json:"moe_rule"`
+	AmdfFreight  model.AmdfFreight  `json:"amdf_freight"`
 }
