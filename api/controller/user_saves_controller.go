@@ -25,7 +25,7 @@ func (controller *UserSavesController) GetQuickSaveItemsByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := controller.UserSavesService.GetQuickSaveItemsByUser(c, user)
+	result, err := controller.UserSavesService.GetQuickSaveItemsByUser(user)
 
 	if err != nil {
 		c.Error(err)

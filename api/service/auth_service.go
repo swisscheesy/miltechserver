@@ -2,17 +2,17 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
-	"miltechserver/prisma/db"
 )
 
 type AuthService struct {
-	Db       *db.PrismaClient
+	Db       *sql.DB
 	FireAuth *auth.Client
 }
 
-func NewAuthService(db *db.PrismaClient, fireAuth *auth.Client) *AuthService {
+func NewAuthService(db *sql.DB, fireAuth *auth.Client) *AuthService {
 	return &AuthService{Db: db, FireAuth: fireAuth}
 }
 

@@ -1,11 +1,10 @@
 package repository
 
 import (
-	"github.com/gin-gonic/gin"
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
-	"miltechserver/prisma/db"
 )
 
 type UserSavesRepository interface {
-	GetQuickSaveItemsByUserId(ctx *gin.Context, user *bootstrap.User) ([]db.UserItemsQuickModel, error)
+	GetQuickSaveItemsByUserId(user *bootstrap.User) ([]model.UserItemsQuick, error)
 }

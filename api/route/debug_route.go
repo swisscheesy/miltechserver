@@ -1,14 +1,14 @@
 package route
 
 import (
+	"database/sql"
 	"github.com/gin-gonic/gin"
 	"miltechserver/bootstrap"
-	"miltechserver/prisma/db"
 	"net/http"
 	"time"
 )
 
-func NewDebugRouter(env *bootstrap.Env, timeout time.Duration, db *db.PrismaClient, group *gin.RouterGroup) {
+func NewDebugRouter(env *bootstrap.Env, timeout time.Duration, db *sql.DB, group *gin.RouterGroup) {
 	// All Public Routes
 
 	group.GET("/ping", func(ctx *gin.Context) {

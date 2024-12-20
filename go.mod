@@ -8,8 +8,6 @@ require (
 	github.com/go-jet/jet/v2 v2.12.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/shopspring/decimal v1.4.0
-	github.com/steebchen/prisma-client-go v0.44.0
 	google.golang.org/api v0.170.0
 )
 
@@ -55,7 +53,6 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.0.0-beta2 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.49.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect

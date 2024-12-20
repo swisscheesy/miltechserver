@@ -1,10 +1,9 @@
 package service
 
 import (
-	"github.com/gin-gonic/gin"
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
 	"miltechserver/bootstrap"
-	"miltechserver/prisma/db"
 )
 
 type UserSavesServiceImpl struct {
@@ -16,6 +15,6 @@ func NewUserSavesServiceImpl(userSavesRepository repository.UserSavesRepository)
 }
 
 // GetQuickSaveItemsByUser is a function that returns the quick save items of a user
-func (service *UserSavesServiceImpl) GetQuickSaveItemsByUser(c *gin.Context, user *bootstrap.User) ([]db.UserItemsQuickModel, error) {
-	return service.UserSavesRepository.GetQuickSaveItemsByUserId(c, user)
+func (service *UserSavesServiceImpl) GetQuickSaveItemsByUser(user *bootstrap.User) ([]model.UserItemsQuick, error) {
+	return service.UserSavesRepository.GetQuickSaveItemsByUserId(user)
 }
