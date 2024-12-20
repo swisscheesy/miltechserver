@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	. "github.com/go-jet/jet/v2/postgres"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
@@ -24,8 +25,8 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchNiin(niin string) (model.Nii
 
 	err := stmt.Query(repo.Db, &item)
 
-	if err != nil {
-		return model.NiinLookup{}, err
+	if err != nil || *item.Niin == "" {
+		return model.NiinLookup{}, errors.New("no items found")
 	} else {
 		return item, nil
 	}
@@ -44,18 +45,10 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(part string) ([]model.N
 
 	err := stmt.Query(repo.Db, &items)
 
-	if err != nil {
-		return []model.NiinLookup{}, err
+	if err != nil || len(items) == 0 {
+		return []model.NiinLookup{}, errors.New("no items found")
 	} else {
 		return items, nil
 	}
 
 }
-
-//func (repo *ItemQueryRepositoryImpl) DetailedItemSearchNiin(ctx *gin.Context, niin string) (model.DetailedItem, error) {
-//	_, err := repo.GetAmdfData(ctx, niin)
-//	data := model.DetailedItem{
-//		//Amdf: amdf,
-//	}
-//	return data, err
-//}

@@ -5,5 +5,5 @@ import (
 )
 
 type Disposition struct {
-	Disposition *model.Disposition `json:"disposition"`
+	Disposition model.Disposition `json:"disposition"`
 }

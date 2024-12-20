@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	. "github.com/go-jet/jet/v2/postgres"
-	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/details"
 	"miltechserver/api/response"
@@ -17,31 +16,47 @@ func NewItemDetailedRepositoryImpl(db *sql.DB) *ItemDetailedRepositoryImpl {
 	return &ItemDetailedRepositoryImpl{Db: db}
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (interface{}, error) {
+func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (response.DetailedResponse, error) {
 	// Get data from each table
 	// Call helper methods to get data from each table
 	// Return a DetailedItem struct with all the data
 
-	test, _ := repo.GetAmdfData(niin)
-	test2, _ := repo.GetArmyPackagingAndFreight(niin)
-	test3, _ := repo.GetSarsscat(niin)
-	test4, _ := repo.GetIdentification(niin)
-	test5, _ := repo.GetManagement(niin)
-	test6, _ := repo.GetReference(niin)
+	amdfData, _ := repo.getAmdfData(niin)
+
+	armyPackData, _ := repo.getArmyPackagingAndFreight(niin)
+	sarsscatData, _ := repo.getSarsscat(niin)
+
+	identificationData, _ := repo.getIdentification(niin)
+
+	managementData, _ := repo.getManagement(niin)
+
+	referenceData, _ := repo.getReference(niin)
+
+	freightData, _ := repo.getFreight(niin)
+
+	packagingData, _ := repo.getPackaging(niin)
+
+	characteristicsData, _ := repo.getCharacteristics(niin)
+
+	dispositionData, _ := repo.getDisposition(niin)
 
 	fullDetailedItem := response.DetailedResponse{
-		Amdf:                    test,
-		ArmyPackagingAndFreight: test2,
-		Sarsscat:                test3,
-		Identification:          test4,
-		Management:              test5,
-		Reference:               test6,
+		Amdf:                    amdfData,
+		ArmyPackagingAndFreight: armyPackData,
+		Sarsscat:                sarsscatData,
+		Identification:          identificationData,
+		Management:              managementData,
+		Reference:               referenceData,
+		Freight:                 freightData,
+		Packaging:               packagingData,
+		Characteristics:         characteristicsData,
+		Disposition:             dispositionData,
 	}
 
 	return fullDetailedItem, nil
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetAmdfData(niin string) (details.Amdf, error) {
+func (repo *ItemDetailedRepositoryImpl) getAmdfData(niin string) (details.Amdf, error) {
 	amdf := details.Amdf{}
 
 	amdfStmt :=
@@ -102,7 +117,7 @@ func (repo *ItemDetailedRepositoryImpl) GetAmdfData(niin string) (details.Amdf, 
 
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(niin string) (details.ArmyPackagingAndFreight, error) {
+func (repo *ItemDetailedRepositoryImpl) getArmyPackagingAndFreight(niin string) (details.ArmyPackagingAndFreight, error) {
 	armyPackagingAndFreight := details.ArmyPackagingAndFreight{}
 
 	armyPackagingAndFreightStmt := SELECT(
@@ -148,7 +163,7 @@ func (repo *ItemDetailedRepositoryImpl) GetArmyPackagingAndFreight(niin string) 
 	}
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetSarsscat(niin string) (details.Sarsscat, error) {
+func (repo *ItemDetailedRepositoryImpl) getSarsscat(niin string) (details.Sarsscat, error) {
 	sarsscat := details.Sarsscat{}
 
 	sarsscatStmt := SELECT(
@@ -157,6 +172,18 @@ func (repo *ItemDetailedRepositoryImpl) GetSarsscat(niin string) (details.Sarssc
 
 	err := sarsscatStmt.Query(repo.Db, &sarsscat.ArmySarsscat)
 
+	moeRuleStmt := SELECT(
+		table.MoeRule.AllColumns).FROM(table.MoeRule).
+		WHERE(table.MoeRule.Niin.EQ(String(niin)))
+
+	err = moeRuleStmt.Query(repo.Db, &sarsscat.MoeRule)
+
+	amdfFreightStmt := SELECT(
+		table.AmdfFreight.AllColumns).FROM(table.AmdfFreight).
+		WHERE(table.AmdfFreight.Niin.EQ(String(niin)))
+
+	err = amdfFreightStmt.Query(repo.Db, &sarsscat.AmdfFreight)
+
 	if err != nil {
 		return details.Sarsscat{}, err
 	} else {
@@ -164,7 +191,7 @@ func (repo *ItemDetailedRepositoryImpl) GetSarsscat(niin string) (details.Sarssc
 	}
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetIdentification(niin string) (details.Identification, error) {
+func (repo *ItemDetailedRepositoryImpl) getIdentification(niin string) (details.Identification, error) {
 	identification := details.Identification{}
 
 	flisMgmtStmt := SELECT(
@@ -198,7 +225,7 @@ func (repo *ItemDetailedRepositoryImpl) GetIdentification(niin string) (details.
 	}
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetManagement(niin string) (details.Management, error) {
+func (repo *ItemDetailedRepositoryImpl) getManagement(niin string) (details.Management, error) {
 	management := details.Management{}
 
 	flisManagementStmt := SELECT(
@@ -256,7 +283,7 @@ func (repo *ItemDetailedRepositoryImpl) GetManagement(niin string) (details.Mana
 	}
 }
 
-func (repo *ItemDetailedRepositoryImpl) GetReference(niin string) (details.Reference, error) {
+func (repo *ItemDetailedRepositoryImpl) getReference(niin string) (details.Reference, error) {
 	reference := details.Reference{}
 
 	// FlisIdentification
@@ -289,9 +316,6 @@ func (repo *ItemDetailedRepositoryImpl) GetReference(niin string) (details.Refer
 		table.CageAddress.AllColumns).FROM(table.CageAddress).
 		WHERE(table.CageAddress.CageCode.IN(String(cageCodes)))
 
-	test := cageAddressesStmt.DebugSql()
-	slog.Info(test)
-
 	err = cageAddressesStmt.Query(repo.Db, &reference.CageAddresses)
 
 	cageStatusAndTypeStmt := SELECT(
@@ -307,18 +331,98 @@ func (repo *ItemDetailedRepositoryImpl) GetReference(niin string) (details.Refer
 	}
 }
 
-//func (repo *ItemDetailedRepositoryImpl) GetFreight(ctx *gin.Context, niin string) (details.Freight, error) {
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetPackaging(ctx *gin.Context, niin string) (details.Packaging, error) {
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetCharacteristics(ctx *gin.Context, niin string) (details.Characteristics, error) {
-//
-//}
-//
-//func (repo *ItemDetailedRepositoryImpl) GetDisposition(ctx *gin.Context, niin string) (details.Disposition, error) {
-//
-//}
+func (repo *ItemDetailedRepositoryImpl) getFreight(niin string) (details.Freight, error) {
+	freight := details.Freight{}
+
+	freightStmt := SELECT(
+		table.FlisFreight.AllColumns).FROM(table.FlisFreight).
+		WHERE(table.FlisFreight.Niin.EQ(String(niin)))
+
+	err := freightStmt.Query(repo.Db, &freight.FlisFreight)
+
+	if err != nil {
+		return details.Freight{}, err
+	} else {
+		return freight, nil
+	}
+}
+
+func (repo *ItemDetailedRepositoryImpl) getPackaging(niin string) (details.Packaging, error) {
+	packaging := details.Packaging{}
+
+	pack1Stmt := SELECT(
+		table.FlisPackaging1.AllColumns).FROM(table.FlisPackaging1).
+		WHERE(table.FlisPackaging1.Niin.EQ(String(niin)))
+
+	err := pack1Stmt.Query(repo.Db, &packaging.FlisPackaging1)
+
+	// Loop through all the referenceAndPartNumber results and get the CageCode
+
+	var cageCodes string
+	for _, ref := range packaging.FlisPackaging1 {
+		if ref.PkgDesignActy != nil {
+			if cageCodes != "" {
+				cageCodes += ","
+			}
+			cageCodes += *ref.PkgDesignActy
+		}
+	}
+
+	pack2Stmt := SELECT(
+		table.FlisPackaging2.AllColumns).FROM(table.FlisPackaging2).
+		WHERE(table.FlisPackaging2.Niin.EQ(String(niin)))
+
+	err = pack2Stmt.Query(repo.Db, &packaging.FlisPackaging2)
+
+	cageAddressStmt := SELECT(
+		table.CageAddress.AllColumns).FROM(table.CageAddress).
+		WHERE(table.CageAddress.CageCode.IN(String(cageCodes)))
+
+	err = cageAddressStmt.Query(repo.Db, &packaging.CageAddress)
+
+	dssWeightStmt := SELECT(
+		table.DssWeightAndCube.AllColumns).FROM(table.DssWeightAndCube).
+		WHERE(table.DssWeightAndCube.Niin.EQ(String(niin)))
+
+	err = dssWeightStmt.Query(repo.Db, &packaging.DssWeightAndCube)
+
+	if err != nil {
+		return details.Packaging{}, err
+	} else {
+		return packaging, nil
+	}
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) getCharacteristics(niin string) (details.Characteristics, error) {
+	characteristics := details.Characteristics{}
+
+	characteristicsStmt := SELECT(
+		table.FlisItemCharacteristics.AllColumns).FROM(table.FlisItemCharacteristics).
+		WHERE(table.FlisItemCharacteristics.Niin.EQ(String(niin)))
+
+	err := characteristicsStmt.Query(repo.Db, &characteristics.Characteristics)
+
+	if err != nil {
+		return details.Characteristics{}, err
+	} else {
+		return characteristics, nil
+	}
+
+}
+
+func (repo *ItemDetailedRepositoryImpl) getDisposition(niin string) (details.Disposition, error) {
+	disposition := details.Disposition{}
+
+	dispositionStmt := SELECT(
+		table.Disposition.AllColumns).FROM(table.Disposition).
+		WHERE(table.Disposition.Niin.EQ(String(niin)))
+
+	err := dispositionStmt.Query(repo.Db, &disposition.Disposition)
+
+	if err != nil {
+		return details.Disposition{}, err
+	} else {
+		return disposition, nil
+	}
+}
