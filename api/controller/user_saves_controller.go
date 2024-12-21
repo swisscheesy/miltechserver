@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"log/slog"
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/service"
 	"miltechserver/bootstrap"
 )
@@ -31,5 +32,101 @@ func (controller *UserSavesController) GetQuickSaveItemsByUser(c *gin.Context) {
 		c.Error(err)
 	} else {
 		c.JSON(200, result)
+	}
+}
+
+func (controller *UserSavesController) UpsertQuickSaveItemByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var quick model.UserItemsQuick
+	//test := c.Request.Body
+	//slog.Info("test %s", test)
+	if err := c.BindJSON(&quick); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.UpsertQuickSaveItemByUser(user, quick)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) DeleteQuickSaveItemByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var quick model.UserItemsQuick
+	if err := c.BindJSON(&quick); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.DeleteQuickSaveItemByUser(user, quick)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) DeleteAllQuickSaveItemsByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteAllQuickSaveItemsByUser(user)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) UpsertQuickSaveItemListByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var quickItems []model.UserItemsQuick
+	if err := c.BindJSON(&quickItems); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.UpsertQuickSaveItemListByUser(user, quickItems)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
 	}
 }

@@ -17,5 +17,9 @@ func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
 	}
 
 	group.GET("/user/saves/quick_items", pc.GetQuickSaveItemsByUser)
+	group.PUT("/user/saves/quick_items/add", pc.UpsertQuickSaveItemByUser)
+	group.PUT("/user/saves/quick_items/addlist", pc.UpsertQuickSaveItemListByUser)
+	group.DELETE("/user/saves/quick_items", pc.DeleteQuickSaveItemByUser)
+	group.DELETE("/user/saves/quick_items/all", pc.DeleteAllQuickSaveItemsByUser)
 
 }

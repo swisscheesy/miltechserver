@@ -7,4 +7,8 @@ import (
 
 type UserSavesRepository interface {
 	GetQuickSaveItemsByUserId(user *bootstrap.User) ([]model.UserItemsQuick, error)
+	UpsertQuickSaveItemByUser(user *bootstrap.User, quickItem model.UserItemsQuick) error
+	UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error
+	DeleteQuickSaveItemByUser(user *bootstrap.User, quickItem model.UserItemsQuick) error
+	DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error
 }

@@ -18,3 +18,23 @@ func NewUserSavesServiceImpl(userSavesRepository repository.UserSavesRepository)
 func (service *UserSavesServiceImpl) GetQuickSaveItemsByUser(user *bootstrap.User) ([]model.UserItemsQuick, error) {
 	return service.UserSavesRepository.GetQuickSaveItemsByUserId(user)
 }
+
+// UpsertQuickSaveItemByUser is a function that upserts a quick save item for a user
+func (service *UserSavesServiceImpl) UpsertQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error {
+	return service.UserSavesRepository.UpsertQuickSaveItemByUser(user, quick)
+}
+
+// DeleteQuickSaveItemByUser is a function that deletes a quick save item for a user
+func (service *UserSavesServiceImpl) DeleteQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error {
+	return service.UserSavesRepository.DeleteQuickSaveItemByUser(user, quick)
+}
+
+// DeleteAllQuickSaveItemsByUser is a function that deletes all quick save items for a user
+func (service *UserSavesServiceImpl) DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error {
+	return service.UserSavesRepository.DeleteAllQuickSaveItemsByUser(user)
+}
+
+// UpsertQuickSaveItemListByUser is a function that upserts a list of quick save items for a user
+func (service *UserSavesServiceImpl) UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error {
+	return service.UserSavesRepository.UpsertQuickSaveItemListByUser(user, quickItems)
+}
