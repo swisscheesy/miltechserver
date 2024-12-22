@@ -38,3 +38,8 @@ func (service *UserSavesServiceImpl) DeleteAllQuickSaveItemsByUser(user *bootstr
 func (service *UserSavesServiceImpl) UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error {
 	return service.UserSavesRepository.UpsertQuickSaveItemListByUser(user, quickItems)
 }
+
+// GetSerializedItemsByUser is a function that returns the serialized items of a user
+func (service *UserSavesServiceImpl) GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
+	return service.UserSavesRepository.GetSerializedItemsByUserId(user)
+}

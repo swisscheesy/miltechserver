@@ -10,7 +10,7 @@ func NoItemFoundResponseMessage() NoItemFoundResponse {
 	return NoItemFoundResponse{
 		Status:  404,
 		Data:    nil,
-		Message: "no item found",
+		Message: "no item(s) found",
 	}
 }
 

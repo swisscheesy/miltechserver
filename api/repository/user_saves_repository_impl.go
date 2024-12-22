@@ -137,3 +137,24 @@ func (repo *UserSavesRepositoryImpl) DeleteAllQuickSaveItemsByUser(user *bootstr
 		return nil
 	}
 }
+
+func (repo *UserSavesRepositoryImpl) GetSerializedItemsByUserId(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
+	var items []model.UserItemsSerialized
+
+	if user != nil {
+		stmt := SELECT(
+			UserItemsSerialized.AllColumns).
+			FROM(UserItemsSerialized).
+			WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)))
+
+		err := stmt.Query(repo.Db, &items)
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("error retrieving serialized saves for user %s", user.UserID))
+		} else {
+			slog.Info("serialized saves retrieved for user", "user_id", user.UserID)
+			return items, nil
+		}
+	} else {
+		return nil, errors.New("valid user not found")
+	}
+}

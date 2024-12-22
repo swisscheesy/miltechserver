@@ -11,4 +11,6 @@ type UserSavesRepository interface {
 	UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error
 	DeleteQuickSaveItemByUser(user *bootstrap.User, quickItem model.UserItemsQuick) error
 	DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error
+
+	GetSerializedItemsByUserId(user *bootstrap.User) ([]model.UserItemsSerialized, error)
 }
