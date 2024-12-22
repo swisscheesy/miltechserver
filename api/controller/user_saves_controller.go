@@ -152,3 +152,97 @@ func (controller *UserSavesController) GetSerializedItemsByUser(c *gin.Context) 
 		c.JSON(200, result)
 	}
 }
+
+func (controller *UserSavesController) UpsertSerializedSaveItemByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var serializedItem model.UserItemsSerialized
+	if err := c.BindJSON(&serializedItem); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.UpsertSerializedSaveItemByUser(user, serializedItem)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) DeleteSerializedSaveItemByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var serializedItem model.UserItemsSerialized
+	if err := c.BindJSON(&serializedItem); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.DeleteSerializedSaveItemByUser(user, serializedItem)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) DeleteAllSerializedItemsByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteAllSerializedItemsByUser(user)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}
+
+func (controller *UserSavesController) UpsertSerializedSaveItemListByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	var serializedItems []model.UserItemsSerialized
+	if err := c.BindJSON(&serializedItems); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.UserSavesService.UpsertSerializedSaveItemListByUser(user, serializedItems)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}

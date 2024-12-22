@@ -9,7 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/bootstrap"
-	"time"
+	"miltechserver/helper"
 )
 
 type UserSavesRepositoryImpl struct {
@@ -51,9 +51,7 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemByUser(user *bootstrap.U
 				UserItemsQuick.ItemName.SET(String(*quick.ItemName)),
 				UserItemsQuick.ImageLocation.SET(String(*quick.ImageLocation)),
 				UserItemsQuick.ItemComment.SET(String(*quick.ItemComment)),
-				UserItemsQuick.SaveTime.SET(Timestamp(time.Now().Year(),
-					time.Now().Month(), time.Now().Day(), time.Now().Hour(),
-					time.Now().Minute(), 0))). // This is super ugly
+				UserItemsQuick.SaveTime.SET(helper.CurrentTimeDB())). // This is super ugly
 				WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
 					AND(
 						UserItemsQuick.Niin.EQ(String(quick.Niin))))).
@@ -100,9 +98,7 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 					UserItemsQuick.ItemComment.
 						SET(String(*val.ItemComment)),
 					UserItemsQuick.SaveTime.
-						SET(Timestamp(time.Now().Year(),
-							time.Now().Month(), time.Now().Day(), time.Now().Hour(),
-							time.Now().Minute(), 0))).
+						SET(helper.CurrentTimeDB())).
 					WHERE(
 						UserItemsQuick.UserID.EQ(String(user.UserID)).
 							AND(UserItemsQuick.Niin.EQ(String(val.Niin)))))
@@ -157,4 +153,98 @@ func (repo *UserSavesRepositoryImpl) GetSerializedItemsByUserId(user *bootstrap.
 	} else {
 		return nil, errors.New("valid user not found")
 	}
+}
+
+func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
+	stmt := UserItemsSerialized.INSERT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.ItemName,
+		UserItemsSerialized.Serial,
+		UserItemsSerialized.ImageLocation, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment).
+		MODEL(serializedItem).
+		ON_CONFLICT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.Serial).
+		DO_UPDATE(
+			SET(UserItemsSerialized.ImageLocation.
+				SET(String(*serializedItem.ImageLocation)),
+				UserItemsSerialized.ItemComment.
+					SET(String(*serializedItem.ItemComment)),
+				UserItemsSerialized.SaveTime.
+					SET(helper.CurrentTimeDB())).
+				WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
+					AND(UserItemsSerialized.Niin.EQ(String(serializedItem.Niin))))).
+		RETURNING(
+			UserItemsSerialized.AllColumns)
+
+	err := stmt.Query(repo.Db, &serializedItem)
+
+	if err != nil {
+		return errors.New("error saving serialized item")
+	}
+
+	slog.Info("serialized save item saved", "user_id", user.UserID, "niin", serializedItem.Niin)
+	return nil
+}
+
+func (repo *UserSavesRepositoryImpl) DeleteAllSerializedItemsByUser(user *bootstrap.User) error {
+	stmt := UserItemsSerialized.DELETE().
+		WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)))
+
+	_, err := stmt.Exec(repo.Db)
+
+	if err != nil {
+		return errors.New("error deleting serialized items")
+	} else {
+		slog.Info("all serialized save items deleted", "user_id", user.UserID)
+		return nil
+	}
+}
+
+func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error {
+
+	var failedNiins []string
+	for _, val := range serializedItems {
+		stmt := UserItemsSerialized.INSERT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.ItemName,
+			UserItemsSerialized.Serial,
+			UserItemsSerialized.ImageLocation, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment).
+			MODEL(val).
+			ON_CONFLICT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.Serial).
+			DO_UPDATE(
+				SET(UserItemsSerialized.ImageLocation.
+					SET(String(*val.ImageLocation)),
+					UserItemsSerialized.ItemComment.
+						SET(String(*val.ItemComment)),
+					UserItemsSerialized.SaveTime.
+						SET(helper.CurrentTimeDB())).
+					WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
+						AND(UserItemsSerialized.Niin.EQ(String(val.Niin)).
+							AND(UserItemsSerialized.Serial.EQ(String(val.Serial))))))
+
+		err := stmt.Query(repo.Db, &serializedItems)
+
+		if err != nil {
+			failedNiins = append(failedNiins, val.Niin)
+		}
+
+	}
+	if len(failedNiins) > 0 {
+		return errors.New(fmt.Sprintf("failed to save following items: %s", failedNiins))
+	} else {
+		slog.Info("serialized save item list inserted", "user_id", user.UserID)
+		return nil
+	}
+}
+
+func (repo *UserSavesRepositoryImpl) DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
+	stmt := UserItemsSerialized.
+		DELETE().
+		WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
+			AND(UserItemsSerialized.Niin.EQ(String(serializedItem.Niin)).
+				AND(UserItemsSerialized.Serial.EQ(String(serializedItem.Serial)))))
+
+	_, err := stmt.Exec(repo.Db)
+
+	if err != nil {
+		return errors.New("error deleting serialized item")
+	}
+
+	slog.Info("serialized save item deleted", "user_id", user.UserID, "niin", serializedItem.Niin)
+	return nil
 }

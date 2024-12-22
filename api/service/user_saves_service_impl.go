@@ -43,3 +43,23 @@ func (service *UserSavesServiceImpl) UpsertQuickSaveItemListByUser(user *bootstr
 func (service *UserSavesServiceImpl) GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
 	return service.UserSavesRepository.GetSerializedItemsByUserId(user)
 }
+
+// UpsertSerializedSaveItemByUser is a function that upserts a serialized item for a user
+func (service *UserSavesServiceImpl) UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
+	return service.UserSavesRepository.UpsertSerializedSaveItemByUser(user, serializedItem)
+}
+
+// DeleteSerializedSaveItemByUser is a function that deletes a serialized item for a user
+func (service *UserSavesServiceImpl) DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
+	return service.UserSavesRepository.DeleteSerializedSaveItemByUser(user, serializedItem)
+}
+
+// DeleteAllSerializedItemsByUser is a function that deletes all serialized items for a user
+func (service *UserSavesServiceImpl) DeleteAllSerializedItemsByUser(user *bootstrap.User) error {
+	return service.UserSavesRepository.DeleteAllSerializedItemsByUser(user)
+}
+
+// UpsertSerializedSaveItemListByUser is a function that upserts a list of serialized items for a user
+func (service *UserSavesServiceImpl) UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error {
+	return service.UserSavesRepository.UpsertSerializedSaveItemListByUser(user, serializedItems)
+}

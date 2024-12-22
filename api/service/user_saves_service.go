@@ -13,4 +13,8 @@ type UserSavesService interface {
 	DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error
 
 	GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error)
+	UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
+	UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
+	DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
+	DeleteAllSerializedItemsByUser(user *bootstrap.User) error
 }
