@@ -63,3 +63,13 @@ func (service *UserSavesServiceImpl) DeleteAllSerializedItemsByUser(user *bootst
 func (service *UserSavesServiceImpl) UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error {
 	return service.UserSavesRepository.UpsertSerializedSaveItemListByUser(user, serializedItems)
 }
+
+// GetItemCategoriesByUser is a function that returns the item categories of a user
+func (service *UserSavesServiceImpl) GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error) {
+	return service.UserSavesRepository.GetItemCategoriesByUserId(user)
+}
+
+// UpsertItemCategoryByUser is a function that upserts an item category for a user
+func (service *UserSavesServiceImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+	return service.UserSavesRepository.UpsertItemCategoryByUser(user, itemCategory)
+}

@@ -248,3 +248,49 @@ func (repo *UserSavesRepositoryImpl) DeleteSerializedSaveItemByUser(user *bootst
 	slog.Info("serialized save item deleted", "user_id", user.UserID, "niin", serializedItem.Niin)
 	return nil
 }
+
+func (repo *UserSavesRepositoryImpl) GetItemCategoriesByUserId(user *bootstrap.User) ([]model.UserItemCategory, error) {
+	var categories []model.UserItemCategory
+
+	if user != nil {
+		stmt := SELECT(UserItemCategory.AllColumns).
+			FROM(UserItemCategory).
+			WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))
+
+		err := stmt.Query(repo.Db, &categories)
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("error retrieving item categories for user %s", user.UserID))
+		} else {
+			slog.Info("item categories retrieved for user", "user_id", user.UserID)
+			return categories, nil
+		}
+	} else {
+		return nil, errors.New("valid user not found")
+	}
+}
+
+func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+	stmt := UserItemCategory.INSERT(UserItemCategory.UUID, UserItemCategory.UserUID,
+		UserItemCategory.Name, UserItemCategory.Comment,
+		UserItemCategory.ImageLocation).
+		MODEL(itemCategory).
+		ON_CONFLICT(UserItemCategory.UUID, UserItemCategory.UserUID).
+		DO_UPDATE(
+			SET(UserItemCategory.Name.
+				SET(String(itemCategory.Name)),
+				UserItemCategory.Comment.
+					SET(String(*itemCategory.Comment)),
+				UserItemCategory.ImageLocation.
+					SET(String(*itemCategory.ImageLocation))).
+				WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))).
+		RETURNING(UserItemCategory.AllColumns)
+
+	_, err := stmt.Exec(repo.Db)
+
+	if err != nil {
+		return errors.New("error saving item category")
+	}
+
+	slog.Info("item category saved", "user_id", user.UserID, "category_name", itemCategory.Name)
+	return nil
+}

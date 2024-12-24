@@ -28,4 +28,6 @@ func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
 	group.DELETE("/user/saves/serialized_items", pc.DeleteSerializedSaveItemByUser)
 	group.DELETE("/user/saves/serialized_items/all", pc.DeleteAllSerializedItemsByUser)
 
+	group.GET("/user/saves/item_category", pc.GetItemCategoriesByUser)
+	group.PUT("/user/saves/item_category", pc.UpsertItemCategoryByUser)
 }

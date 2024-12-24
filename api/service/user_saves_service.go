@@ -17,4 +17,7 @@ type UserSavesService interface {
 	UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
 	DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
 	DeleteAllSerializedItemsByUser(user *bootstrap.User) error
+
+	GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
+	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
 }

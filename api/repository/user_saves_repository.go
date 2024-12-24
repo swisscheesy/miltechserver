@@ -17,4 +17,8 @@ type UserSavesRepository interface {
 	UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
 	DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
 	DeleteAllSerializedItemsByUser(user *bootstrap.User) error
+
+	GetItemCategoriesByUserId(user *bootstrap.User) ([]model.UserItemCategory, error)
+	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
+	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error
 }
