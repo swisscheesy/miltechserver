@@ -20,4 +20,5 @@ type UserSavesService interface {
 
 	GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
+	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error
 }

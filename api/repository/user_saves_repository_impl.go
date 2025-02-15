@@ -270,9 +270,10 @@ func (repo *UserSavesRepositoryImpl) GetItemCategoriesByUserId(user *bootstrap.U
 }
 
 func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
-	stmt := UserItemCategory.INSERT(UserItemCategory.UUID, UserItemCategory.UserUID,
-		UserItemCategory.Name, UserItemCategory.Comment,
-		UserItemCategory.ImageLocation).
+	stmt := UserItemCategory.
+		INSERT(UserItemCategory.UUID, UserItemCategory.UserUID,
+			UserItemCategory.Name, UserItemCategory.Comment,
+			UserItemCategory.ImageLocation).
 		MODEL(itemCategory).
 		ON_CONFLICT(UserItemCategory.UUID, UserItemCategory.UserUID).
 		DO_UPDATE(
@@ -293,4 +294,41 @@ func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 
 	slog.Info("item category saved", "user_id", user.UserID, "category_name", itemCategory.Name)
 	return nil
+}
+
+func (repo *UserSavesRepositoryImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error {
+	stmt := UserItemCategory.DELETE().
+		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
+			AND(UserItemCategory.UUID.EQ(String(itemCategoryUuid))))
+
+	_, err := stmt.Exec(repo.Db)
+
+	if err != nil {
+		return errors.New("error deleting item category")
+	}
+
+	slog.Info("item category deleted", "user_id", user.UserID, "category_uuid", itemCategoryUuid)
+	return nil
+}
+
+func (repo *UserSavesRepositoryImpl) GetCategorizedItemsByCategoryUuid(user *bootstrap.User, categoryUuid string) ([]model.UserItemsCategorized, error) {
+	var items []model.UserItemsCategorized
+
+	if user != nil {
+		stmt :=
+			SELECT(
+				UserItemsCategorized.AllColumns,
+			).WHERE(
+				UserItemsCategorized.UserID.EQ(String(user.UserID)).
+					AND(UserItemsCategorized.CategoryID.EQ(String(categoryUuid))))
+
+		err := stmt.Query(repo.Db, &items)
+
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("error retrieving categorized items for user %s", user.UserID))
+		} else {
+			slog.Info("categorized items retrieved for user", "user_id", user.UserID)
+			return items, nil
+		}
+	}
 }

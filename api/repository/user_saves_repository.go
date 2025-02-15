@@ -21,4 +21,6 @@ type UserSavesRepository interface {
 	GetItemCategoriesByUserId(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
 	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error
+
+	GetCategorizedItemsByCategoryUuid(user *bootstrap.User, categoryUuid string) ([]model.UserItemsCategorized, error)
 }

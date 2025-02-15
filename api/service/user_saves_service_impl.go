@@ -73,3 +73,8 @@ func (service *UserSavesServiceImpl) GetItemCategoriesByUser(user *bootstrap.Use
 func (service *UserSavesServiceImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
 	return service.UserSavesRepository.UpsertItemCategoryByUser(user, itemCategory)
 }
+
+// DeleteItemCategoryByUuid is a function that deletes an item category for a user
+func (service *UserSavesServiceImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error {
+	return service.UserSavesRepository.DeleteItemCategoryByUuid(user, itemCategoryUuid)
+}

@@ -290,3 +290,24 @@ func (controller *UserSavesController) UpsertItemCategoryByUser(c *gin.Context) 
 		c.JSON(200, gin.H{"message": "success"})
 	}
 }
+
+func (controller *UserSavesController) DeleteItemCategoryByUuid(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	itemCategoryUuid := c.Query("uuid")
+
+	err := controller.UserSavesService.DeleteItemCategoryByUuid(user, itemCategoryUuid)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.JSON(200, gin.H{"message": "success"})
+	}
+}

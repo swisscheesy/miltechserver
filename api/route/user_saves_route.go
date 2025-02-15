@@ -30,4 +30,5 @@ func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
 
 	group.GET("/user/saves/item_category", pc.GetItemCategoriesByUser)
 	group.PUT("/user/saves/item_category", pc.UpsertItemCategoryByUser)
+	group.DELETE("/user/saves/item_category", pc.DeleteItemCategoryByUuid)
 }
