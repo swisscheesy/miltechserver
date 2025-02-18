@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/go-jet/jet/v2/generator/metadata"
+	"github.com/go-jet/jet/v2/generator/postgres"
+	"github.com/go-jet/jet/v2/generator/template"
+	postgres2 "github.com/go-jet/jet/v2/postgres"
 	"log"
 	"miltechserver/api/route"
 	"miltechserver/bootstrap"
@@ -14,9 +19,7 @@ import (
 
 func main() {
 	// Start the engine
-
 	engine := SetupEngine()
-
 	err := engine.Run(":8080")
 	helper.PanicOnError(err)
 
@@ -25,12 +28,13 @@ func main() {
 func SetupEngine() *gin.Engine {
 	ctx := context.Background()
 	env := bootstrap.NewEnv()
+	generateSchema(env)
 	app := bootstrap.App(ctx, env)
 	db := app.Db
 
 	server := gin.Default()
 
-	route.Setup(db, server, app.FireAuth)
+	route.Setup(db, server, app.FireAuth, env)
 
 	// Cleanup server on crash or interrupt
 	c := make(chan os.Signal, 1)
@@ -46,4 +50,46 @@ func SetupEngine() *gin.Engine {
 	}()
 
 	return server
+}
+
+func generateSchema(env *bootstrap.Env) {
+	err1 := postgres.Generate(
+		"./.gen",
+		postgres.DBConnection{
+			Host:       env.Host,
+			Port:       5432,
+			User:       env.Username,
+			Password:   env.Password,
+			SslMode:    "disable",
+			DBName:     env.DBName,
+			SchemaName: env.DBSchema,
+		},
+		template.Default(postgres2.Dialect).
+			UseSchema(func(schema metadata.Schema) template.Schema {
+				return template.DefaultSchema(schema).
+					UseModel(template.DefaultModel().
+						UseTable(func(table metadata.Table) template.TableModel {
+							return template.DefaultTableModel(table).
+								UseField(func(columnMetaData metadata.Column) template.TableModelField {
+									defaultTableModelField := template.DefaultTableModelField(columnMetaData)
+									return defaultTableModelField.UseTags(
+										fmt.Sprintf(`json:"%s"`, columnMetaData.Name),
+									)
+								})
+						}).UseView(func(table metadata.Table) template.TableModel {
+						return template.DefaultTableModel(table).
+							UseField(func(columnMetaData metadata.Column) template.TableModelField {
+								defaultTableModelField := template.DefaultTableModelField(columnMetaData)
+								return defaultTableModelField.UseTags(
+									fmt.Sprintf(`json:"%s"`, columnMetaData.Name),
+								)
+							})
+					}),
+					)
+			}),
+	)
+
+	if err1 != nil {
+		log.Fatalf("Error generating code: %s", err1)
+	}
 }

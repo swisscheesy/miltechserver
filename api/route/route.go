@@ -5,9 +5,10 @@ import (
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
 	"miltechserver/api/middleware"
+	"miltechserver/bootstrap"
 )
 
-func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client) {
+func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.Env) {
 	v1Route := gin.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -17,6 +18,7 @@ func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client) {
 
 	v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
+	NewGeneralQueriesRouter(v1Route, env)
 	NewItemQueryRouter(db, v1Route)
 	NewItemLookupRouter(db, v1Route)
 

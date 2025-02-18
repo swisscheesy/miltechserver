@@ -13,6 +13,8 @@ type Env struct {
 	Username       string
 	Password       string
 	DBName         string
+	DBDate         string
+	DBSchema       string
 	ServerAddress  string
 	ContextTimeout int
 }
@@ -28,6 +30,8 @@ func NewEnv() *Env {
 	env.Username = os.Getenv("DB_USERNAME")
 	env.Password = os.Getenv("DB_PASSWORD")
 	env.DBName = os.Getenv("DB_NAME")
+	env.DBDate = os.Getenv("DB_DATE")
+	env.DBSchema = os.Getenv("DB_SCHEMA")
 
 	if env.AppEnv == "development" {
 		log.Println("The App is running in development mode")

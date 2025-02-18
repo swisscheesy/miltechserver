@@ -280,9 +280,9 @@ func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 			SET(UserItemCategory.Name.
 				SET(String(itemCategory.Name)),
 				UserItemCategory.Comment.
-					SET(String(*itemCategory.Comment)),
+					SET(String(itemCategory.Comment)), //TODO Was *itemCategory.Comment
 				UserItemCategory.ImageLocation.
-					SET(String(*itemCategory.ImageLocation))).
+					SET(String(itemCategory.ImageLocation))).
 				WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))).
 		RETURNING(UserItemCategory.AllColumns)
 
@@ -330,5 +330,8 @@ func (repo *UserSavesRepositoryImpl) GetCategorizedItemsByCategoryUuid(user *boo
 			slog.Info("categorized items retrieved for user", "user_id", user.UserID)
 			return items, nil
 		}
+	} else {
+		return nil, errors.New("valid user not found")
 	}
+
 }

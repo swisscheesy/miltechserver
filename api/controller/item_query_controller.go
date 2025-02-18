@@ -47,6 +47,7 @@ func (controller *ItemQueryController) FindShort(c *gin.Context) {
 				c.JSON(500, response.InternalErrorResponseMessage())
 			}
 		} else {
+
 			c.JSON(200, response.StandardResponse{
 				Status:  200,
 				Message: "",

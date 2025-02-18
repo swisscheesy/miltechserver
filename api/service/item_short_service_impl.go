@@ -14,8 +14,12 @@ func NewItemQueryServiceImpl(itemQueryRepository repository.ItemQueryRepository)
 }
 
 func (service *ItemShortServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, error) {
-	return service.ItemQueryRepository.ShortItemSearchNiin(niin)
-
+	val, err := service.ItemQueryRepository.ShortItemSearchNiin(niin)
+	if err != nil {
+		return model.NiinLookup{}, err
+	} else {
+		return val, nil
+	}
 }
 
 func (service *ItemShortServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, error) {
