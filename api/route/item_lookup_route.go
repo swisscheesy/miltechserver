@@ -16,8 +16,8 @@ func NewItemLookupRouter(db *sql.DB, group *gin.RouterGroup) {
 			itemLookupRepo),
 	}
 	group.GET("/lookup/lin", pc.LookupLINByPage)
-	group.GET("/lookup/lin/:niin", pc.LookupLINByNIIN)
-	group.GET("/lookup/niin/:lin", pc.LookupNIINByLIN)
+	group.GET("/lookup/lin/lin/:niin", pc.LookupLINByNIIN)
+	group.GET("/lookup/lin/niin/:lin", pc.LookupNIINByLIN)
 
 	group.GET("/lookup/uoc", pc.LookupUOCByPage)
 	group.GET("/lookup/uoc/:uoc", pc.LookupSpecificUOC)

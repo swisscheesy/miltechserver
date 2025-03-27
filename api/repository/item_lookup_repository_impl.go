@@ -27,11 +27,11 @@ func NewItemLookupRepositoryImpl(db *sql.DB) *ItemLokupRepositoryImpl {
 // \return an error if the operation fails.
 func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPageResponse, error) {
 
-	var linData []model.ArmyLineItemNumber
+	var linData []model.LookupLinNiin
 	offset := returnCount * int64(page-1)
 	stmt := SELECT(
-		table.ArmyLineItemNumber.AllColumns,
-	).FROM(table.ArmyLineItemNumber).
+		view.LookupLinNiin.AllColumns,
+	).FROM(view.LookupLinNiin).
 		LIMIT(returnCount).
 		OFFSET(offset)
 
@@ -42,8 +42,8 @@ func (repo *ItemLokupRepositoryImpl) SearchLINByPage(page int) (response.LINPage
 	}
 
 	countStmt := SELECT(
-		COUNT(table.ArmyLineItemNumber.Lin),
-	).FROM(table.ArmyLineItemNumber)
+		COUNT(view.LookupLinNiin.Lin),
+	).FROM(view.LookupLinNiin)
 
 	err = countStmt.Query(repo.Db, &count)
 

@@ -103,11 +103,14 @@ func (repo *ItemDetailedRepositoryImpl) getAmdfData(niin string) (details.Amdf, 
 
 	err = amdfIandSStmt.Query(repo.Db, &amdf.AmdfIandS)
 
-	armyLinStmt := SELECT(
-		table.ArmyLineItemNumber.AllColumns).FROM(table.ArmyLineItemNumber).
-		WHERE(table.ArmyLineItemNumber.Lin.EQ(String(*amdf.AmdfManagement.Lin)))
+	// Ensure the item has LIN data, otherwise skip
+	if amdf.AmdfManagement.Lin != nil {
+		armyLinStmt := SELECT(
+			table.ArmyLineItemNumber.AllColumns).FROM(table.ArmyLineItemNumber).
+			WHERE(table.ArmyLineItemNumber.Lin.EQ(String(*amdf.AmdfManagement.Lin)))
 
-	err = armyLinStmt.Query(repo.Db, &amdf.ArmyLin)
+		err = armyLinStmt.Query(repo.Db, &amdf.ArmyLin)
+	}
 
 	if err != nil {
 		return details.Amdf{}, err
@@ -200,11 +203,14 @@ func (repo *ItemDetailedRepositoryImpl) getIdentification(niin string) (details.
 
 	err := flisMgmtStmt.Query(repo.Db, &identification.FlisManagementId)
 
-	colloquialNamesStmt := SELECT(
-		table.ColloquialName.AllColumns).FROM(table.ColloquialName).
-		WHERE(table.ColloquialName.Inc.EQ(String(*identification.FlisManagementId.Inc)))
+	// Only run if the FlisManagementId.Inc is not nil
+	if identification.FlisManagementId.Inc == nil {
+		colloquialNamesStmt := SELECT(
+			table.ColloquialName.AllColumns).FROM(table.ColloquialName).
+			WHERE(table.ColloquialName.Inc.EQ(String(*identification.FlisManagementId.Inc)))
 
-	err = colloquialNamesStmt.Query(repo.Db, &identification.ColloquialName)
+		err = colloquialNamesStmt.Query(repo.Db, &identification.ColloquialName)
+	}
 
 	flisStandardizationStmt := SELECT(
 		table.FlisStandardization.AllColumns).FROM(table.FlisStandardization).
@@ -301,7 +307,7 @@ func (repo *ItemDetailedRepositoryImpl) getReference(niin string) (details.Refer
 	err = referenceAndPartNumberStmt.Query(repo.Db, &reference.ReferenceAndPartNumber)
 
 	// Loop through all the referenceAndPartNumber results and get the CageCode
-
+	// Ensure none are nil or empty
 	var cageCodes string
 	for _, ref := range reference.ReferenceAndPartNumber {
 		if ref.CageCode != nil {

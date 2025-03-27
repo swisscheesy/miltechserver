@@ -5,9 +5,9 @@ import (
 )
 
 type LINPageResponse struct {
-	Lins       []model.ArmyLineItemNumber `json:"lins"`
-	Count      int                        `json:"count"`
-	Page       int                        `json:"page"`
-	TotalPages int                        `json:"total_pages"`
-	IsLastPage bool                       `json:"is_last_page"`
+	Lins       []model.LookupLinNiin `json:"lins"`
+	Count      int                   `json:"count"`
+	Page       int                   `json:"page"`
+	TotalPages int                   `json:"total_pages"`
+	IsLastPage bool                  `json:"is_last_page"`
 }

@@ -68,8 +68,11 @@ func (controller *ItemLookupController) LookupLINByNIIN(c *gin.Context) {
 			Status:  200,
 			Message: "",
 			Data: response.LinSearchResponse{
-				Count: retCount,
-				Lins:  linData,
+				Count:      retCount,
+				Lins:       linData,
+				TotalPages: 1,
+				Page:       1,
+				IsLastPage: true,
 			},
 		})
 	}
@@ -93,9 +96,12 @@ func (controller *ItemLookupController) LookupNIINByLIN(c *gin.Context) {
 		c.JSON(200, response.StandardResponse{
 			Status:  200,
 			Message: "",
-			Data: response.NiinSearchResponse{
-				Count: len(niinData),
-				Niins: niinData,
+			Data: response.LinSearchResponse{
+				Count:      len(niinData),
+				Lins:       niinData,
+				TotalPages: 1,
+				Page:       1,
+				IsLastPage: true,
 			},
 		})
 	}
