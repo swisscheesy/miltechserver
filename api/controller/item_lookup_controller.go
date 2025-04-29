@@ -1,11 +1,12 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
 	"miltechserver/api/response"
 	"miltechserver/api/service"
 	"strconv"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type ItemLookupController struct {
@@ -155,8 +156,11 @@ func (controller *ItemLookupController) LookupSpecificUOC(c *gin.Context) {
 			Status:  200,
 			Message: "",
 			Data: response.UOCPLookupResponse{
-				Count: len(uocData),
-				UOCs:  uocData,
+				Count:      len(uocData),
+				UOCs:       uocData,
+				TotalPages: 1,
+				Page:       1,
+				IsLastPage: true,
 			},
 		})
 	}
@@ -181,8 +185,11 @@ func (controller *ItemLookupController) LookupUOCByModel(c *gin.Context) {
 			Status:  200,
 			Message: "",
 			Data: response.UOCPLookupResponse{
-				Count: len(uocData),
-				UOCs:  uocData,
+				Count:      len(uocData),
+				UOCs:       uocData,
+				TotalPages: 1,
+				Page:       1,
+				IsLastPage: true,
 			},
 		})
 	}
