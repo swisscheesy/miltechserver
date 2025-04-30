@@ -2,10 +2,11 @@ package route
 
 import (
 	"database/sql"
-	"firebase.google.com/go/v4/auth"
-	"github.com/gin-gonic/gin"
 	"miltechserver/api/middleware"
 	"miltechserver/bootstrap"
+
+	"firebase.google.com/go/v4/auth"
+	"github.com/gin-gonic/gin"
 )
 
 func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.Env) {
@@ -21,6 +22,7 @@ func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.
 	NewGeneralQueriesRouter(v1Route, env)
 	NewItemQueryRouter(db, v1Route)
 	NewItemLookupRouter(db, v1Route)
+	NewItemQuickListsRouter(db, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := gin.Group("/api/v1/auth")
