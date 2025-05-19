@@ -22,55 +22,25 @@ func (repo *ItemDetailedRepositoryImpl) GetDetailedItemData(niin string) (respon
 	// Call helper methods to get data from each table
 	// Return a DetailedItem struct with all the data
 
-	amdfData, err := repo.getAmdfData(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	amdfData, _ := repo.getAmdfData(niin)
 
-	armyPackData, err := repo.getArmyPackagingAndFreight(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	armyPackData, _ := repo.getArmyPackagingAndFreight(niin)
 
-	sarsscatData, err := repo.getSarsscat(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	sarsscatData, _ := repo.getSarsscat(niin)
 
-	identificationData, err := repo.getIdentification(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	identificationData, _ := repo.getIdentification(niin)
 
-	managementData, err := repo.getManagement(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	managementData, _ := repo.getManagement(niin)
 
-	referenceData, err := repo.getReference(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	referenceData, _ := repo.getReference(niin)
 
-	freightData, err := repo.getFreight(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	freightData, _ := repo.getFreight(niin)
 
-	packagingData, err := repo.getPackaging(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	packagingData, _ := repo.getPackaging(niin)
 
-	characteristicsData, err := repo.getCharacteristics(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	characteristicsData, _ := repo.getCharacteristics(niin)
 
-	dispositionData, err := repo.getDisposition(niin)
-	if err != nil {
-		return response.DetailedResponse{}, err
-	}
+	dispositionData, _ := repo.getDisposition(niin)
 
 	fullDetailedItem := response.DetailedResponse{
 		Amdf:                    amdfData,

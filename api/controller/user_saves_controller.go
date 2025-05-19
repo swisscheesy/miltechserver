@@ -1,12 +1,13 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/api/service"
 	"miltechserver/bootstrap"
+
+	"github.com/gin-gonic/gin"
 )
 
 type UserSavesController struct {
@@ -30,7 +31,7 @@ func (controller *UserSavesController) GetQuickSaveItemsByUser(c *gin.Context) {
 	result, err := controller.UserSavesService.GetQuickSaveItemsByUser(user)
 
 	if err != nil {
-		c.Error(err)
+		c.JSON(400, result)
 	} else {
 		c.JSON(200, result)
 	}
@@ -50,6 +51,7 @@ func (controller *UserSavesController) UpsertQuickSaveItemByUser(c *gin.Context)
 	//test := c.Request.Body
 	//slog.Info("test %s", test)
 	if err := c.BindJSON(&quick); err != nil {
+		slog.Info("invalid request %s", err)
 		c.JSON(400, gin.H{"message": "invalid request"})
 		return
 	}

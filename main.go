@@ -3,11 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/go-jet/jet/v2/generator/metadata"
-	"github.com/go-jet/jet/v2/generator/postgres"
-	"github.com/go-jet/jet/v2/generator/template"
-	postgres2 "github.com/go-jet/jet/v2/postgres"
 	"log"
 	"miltechserver/api/route"
 	"miltechserver/bootstrap"
@@ -15,6 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/gin-gonic/gin"
+	"github.com/go-jet/jet/v2/generator/metadata"
+	"github.com/go-jet/jet/v2/generator/postgres"
+	"github.com/go-jet/jet/v2/generator/template"
+	postgres2 "github.com/go-jet/jet/v2/postgres"
 )
 
 func main() {
@@ -60,7 +61,7 @@ func generateSchema(env *bootstrap.Env) {
 			Port:       5432,
 			User:       env.Username,
 			Password:   env.Password,
-			SslMode:    "disable",
+			SslMode:    env.SslMode,
 			DBName:     env.DBName,
 			SchemaName: env.DBSchema,
 		},

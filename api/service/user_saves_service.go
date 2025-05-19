@@ -6,19 +6,24 @@ import (
 )
 
 type UserSavesService interface {
+	// Quick Save Items
 	GetQuickSaveItemsByUser(user *bootstrap.User) ([]model.UserItemsQuick, error)
 	UpsertQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error
 	UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error
 	DeleteQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error
 	DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error
 
+	// Serialized Save Items
 	GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error)
 	UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
 	UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
 	DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
 	DeleteAllSerializedItemsByUser(user *bootstrap.User) error
 
+	// Item Categories
 	GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
 	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error
+
+	// Categorized Items
 }

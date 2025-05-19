@@ -155,3 +155,8 @@ go.work
 /fire_auth_key.json
 *_gen.go
 miltech_ng/
+/Dockerfile
+/.dockerignore
+./.DS_Store
+api/.DS_Store
+.DS_Store

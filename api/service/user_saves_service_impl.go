@@ -16,7 +16,13 @@ func NewUserSavesServiceImpl(userSavesRepository repository.UserSavesRepository)
 
 // GetQuickSaveItemsByUser is a function that returns the quick save items of a user
 func (service *UserSavesServiceImpl) GetQuickSaveItemsByUser(user *bootstrap.User) ([]model.UserItemsQuick, error) {
-	return service.UserSavesRepository.GetQuickSaveItemsByUserId(user)
+	var items, err = service.UserSavesRepository.GetQuickSaveItemsByUserId(user)
+	// if test is nil, return an empty array
+	if items == nil {
+		return []model.UserItemsQuick{}, nil
+	}
+
+	return items, err
 }
 
 // UpsertQuickSaveItemByUser is a function that upserts a quick save item for a user
@@ -41,7 +47,11 @@ func (service *UserSavesServiceImpl) UpsertQuickSaveItemListByUser(user *bootstr
 
 // GetSerializedItemsByUser is a function that returns the serialized items of a user
 func (service *UserSavesServiceImpl) GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
-	return service.UserSavesRepository.GetSerializedItemsByUserId(user)
+	var items, err = service.UserSavesRepository.GetSerializedItemsByUserId(user)
+	if items == nil {
+		return []model.UserItemsSerialized{}, nil
+	}
+	return items, err
 }
 
 // UpsertSerializedSaveItemByUser is a function that upserts a serialized item for a user
@@ -66,15 +76,19 @@ func (service *UserSavesServiceImpl) UpsertSerializedSaveItemListByUser(user *bo
 
 // GetItemCategoriesByUser is a function that returns the item categories of a user
 func (service *UserSavesServiceImpl) GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error) {
-	return service.UserSavesRepository.GetItemCategoriesByUserId(user)
+	var items, err = service.UserSavesRepository.GetUserItemCategories(user)
+	if items == nil {
+		return []model.UserItemCategory{}, nil
+	}
+	return items, err
 }
 
 // UpsertItemCategoryByUser is a function that upserts an item category for a user
 func (service *UserSavesServiceImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
-	return service.UserSavesRepository.UpsertItemCategoryByUser(user, itemCategory)
+	return service.UserSavesRepository.UpsertUserItemCategory(user, itemCategory)
 }
 
 // DeleteItemCategoryByUuid is a function that deletes an item category for a user
 func (service *UserSavesServiceImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error {
-	return service.UserSavesRepository.DeleteItemCategoryByUuid(user, itemCategoryUuid)
+	return service.UserSavesRepository.DeleteUserItemCategory(user, itemCategoryUuid)
 }

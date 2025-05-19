@@ -4,12 +4,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	. "github.com/go-jet/jet/v2/postgres"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/bootstrap"
 	"miltechserver/helper"
+
+	. "github.com/go-jet/jet/v2/postgres"
 )
 
 type UserSavesRepositoryImpl struct {
@@ -112,7 +113,7 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 	}
 
 	if len(failedNiins) > 0 {
-		return errors.New(fmt.Sprintf("failed to save following items: %s", failedNiins))
+		return fmt.Errorf(fmt.Sprintf("failed to save following items: %s", failedNiins))
 	} else {
 		slog.Info("quick save item list inserted", "user_id", user.UserID)
 		return nil
@@ -249,7 +250,7 @@ func (repo *UserSavesRepositoryImpl) DeleteSerializedSaveItemByUser(user *bootst
 	return nil
 }
 
-func (repo *UserSavesRepositoryImpl) GetItemCategoriesByUserId(user *bootstrap.User) ([]model.UserItemCategory, error) {
+func (repo *UserSavesRepositoryImpl) GetUserItemCategories(user *bootstrap.User) ([]model.UserItemCategory, error) {
 	var categories []model.UserItemCategory
 
 	if user != nil {
@@ -269,7 +270,7 @@ func (repo *UserSavesRepositoryImpl) GetItemCategoriesByUserId(user *bootstrap.U
 	}
 }
 
-func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+func (repo *UserSavesRepositoryImpl) UpsertUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error {
 	stmt := UserItemCategory.
 		INSERT(UserItemCategory.UUID, UserItemCategory.UserUID,
 			UserItemCategory.Name, UserItemCategory.Comment,
@@ -280,9 +281,9 @@ func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 			SET(UserItemCategory.Name.
 				SET(String(itemCategory.Name)),
 				UserItemCategory.Comment.
-					SET(String(itemCategory.Comment)), //TODO Was *itemCategory.Comment
+					SET(String(*itemCategory.Comment)), //TODO Was *itemCategory.Comment
 				UserItemCategory.ImageLocation.
-					SET(String(itemCategory.ImageLocation))).
+					SET(String(*itemCategory.ImageLocation))).
 				WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))).
 		RETURNING(UserItemCategory.AllColumns)
 
@@ -296,7 +297,7 @@ func (repo *UserSavesRepositoryImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 	return nil
 }
 
-func (repo *UserSavesRepositoryImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error {
+func (repo *UserSavesRepositoryImpl) DeleteUserItemCategory(user *bootstrap.User, itemCategoryUuid string) error {
 	stmt := UserItemCategory.DELETE().
 		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
 			AND(UserItemCategory.UUID.EQ(String(itemCategoryUuid))))
