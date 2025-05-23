@@ -48,8 +48,7 @@ func (controller *UserSavesController) UpsertQuickSaveItemByUser(c *gin.Context)
 	}
 
 	var quick model.UserItemsQuick
-	//test := c.Request.Body
-	//slog.Info("test %s", test)
+
 	if err := c.BindJSON(&quick); err != nil {
 		slog.Info("invalid request %s", err)
 		c.JSON(400, gin.H{"message": "invalid request"})

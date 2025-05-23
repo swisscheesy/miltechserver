@@ -43,16 +43,17 @@ func (repo *UserSavesRepositoryImpl) GetQuickSaveItemsByUserId(user *bootstrap.U
 
 func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error {
 	stmt := UserItemsQuick.INSERT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ItemName,
-		UserItemsQuick.ImageLocation, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime).
+		UserItemsQuick.ImageLocation, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID).
 		MODEL(quick).
 		ON_CONFLICT(UserItemsQuick.UserID, UserItemsQuick.Niin).
 		DO_UPDATE(
 			SET(
-				UserItemsQuick.Niin.SET(String(quick.Niin)),
-				UserItemsQuick.ItemName.SET(String(*quick.ItemName)),
+				UserItemsQuick.UserID.SET(String(user.UserID)),
+				UserItemsQuick.LastUpdated.SET(TimestampT(*quick.LastUpdated)),
 				UserItemsQuick.ImageLocation.SET(String(*quick.ImageLocation)),
 				UserItemsQuick.ItemComment.SET(String(*quick.ItemComment)),
-				UserItemsQuick.SaveTime.SET(helper.CurrentTimeDB())). // This is super ugly
+				UserItemsQuick.ID.SET(String(quick.ID)),
+				UserItemsQuick.SaveTime.SET(TimestampT(*quick.SaveTime))).
 				WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
 					AND(
 						UserItemsQuick.Niin.EQ(String(quick.Niin))))).
@@ -89,7 +90,7 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 	var failedNiins []string
 	for _, val := range quickItems {
 		stmt := UserItemsQuick.INSERT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ItemName,
-			UserItemsQuick.ImageLocation, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime).
+			UserItemsQuick.ImageLocation, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID).
 			MODEL(val).
 			ON_CONFLICT(UserItemsQuick.UserID, UserItemsQuick.Niin).
 			DO_UPDATE(
@@ -99,7 +100,9 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 					UserItemsQuick.ItemComment.
 						SET(String(*val.ItemComment)),
 					UserItemsQuick.SaveTime.
-						SET(helper.CurrentTimeDB())).
+						SET(TimestampT(*val.SaveTime)),
+					UserItemsQuick.LastUpdated.
+						SET(TimestampT(*val.LastUpdated))).
 					WHERE(
 						UserItemsQuick.UserID.EQ(String(user.UserID)).
 							AND(UserItemsQuick.Niin.EQ(String(val.Niin)))))
@@ -159,7 +162,7 @@ func (repo *UserSavesRepositoryImpl) GetSerializedItemsByUserId(user *bootstrap.
 func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
 	stmt := UserItemsSerialized.INSERT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.ItemName,
 		UserItemsSerialized.Serial,
-		UserItemsSerialized.ImageLocation, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment).
+		UserItemsSerialized.ImageLocation, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment, UserItemsSerialized.LastUpdated).
 		MODEL(serializedItem).
 		ON_CONFLICT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.Serial).
 		DO_UPDATE(
@@ -168,7 +171,9 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootst
 				UserItemsSerialized.ItemComment.
 					SET(String(*serializedItem.ItemComment)),
 				UserItemsSerialized.SaveTime.
-					SET(helper.CurrentTimeDB())).
+					SET(TimestampT(*serializedItem.SaveTime)),
+				UserItemsSerialized.LastUpdated.
+					SET(TimestampT(*serializedItem.LastUpdated))).
 				WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
 					AND(UserItemsSerialized.Niin.EQ(String(serializedItem.Niin))))).
 		RETURNING(
@@ -272,11 +277,11 @@ func (repo *UserSavesRepositoryImpl) GetUserItemCategories(user *bootstrap.User)
 
 func (repo *UserSavesRepositoryImpl) UpsertUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error {
 	stmt := UserItemCategory.
-		INSERT(UserItemCategory.UUID, UserItemCategory.UserUID,
+		INSERT(UserItemCategory.ID, UserItemCategory.UserUID,
 			UserItemCategory.Name, UserItemCategory.Comment,
 			UserItemCategory.ImageLocation).
 		MODEL(itemCategory).
-		ON_CONFLICT(UserItemCategory.UUID, UserItemCategory.UserUID).
+		ON_CONFLICT(UserItemCategory.ID, UserItemCategory.UserUID).
 		DO_UPDATE(
 			SET(UserItemCategory.Name.
 				SET(String(itemCategory.Name)),
@@ -300,7 +305,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemCategory(user *bootstrap.User
 func (repo *UserSavesRepositoryImpl) DeleteUserItemCategory(user *bootstrap.User, itemCategoryUuid string) error {
 	stmt := UserItemCategory.DELETE().
 		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
-			AND(UserItemCategory.UUID.EQ(String(itemCategoryUuid))))
+			AND(UserItemCategory.ID.EQ(String(itemCategoryUuid))))
 
 	_, err := stmt.Exec(repo.Db)
 
