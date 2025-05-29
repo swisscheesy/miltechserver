@@ -31,9 +31,13 @@ func (controller *UserSavesController) GetQuickSaveItemsByUser(c *gin.Context) {
 	result, err := controller.UserSavesService.GetQuickSaveItemsByUser(user)
 
 	if err != nil {
-		c.JSON(400, result)
+		c.JSON(404, response.EmptyResponseMessage())
 	} else {
-		c.JSON(200, result)
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    result,
+		})
 	}
 }
 
@@ -60,7 +64,7 @@ func (controller *UserSavesController) UpsertQuickSaveItemByUser(c *gin.Context)
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -85,7 +89,7 @@ func (controller *UserSavesController) DeleteQuickSaveItemByUser(c *gin.Context)
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -104,7 +108,7 @@ func (controller *UserSavesController) DeleteAllQuickSaveItemsByUser(c *gin.Cont
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -129,7 +133,7 @@ func (controller *UserSavesController) UpsertQuickSaveItemListByUser(c *gin.Cont
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -146,11 +150,13 @@ func (controller *UserSavesController) GetSerializedItemsByUser(c *gin.Context) 
 	result, err := controller.UserSavesService.GetSerializedItemsByUser(user)
 
 	if err != nil {
-		c.Error(err)
-	} else if len(result) == 0 {
-		c.JSON(404, response.NoItemFoundResponseMessage())
+		c.JSON(404, response.EmptyResponseMessage())
 	} else {
-		c.JSON(200, result)
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    result,
+		})
 	}
 }
 
@@ -175,7 +181,7 @@ func (controller *UserSavesController) UpsertSerializedSaveItemByUser(c *gin.Con
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -200,7 +206,7 @@ func (controller *UserSavesController) DeleteSerializedSaveItemByUser(c *gin.Con
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -219,7 +225,7 @@ func (controller *UserSavesController) DeleteAllSerializedItemsByUser(c *gin.Con
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -244,7 +250,7 @@ func (controller *UserSavesController) UpsertSerializedSaveItemListByUser(c *gin
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
@@ -261,9 +267,13 @@ func (controller *UserSavesController) GetItemCategoriesByUser(c *gin.Context) {
 	result, err := controller.UserSavesService.GetItemCategoriesByUser(user)
 
 	if err != nil {
-		c.Error(err)
+		c.JSON(404, response.EmptyResponseMessage())
 	} else {
-		c.JSON(200, result)
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    result,
+		})
 	}
 }
 
@@ -288,11 +298,65 @@ func (controller *UserSavesController) UpsertItemCategoryByUser(c *gin.Context) 
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
 	}
 }
 
-func (controller *UserSavesController) DeleteItemCategoryByUuid(c *gin.Context) {
+func (controller *UserSavesController) DeleteItemCategory(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	var itemCategory model.UserItemCategory
+	if err := c.BindJSON(&itemCategory); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteItemCategoryByUuid(user, itemCategory)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.Status(200)
+	}
+}
+
+func (controller *UserSavesController) GetCategorizedItemsByCategory(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	var itemCategory model.UserItemCategory
+	if err := c.BindJSON(&itemCategory); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	result, err := controller.UserSavesService.GetCategorizedItemsByCategory(user, itemCategory)
+
+	if err != nil {
+		c.JSON(404, response.EmptyResponseMessage())
+	} else {
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    result,
+		})
+	}
+}
+
+func (controller *UserSavesController) GetCategorizedItemsByUser(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -302,13 +366,90 @@ func (controller *UserSavesController) DeleteItemCategoryByUuid(c *gin.Context) 
 		return
 	}
 
-	itemCategoryUuid := c.Query("uuid")
+	result, err := controller.UserSavesService.GetCategorizedItemsByUser(user)
 
-	err := controller.UserSavesService.DeleteItemCategoryByUuid(user, itemCategoryUuid)
+	if err != nil {
+		c.JSON(404, response.EmptyResponseMessage())
+	} else {
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    result,
+		})
+	}
+}
+
+func (controller *UserSavesController) DeleteCategorizedItemByCategoryId(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	var categorizedItem model.UserItemsCategorized
+	if err := c.BindJSON(&categorizedItem); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteCategorizedItemByCategoryId(user, categorizedItem)
 
 	if err != nil {
 		c.Error(err)
 	} else {
-		c.JSON(200, gin.H{"message": "success"})
+		c.Status(200)
+	}
+}
+
+func (controller *UserSavesController) UpsertCategorizedItemByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	var categorizedItem model.UserItemsCategorized
+	if err := c.BindJSON(&categorizedItem); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.UpsertCategorizedItemByUser(user, categorizedItem)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.Status(200)
+	}
+}
+
+func (controller *UserSavesController) UpsertCategorizedItemListByUser(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	var categorizedItems []model.UserItemsCategorized
+	if err := c.BindJSON(&categorizedItems); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request %s")
+		return
+	}
+
+	err := controller.UserSavesService.UpsertCategorizedItemListByUser(user, categorizedItems)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.Status(200)
 	}
 }

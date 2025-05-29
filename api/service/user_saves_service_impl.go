@@ -89,6 +89,34 @@ func (service *UserSavesServiceImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 }
 
 // DeleteItemCategoryByUuid is a function that deletes an item category for a user
-func (service *UserSavesServiceImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error {
-	return service.UserSavesRepository.DeleteUserItemCategory(user, itemCategoryUuid)
+func (service *UserSavesServiceImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+	return service.UserSavesRepository.DeleteUserItemCategory(user, itemCategory)
+}
+
+func (service *UserSavesServiceImpl) GetCategorizedItemsByUser(user *bootstrap.User) ([]model.UserItemsCategorized, error) {
+	var items, err = service.UserSavesRepository.GetCategorizedItemsByUser(user)
+	if items == nil {
+		return []model.UserItemsCategorized{}, nil
+	}
+	return items, err
+}
+
+func (service *UserSavesServiceImpl) GetCategorizedItemsByCategory(user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error) {
+	var items, err = service.UserSavesRepository.GetCategorizedItemsByCategory(user, itemCategory)
+	if items == nil {
+		return []model.UserItemsCategorized{}, nil
+	}
+	return items, err
+}
+
+func (service *UserSavesServiceImpl) UpsertCategorizedItemByUser(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
+	return service.UserSavesRepository.UpsertUserItemsCategorized(user, categorizedItem)
+}
+
+func (service *UserSavesServiceImpl) UpsertCategorizedItemListByUser(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error {
+	return service.UserSavesRepository.UpsertUserItemsCategorizedList(user, categorizedItems)
+}
+
+func (service *UserSavesServiceImpl) DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
+	return service.UserSavesRepository.DeleteUserItemsCategorized(user, categorizedItem)
 }

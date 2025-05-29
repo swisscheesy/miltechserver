@@ -23,8 +23,12 @@ type UserSavesRepository interface {
 	// Item Categories
 	GetUserItemCategories(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error
-	DeleteUserItemCategory(user *bootstrap.User, itemCategoryUuid string) error
+	DeleteUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error
 
 	// Categorized Items
-	GetCategorizedItemsByCategoryUuid(user *bootstrap.User, categoryUuid string) ([]model.UserItemsCategorized, error)
+	GetCategorizedItemsByCategory(user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error)
+	GetCategorizedItemsByUser(user *bootstrap.User) ([]model.UserItemsCategorized, error)
+	UpsertUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+	UpsertUserItemsCategorizedList(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
+	DeleteUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
 }

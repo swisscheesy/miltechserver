@@ -2,10 +2,11 @@ package route
 
 import (
 	"database/sql"
-	"github.com/gin-gonic/gin"
 	"miltechserver/api/controller"
 	"miltechserver/api/repository"
 	"miltechserver/api/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
@@ -30,5 +31,11 @@ func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
 
 	group.GET("/user/saves/item_category", pc.GetItemCategoriesByUser)
 	group.PUT("/user/saves/item_category", pc.UpsertItemCategoryByUser)
-	group.DELETE("/user/saves/item_category", pc.DeleteItemCategoryByUuid)
+	group.DELETE("/user/saves/item_category", pc.DeleteItemCategory)
+
+	group.GET("/user/saves/categorized_items/category", pc.GetCategorizedItemsByCategory)
+	group.GET("/user/saves/categorized_items", pc.GetCategorizedItemsByUser)
+	group.PUT("/user/saves/categorized_items/add", pc.UpsertCategorizedItemByUser)
+	group.PUT("/user/saves/categorized_items/addlist", pc.UpsertCategorizedItemListByUser)
+	group.DELETE("/user/saves/categorized_items", pc.DeleteCategorizedItemByCategoryId)
 }

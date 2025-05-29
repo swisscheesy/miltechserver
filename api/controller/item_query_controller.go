@@ -1,10 +1,11 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
 	"miltechserver/api/response"
 	"miltechserver/api/service"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type ItemQueryController struct {
@@ -27,7 +28,7 @@ func (controller *ItemQueryController) FindShort(c *gin.Context) {
 		result, err := controller.ItemQueryService.FindShortByNiin(value)
 		if err != nil {
 			if strings.Contains(err.Error(), "no item") {
-				c.JSON(404, response.NoItemFoundResponseMessage())
+				c.JSON(404, response.EmptyResponseMessage())
 			} else {
 				c.JSON(500, response.InternalErrorResponseMessage())
 			}

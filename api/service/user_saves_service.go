@@ -23,7 +23,12 @@ type UserSavesService interface {
 	// Item Categories
 	GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
-	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategoryUuid string) error
+	DeleteItemCategoryByUuid(user *bootstrap.User, itemCategory model.UserItemCategory) error
 
 	// Categorized Items
+	GetCategorizedItemsByUser(user *bootstrap.User) ([]model.UserItemsCategorized, error)
+	GetCategorizedItemsByCategory(user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error)
+	UpsertCategorizedItemByUser(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+	UpsertCategorizedItemListByUser(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
+	DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
 }
