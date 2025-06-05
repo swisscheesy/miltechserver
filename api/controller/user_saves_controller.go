@@ -24,7 +24,7 @@ func (controller *UserSavesController) GetQuickSaveItemsByUser(c *gin.Context) {
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -47,14 +47,14 @@ func (controller *UserSavesController) UpsertQuickSaveItemByUser(c *gin.Context)
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
 	var quick model.UserItemsQuick
 
 	if err := c.BindJSON(&quick); err != nil {
-		slog.Info("invalid request %s", err)
+		slog.Info("invalid request", "error", err)
 		c.JSON(400, gin.H{"message": "invalid request"})
 		return
 	}
@@ -74,7 +74,7 @@ func (controller *UserSavesController) DeleteQuickSaveItemByUser(c *gin.Context)
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -99,7 +99,7 @@ func (controller *UserSavesController) DeleteAllQuickSaveItemsByUser(c *gin.Cont
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -118,7 +118,7 @@ func (controller *UserSavesController) UpsertQuickSaveItemListByUser(c *gin.Cont
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -143,7 +143,7 @@ func (controller *UserSavesController) GetSerializedItemsByUser(c *gin.Context) 
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -166,7 +166,7 @@ func (controller *UserSavesController) UpsertSerializedSaveItemByUser(c *gin.Con
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -191,7 +191,7 @@ func (controller *UserSavesController) DeleteSerializedSaveItemByUser(c *gin.Con
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -216,7 +216,7 @@ func (controller *UserSavesController) DeleteAllSerializedItemsByUser(c *gin.Con
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -235,7 +235,7 @@ func (controller *UserSavesController) UpsertSerializedSaveItemListByUser(c *gin
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -260,7 +260,7 @@ func (controller *UserSavesController) GetItemCategoriesByUser(c *gin.Context) {
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -283,7 +283,7 @@ func (controller *UserSavesController) UpsertItemCategoryByUser(c *gin.Context) 
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -314,7 +314,7 @@ func (controller *UserSavesController) DeleteItemCategory(c *gin.Context) {
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -339,7 +339,7 @@ func (controller *UserSavesController) GetCategorizedItemsByCategory(c *gin.Cont
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -362,7 +362,7 @@ func (controller *UserSavesController) GetCategorizedItemsByUser(c *gin.Context)
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -391,7 +391,7 @@ func (controller *UserSavesController) DeleteCategorizedItemByCategoryId(c *gin.
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -416,7 +416,7 @@ func (controller *UserSavesController) UpsertCategorizedItemByUser(c *gin.Contex
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 
@@ -441,7 +441,7 @@ func (controller *UserSavesController) UpsertCategorizedItemListByUser(c *gin.Co
 
 	if !ok {
 		c.JSON(401, gin.H{"message": "unauthorized"})
-		slog.Info("Unauthorized request %s")
+		slog.Info("Unauthorized request")
 		return
 	}
 

@@ -28,4 +28,5 @@ func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.
 	authRoutes := gin.Group("/api/v1/auth")
 	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
 	NewUserSavesRouter(db, authRoutes)
+	NewUserGeneralRouter(db, authRoutes)
 }

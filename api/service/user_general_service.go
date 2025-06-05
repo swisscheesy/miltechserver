@@ -1,0 +1,10 @@
+package service
+
+import (
+	"miltechserver/api/auth"
+	"miltechserver/bootstrap"
+)
+
+type UserGeneralService interface {
+	UpsertUser(user *bootstrap.User, userDto auth.UserDto) error
+}

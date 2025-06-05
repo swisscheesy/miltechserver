@@ -2,8 +2,9 @@ package route
 
 import (
 	"database/sql"
-	"github.com/gin-gonic/gin"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
 )
 
 func NewTestRouter(db *sql.DB, group *gin.RouterGroup) {
