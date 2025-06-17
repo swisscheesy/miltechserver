@@ -4,14 +4,17 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
 	"miltechserver/bootstrap"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
 
 type UserSavesServiceImpl struct {
 	UserSavesRepository repository.UserSavesRepository
+	BlobClient          *azblob.Client
 }
 
-func NewUserSavesServiceImpl(userSavesRepository repository.UserSavesRepository) *UserSavesServiceImpl {
-	return &UserSavesServiceImpl{UserSavesRepository: userSavesRepository}
+func NewUserSavesServiceImpl(userSavesRepository repository.UserSavesRepository, blobClient *azblob.Client) *UserSavesServiceImpl {
+	return &UserSavesServiceImpl{UserSavesRepository: userSavesRepository, BlobClient: blobClient}
 }
 
 // GetQuickSaveItemsByUser is a function that returns the quick save items of a user
@@ -119,4 +122,19 @@ func (service *UserSavesServiceImpl) UpsertCategorizedItemListByUser(user *boots
 
 func (service *UserSavesServiceImpl) DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
 	return service.UserSavesRepository.DeleteUserItemsCategorized(user, categorizedItem)
+}
+
+// UploadItemImage uploads an item image to Azure Blob Storage
+func (service *UserSavesServiceImpl) UploadItemImage(user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error) {
+	return service.UserSavesRepository.UploadItemImage(user, itemID, tableType, imageData)
+}
+
+// DeleteItemImage deletes an item image from Azure Blob Storage
+func (service *UserSavesServiceImpl) DeleteItemImage(user *bootstrap.User, itemID string, tableType string) error {
+	return service.UserSavesRepository.DeleteItemImage(user, itemID, tableType)
+}
+
+// GetItemImage retrieves an item image from Azure Blob Storage
+func (service *UserSavesServiceImpl) GetItemImage(user *bootstrap.User, itemID string, tableType string) ([]byte, string, error) {
+	return service.UserSavesRepository.GetItemImage(user, itemID, tableType)
 }

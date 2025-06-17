@@ -6,10 +6,11 @@ import (
 	"miltechserver/bootstrap"
 
 	"firebase.google.com/go/v4/auth"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.Env) {
+func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
 	v1Route := gin.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -27,6 +28,7 @@ func Setup(db *sql.DB, gin *gin.Engine, authClient *auth.Client, env *bootstrap.
 	// All Authenticated Routes
 	authRoutes := gin.Group("/api/v1/auth")
 	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
-	NewUserSavesRouter(db, authRoutes)
+	NewUserSavesRouter(db, blobClient, env, authRoutes)
 	NewUserGeneralRouter(db, authRoutes)
+	NewUserVehicleRouter(db, authRoutes)
 }

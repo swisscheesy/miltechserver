@@ -8,16 +8,18 @@ import (
 )
 
 type Env struct {
-	Host           string
-	Port           string
-	Username       string
-	Password       string
-	DBName         string
-	DBDate         string
-	DBSchema       string
-	ServerAddress  string
-	SslMode        string
-	ContextTimeout int
+	Host            string
+	Port            string
+	Username        string
+	Password        string
+	DBName          string
+	DBDate          string
+	DBSchema        string
+	BlobAccountName string
+	BlobAccountKey  string
+	ServerAddress   string
+	SslMode         string
+	ContextTimeout  int
 }
 
 func NewEnv() *Env {
@@ -34,6 +36,7 @@ func NewEnv() *Env {
 		log.Println("Production build: Skipping .env file")
 		env.SslMode = "require"
 	}
+	// Database
 	env.Host = os.Getenv("DB_HOST")
 	env.Port = os.Getenv("DB_PORT")
 	env.Username = os.Getenv("DB_USERNAME")
@@ -41,6 +44,9 @@ func NewEnv() *Env {
 	env.DBName = os.Getenv("DB_NAME")
 	env.DBDate = os.Getenv("DB_DATE")
 	env.DBSchema = os.Getenv("DB_SCHEMA")
+	// Blob Storage
+	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
+	env.BlobAccountKey = os.Getenv("BLOB_ACCOUNT_KEY")
 
 	log.Printf("DB_HOST: %s", env.Host)
 	log.Printf("DB_PORT: %s", env.Port)

@@ -18,5 +18,5 @@ func NewUserGeneralRouter(db *sql.DB, group *gin.RouterGroup) {
 			userGeneralRepository),
 	}
 
-	group.POST("/user/general/register", pc.UpsertUser)
+	group.POST("/user/general/refresh", pc.UpsertUser)
 }

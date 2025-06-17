@@ -31,4 +31,9 @@ type UserSavesService interface {
 	UpsertCategorizedItemByUser(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
 	UpsertCategorizedItemListByUser(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
 	DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+
+	// Image Management
+	UploadItemImage(user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error)
+	DeleteItemImage(user *bootstrap.User, itemID string, tableType string) error
+	GetItemImage(user *bootstrap.User, itemID string, tableType string) ([]byte, string, error)
 }

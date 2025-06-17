@@ -5,16 +5,18 @@ import (
 	"miltechserver/api/controller"
 	"miltechserver/api/repository"
 	"miltechserver/api/service"
+	"miltechserver/bootstrap"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
 
-func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
-	userSavesRepository := repository.NewUserSavesRepositoryImpl(db)
+func NewUserSavesRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, group *gin.RouterGroup) {
+	userSavesRepository := repository.NewUserSavesRepositoryImpl(db, blobClient, env)
 
 	pc := &controller.UserSavesController{
 		UserSavesService: service.NewUserSavesServiceImpl(
-			userSavesRepository),
+			userSavesRepository, blobClient),
 	}
 
 	group.GET("/user/saves/quick_items", pc.GetQuickSaveItemsByUser)
@@ -38,4 +40,9 @@ func NewUserSavesRouter(db *sql.DB, group *gin.RouterGroup) {
 	group.PUT("/user/saves/categorized_items/add", pc.UpsertCategorizedItemByUser)
 	group.PUT("/user/saves/categorized_items/addlist", pc.UpsertCategorizedItemListByUser)
 	group.DELETE("/user/saves/categorized_items", pc.DeleteCategorizedItemByCategoryId)
+
+	// Image management routes
+	group.POST("/user/saves/items/image/upload/:table_type", pc.UploadItemImage)
+	group.DELETE("/user/saves/items/image/:table_type", pc.DeleteItemImage)
+	group.GET("/user/saves/items/image/:table_type", pc.GetItemImage)
 }
