@@ -72,6 +72,15 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemByUser(user *bootstrap.U
 }
 
 func (repo *UserSavesRepositoryImpl) DeleteQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error {
+	// Delete image from blob storage if it exists
+	if quick.Image != nil && *quick.Image != "" {
+		err := repo.DeleteItemImage(user, quick.ID, "quick")
+		if err != nil {
+			slog.Error("Failed to delete image from blob storage", "error", err, "user_id", user.UserID, "item_id", quick.ID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
 	stmt := UserItemsQuick.
 		DELETE().
 		WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
@@ -82,7 +91,7 @@ func (repo *UserSavesRepositoryImpl) DeleteQuickSaveItemByUser(user *bootstrap.U
 	if err != nil {
 		return errors.New("error deleting quick item")
 	} else {
-		slog.Info("quick save item deleted", "user_id", user.UserID, "niin", quick.Niin)
+		slog.Info("quick save item and associated image deleted", "user_id", user.UserID, "niin", quick.Niin)
 		return nil
 	}
 }
@@ -122,16 +131,139 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 
 }
 
+// Helper methods for bulk image deletion
+
+// getAllQuickItemsWithImages retrieves all quick save items that have images for a user
+func (repo *UserSavesRepositoryImpl) getAllQuickItemsWithImages(user *bootstrap.User) ([]model.UserItemsQuick, error) {
+	var items []model.UserItemsQuick
+
+	stmt := SELECT(UserItemsQuick.AllColumns).
+		FROM(UserItemsQuick).
+		WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
+			AND(UserItemsQuick.Image.IS_NOT_NULL()).
+			AND(UserItemsQuick.Image.NOT_EQ(String(""))))
+
+	err := stmt.Query(repo.Db, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve quick items with images: %w", err)
+	}
+
+	return items, nil
+}
+
+// getAllSerializedItemsWithImages retrieves all serialized items that have images for a user
+func (repo *UserSavesRepositoryImpl) getAllSerializedItemsWithImages(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
+	var items []model.UserItemsSerialized
+
+	stmt := SELECT(UserItemsSerialized.AllColumns).
+		FROM(UserItemsSerialized).
+		WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
+			AND(UserItemsSerialized.Image.IS_NOT_NULL()).
+			AND(UserItemsSerialized.Image.NOT_EQ(String(""))))
+
+	err := stmt.Query(repo.Db, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve serialized items with images: %w", err)
+	}
+
+	return items, nil
+}
+
+// getAllCategorizedItemsWithImages retrieves all categorized items that have images for a user
+func (repo *UserSavesRepositoryImpl) getAllCategorizedItemsWithImages(user *bootstrap.User) ([]model.UserItemsCategorized, error) {
+	var items []model.UserItemsCategorized
+
+	stmt := SELECT(UserItemsCategorized.AllColumns).
+		FROM(UserItemsCategorized).
+		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)).
+			AND(UserItemsCategorized.Image.IS_NOT_NULL()).
+			AND(UserItemsCategorized.Image.NOT_EQ(String(""))))
+
+	err := stmt.Query(repo.Db, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve categorized items with images: %w", err)
+	}
+
+	return items, nil
+}
+
+// getAllCategoriesWithImages retrieves all item categories that have images for a user
+func (repo *UserSavesRepositoryImpl) getAllCategoriesWithImages(user *bootstrap.User) ([]model.UserItemCategory, error) {
+	var categories []model.UserItemCategory
+
+	stmt := SELECT(UserItemCategory.AllColumns).
+		FROM(UserItemCategory).
+		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
+			AND(UserItemCategory.Image.IS_NOT_NULL()).
+			AND(UserItemCategory.Image.NOT_EQ(String(""))))
+
+	err := stmt.Query(repo.Db, &categories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve categories with images: %w", err)
+	}
+
+	return categories, nil
+}
+
+// deleteImagesFromBlobStorage deletes multiple images from Azure Blob Storage
+func (repo *UserSavesRepositoryImpl) deleteImagesFromBlobStorage(user *bootstrap.User, itemIDs []string) error {
+	containerName := "user-item-images"
+	ctx := context.Background()
+
+	var failedDeletions []string
+
+	for _, itemID := range itemIDs {
+		blobName := fmt.Sprintf("%s/%s.jpg", user.UserID, itemID)
+
+		_, err := repo.BlobClient.DeleteBlob(ctx, containerName, blobName, nil)
+		if err != nil {
+			// Log the error but continue with other deletions
+			slog.Error("Failed to delete blob", "error", err, "blob_name", blobName, "user_id", user.UserID)
+			failedDeletions = append(failedDeletions, itemID)
+		}
+	}
+
+	if len(failedDeletions) > 0 {
+		slog.Warn("Some images failed to delete from blob storage", "failed_items", failedDeletions, "user_id", user.UserID)
+		// Don't return error here as the database deletion should still proceed
+	}
+
+	return nil
+}
+
 func (repo *UserSavesRepositoryImpl) DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error {
+	// First, get all quick save items that have images
+	itemsWithImages, err := repo.getAllQuickItemsWithImages(user)
+	if err != nil {
+		slog.Error("Failed to retrieve quick items with images", "error", err, "user_id", user.UserID)
+		// Continue with database deletion even if image retrieval fails
+	}
+
+	// Extract item IDs for image deletion
+	var itemIDs []string
+	for _, item := range itemsWithImages {
+		itemIDs = append(itemIDs, item.ID)
+	}
+
+	// Delete images from blob storage
+	if len(itemIDs) > 0 {
+		err = repo.deleteImagesFromBlobStorage(user, itemIDs)
+		if err != nil {
+			slog.Error("Failed to delete images from blob storage", "error", err, "user_id", user.UserID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
+	// Delete from database
 	stmt := UserItemsQuick.DELETE().
 		WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)))
 
-	_, err := stmt.Exec(repo.Db)
+	_, err = stmt.Exec(repo.Db)
 
 	if err != nil {
 		return errors.New("error deleting quick items")
 	} else {
-		slog.Info("all quick save items deleted", "user_id", user.UserID)
+		slog.Info("all quick save items and associated images deleted", "user_id", user.UserID, "items_with_images", len(itemIDs))
 		return nil
 	}
 }
@@ -188,15 +320,38 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootst
 }
 
 func (repo *UserSavesRepositoryImpl) DeleteAllSerializedItemsByUser(user *bootstrap.User) error {
+	// First, get all serialized items that have images
+	itemsWithImages, err := repo.getAllSerializedItemsWithImages(user)
+	if err != nil {
+		slog.Error("Failed to retrieve serialized items with images", "error", err, "user_id", user.UserID)
+		// Continue with database deletion even if image retrieval fails
+	}
+
+	// Extract item IDs for image deletion
+	var itemIDs []string
+	for _, item := range itemsWithImages {
+		itemIDs = append(itemIDs, item.ID)
+	}
+
+	// Delete images from blob storage
+	if len(itemIDs) > 0 {
+		err = repo.deleteImagesFromBlobStorage(user, itemIDs)
+		if err != nil {
+			slog.Error("Failed to delete images from blob storage", "error", err, "user_id", user.UserID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
+	// Delete from database
 	stmt := UserItemsSerialized.DELETE().
 		WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)))
 
-	_, err := stmt.Exec(repo.Db)
+	_, err = stmt.Exec(repo.Db)
 
 	if err != nil {
 		return errors.New("error deleting serialized items")
 	} else {
-		slog.Info("all serialized save items deleted", "user_id", user.UserID)
+		slog.Info("all serialized save items and associated images deleted", "user_id", user.UserID, "items_with_images", len(itemIDs))
 		return nil
 	}
 }
@@ -238,6 +393,15 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemListByUser(user *bo
 }
 
 func (repo *UserSavesRepositoryImpl) DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
+	// Delete image from blob storage if it exists
+	if serializedItem.Image != nil && *serializedItem.Image != "" {
+		err := repo.DeleteItemImage(user, serializedItem.ID, "serialized")
+		if err != nil {
+			slog.Error("Failed to delete image from blob storage", "error", err, "user_id", user.UserID, "item_id", serializedItem.ID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
 	stmt := UserItemsSerialized.
 		DELETE().
 		WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
@@ -250,7 +414,7 @@ func (repo *UserSavesRepositoryImpl) DeleteSerializedSaveItemByUser(user *bootst
 		return errors.New("error deleting serialized item")
 	}
 
-	slog.Info("serialized save item deleted", "user_id", user.UserID, "niin", serializedItem.Niin)
+	slog.Info("serialized save item and associated image deleted", "user_id", user.UserID, "niin", serializedItem.Niin)
 	return nil
 }
 
@@ -305,11 +469,48 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemCategory(user *bootstrap.User
 
 // Deletes a single item category and all items in that category
 func (repo *UserSavesRepositoryImpl) DeleteUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+	// First, get all categorized items in this category that have images
+	var categorizedItemsWithImages []model.UserItemsCategorized
+	stmt := SELECT(UserItemsCategorized.AllColumns).
+		FROM(UserItemsCategorized).
+		WHERE(UserItemsCategorized.CategoryID.EQ(String(itemCategory.ID)).
+			AND(UserItemsCategorized.Image.IS_NOT_NULL()).
+			AND(UserItemsCategorized.Image.NOT_EQ(String(""))))
+
+	err := stmt.Query(repo.Db, &categorizedItemsWithImages)
+	if err != nil {
+		slog.Error("Failed to retrieve categorized items with images", "error", err, "user_id", user.UserID, "category_id", itemCategory.ID)
+		// Continue with deletion even if image retrieval fails
+	}
+
+	// Delete images for categorized items
+	var itemIDs []string
+	for _, item := range categorizedItemsWithImages {
+		itemIDs = append(itemIDs, item.ID)
+	}
+
+	if len(itemIDs) > 0 {
+		err = repo.deleteImagesFromBlobStorage(user, itemIDs)
+		if err != nil {
+			slog.Error("Failed to delete categorized item images from blob storage", "error", err, "user_id", user.UserID, "category_id", itemCategory.ID)
+			// Continue with deletion even if image deletion fails
+		}
+	}
+
+	// Delete category image if it exists
+	if itemCategory.Image != nil && *itemCategory.Image != "" {
+		err = repo.DeleteItemImage(user, itemCategory.ID, "category")
+		if err != nil {
+			slog.Error("Failed to delete category image from blob storage", "error", err, "user_id", user.UserID, "category_id", itemCategory.ID)
+			// Continue with deletion even if image deletion fails
+		}
+	}
+
 	cat_stmt := UserItemCategory.DELETE().
 		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
 			AND(UserItemCategory.ID.EQ(String(itemCategory.ID))))
 
-	_, err := cat_stmt.Exec(repo.Db)
+	_, err = cat_stmt.Exec(repo.Db)
 
 	if err != nil {
 		return errors.New("error deleting item category")
@@ -324,17 +525,49 @@ func (repo *UserSavesRepositoryImpl) DeleteUserItemCategory(user *bootstrap.User
 		return errors.New("error deleting categorized items")
 	}
 
-	slog.Info("item category deleted", "user_id", user.UserID, "category_uuid", itemCategory.ID)
+	slog.Info("item category, categorized items and associated images deleted", "user_id", user.UserID, "category_uuid", itemCategory.ID, "items_with_images", len(itemIDs))
 	return nil
 }
 
 // DeleteAllUserItemCategories deletes all item categories and their associated categorized items for a user
 func (repo *UserSavesRepositoryImpl) DeleteAllUserItemCategories(user *bootstrap.User) error {
+	// First, get all categorized items that have images
+	categorizedItemsWithImages, err := repo.getAllCategorizedItemsWithImages(user)
+	if err != nil {
+		slog.Error("Failed to retrieve categorized items with images", "error", err, "user_id", user.UserID)
+		// Continue with database deletion even if image retrieval fails
+	}
+
+	// Get all categories that have images
+	categoriesWithImages, err := repo.getAllCategoriesWithImages(user)
+	if err != nil {
+		slog.Error("Failed to retrieve categories with images", "error", err, "user_id", user.UserID)
+		// Continue with database deletion even if image retrieval fails
+	}
+
+	// Extract item IDs for image deletion
+	var itemIDs []string
+	for _, item := range categorizedItemsWithImages {
+		itemIDs = append(itemIDs, item.ID)
+	}
+	for _, category := range categoriesWithImages {
+		itemIDs = append(itemIDs, category.ID)
+	}
+
+	// Delete images from blob storage
+	if len(itemIDs) > 0 {
+		err = repo.deleteImagesFromBlobStorage(user, itemIDs)
+		if err != nil {
+			slog.Error("Failed to delete images from blob storage", "error", err, "user_id", user.UserID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
 	// First delete all categorized items for this user
 	items_stmt := UserItemsCategorized.DELETE().
 		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
 
-	_, err := items_stmt.Exec(repo.Db)
+	_, err = items_stmt.Exec(repo.Db)
 	if err != nil {
 		return errors.New("error deleting all categorized items: " + err.Error())
 	}
@@ -348,7 +581,7 @@ func (repo *UserSavesRepositoryImpl) DeleteAllUserItemCategories(user *bootstrap
 		return errors.New("error deleting all item categories: " + err.Error())
 	}
 
-	slog.Info("all item categories and categorized items deleted", "user_id", user.UserID)
+	slog.Info("all item categories, categorized items and associated images deleted", "user_id", user.UserID, "items_with_images", len(itemIDs))
 	return nil
 }
 
@@ -491,6 +724,15 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorizedList(user *bootst
 }
 
 func (repo *UserSavesRepositoryImpl) DeleteUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
+	// Delete image from blob storage if it exists
+	if categorizedItem.Image != nil && *categorizedItem.Image != "" {
+		err := repo.DeleteItemImage(user, categorizedItem.ID, "categorized")
+		if err != nil {
+			slog.Error("Failed to delete image from blob storage", "error", err, "user_id", user.UserID, "item_id", categorizedItem.ID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
 	stmt := UserItemsCategorized.
 		DELETE().
 		WHERE(
@@ -506,21 +748,44 @@ func (repo *UserSavesRepositoryImpl) DeleteUserItemsCategorized(user *bootstrap.
 		return errors.New("error deleting categorized item: " + err.Error())
 	}
 
-	slog.Info("categorized item deleted", "user_id", user.UserID, "niin", categorizedItem.Niin, "category_id", categorizedItem.CategoryID)
+	slog.Info("categorized item and associated image deleted", "user_id", user.UserID, "niin", categorizedItem.Niin, "category_id", categorizedItem.CategoryID)
 	return nil
 }
 
 // DeleteAllUserItemsCategorized deletes all categorized items for a user
 func (repo *UserSavesRepositoryImpl) DeleteAllUserItemsCategorized(user *bootstrap.User) error {
+	// First, get all categorized items that have images
+	itemsWithImages, err := repo.getAllCategorizedItemsWithImages(user)
+	if err != nil {
+		slog.Error("Failed to retrieve categorized items with images", "error", err, "user_id", user.UserID)
+		// Continue with database deletion even if image retrieval fails
+	}
+
+	// Extract item IDs for image deletion
+	var itemIDs []string
+	for _, item := range itemsWithImages {
+		itemIDs = append(itemIDs, item.ID)
+	}
+
+	// Delete images from blob storage
+	if len(itemIDs) > 0 {
+		err = repo.deleteImagesFromBlobStorage(user, itemIDs)
+		if err != nil {
+			slog.Error("Failed to delete images from blob storage", "error", err, "user_id", user.UserID)
+			// Continue with database deletion even if image deletion fails
+		}
+	}
+
+	// Delete from database
 	stmt := UserItemsCategorized.DELETE().
 		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
 
-	_, err := stmt.Exec(repo.Db)
+	_, err = stmt.Exec(repo.Db)
 	if err != nil {
 		return errors.New("error deleting all categorized items: " + err.Error())
 	}
 
-	slog.Info("all categorized items deleted", "user_id", user.UserID)
+	slog.Info("all categorized items and associated images deleted", "user_id", user.UserID, "items_with_images", len(itemIDs))
 	return nil
 }
 
