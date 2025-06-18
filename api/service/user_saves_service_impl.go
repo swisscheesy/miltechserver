@@ -91,9 +91,14 @@ func (service *UserSavesServiceImpl) UpsertItemCategoryByUser(user *bootstrap.Us
 	return service.UserSavesRepository.UpsertUserItemCategory(user, itemCategory)
 }
 
-// DeleteItemCategoryByUuid is a function that deletes an item category for a user
-func (service *UserSavesServiceImpl) DeleteItemCategoryByUuid(user *bootstrap.User, itemCategory model.UserItemCategory) error {
+// DeleteItemCategory is a function that deletes an item category for a user
+func (service *UserSavesServiceImpl) DeleteItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error {
 	return service.UserSavesRepository.DeleteUserItemCategory(user, itemCategory)
+}
+
+// DeleteAllItemCategories is a function that deletes all item categories for a user
+func (service *UserSavesServiceImpl) DeleteAllItemCategories(user *bootstrap.User) error {
+	return service.UserSavesRepository.DeleteAllUserItemCategories(user)
 }
 
 func (service *UserSavesServiceImpl) GetCategorizedItemsByUser(user *bootstrap.User) ([]model.UserItemsCategorized, error) {
@@ -122,6 +127,11 @@ func (service *UserSavesServiceImpl) UpsertCategorizedItemListByUser(user *boots
 
 func (service *UserSavesServiceImpl) DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
 	return service.UserSavesRepository.DeleteUserItemsCategorized(user, categorizedItem)
+}
+
+// DeleteAllCategorizedItems is a function that deletes all categorized items for a user
+func (service *UserSavesServiceImpl) DeleteAllCategorizedItems(user *bootstrap.User) error {
+	return service.UserSavesRepository.DeleteAllUserItemsCategorized(user)
 }
 
 // UploadItemImage uploads an item image to Azure Blob Storage

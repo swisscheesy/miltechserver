@@ -34,12 +34,14 @@ func NewUserSavesRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.En
 	group.GET("/user/saves/item_category", pc.GetItemCategoriesByUser)
 	group.PUT("/user/saves/item_category", pc.UpsertItemCategoryByUser)
 	group.DELETE("/user/saves/item_category", pc.DeleteItemCategory)
+	group.DELETE("/user/saves/item_category/all", pc.DeleteAllItemCategories)
 
 	group.GET("/user/saves/categorized_items/category", pc.GetCategorizedItemsByCategory)
 	group.GET("/user/saves/categorized_items", pc.GetCategorizedItemsByUser)
 	group.PUT("/user/saves/categorized_items/add", pc.UpsertCategorizedItemByUser)
 	group.PUT("/user/saves/categorized_items/addlist", pc.UpsertCategorizedItemListByUser)
 	group.DELETE("/user/saves/categorized_items", pc.DeleteCategorizedItemByCategoryId)
+	group.DELETE("/user/saves/categorized_items/all", pc.DeleteAllCategorizedItems)
 
 	// Image management routes
 	group.POST("/user/saves/items/image/upload/:table_type", pc.UploadItemImage)

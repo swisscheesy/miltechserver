@@ -319,7 +319,26 @@ func (controller *UserSavesController) DeleteItemCategory(c *gin.Context) {
 		return
 	}
 
-	err := controller.UserSavesService.DeleteItemCategoryByUuid(user, itemCategory)
+	err := controller.UserSavesService.DeleteItemCategory(user, itemCategory)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.Status(200)
+	}
+}
+
+func (controller *UserSavesController) DeleteAllItemCategories(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteAllItemCategories(user)
 
 	if err != nil {
 		c.Error(err)
@@ -397,6 +416,25 @@ func (controller *UserSavesController) DeleteCategorizedItemByCategoryId(c *gin.
 	}
 
 	err := controller.UserSavesService.DeleteCategorizedItemByCategoryId(user, categorizedItem)
+
+	if err != nil {
+		c.Error(err)
+	} else {
+		c.Status(200)
+	}
+}
+
+func (controller *UserSavesController) DeleteAllCategorizedItems(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	err := controller.UserSavesService.DeleteAllCategorizedItems(user)
 
 	if err != nil {
 		c.Error(err)

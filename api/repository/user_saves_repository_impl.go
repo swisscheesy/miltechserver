@@ -328,6 +328,30 @@ func (repo *UserSavesRepositoryImpl) DeleteUserItemCategory(user *bootstrap.User
 	return nil
 }
 
+// DeleteAllUserItemCategories deletes all item categories and their associated categorized items for a user
+func (repo *UserSavesRepositoryImpl) DeleteAllUserItemCategories(user *bootstrap.User) error {
+	// First delete all categorized items for this user
+	items_stmt := UserItemsCategorized.DELETE().
+		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
+
+	_, err := items_stmt.Exec(repo.Db)
+	if err != nil {
+		return errors.New("error deleting all categorized items: " + err.Error())
+	}
+
+	// Then delete all item categories for this user
+	cat_stmt := UserItemCategory.DELETE().
+		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))
+
+	_, err = cat_stmt.Exec(repo.Db)
+	if err != nil {
+		return errors.New("error deleting all item categories: " + err.Error())
+	}
+
+	slog.Info("all item categories and categorized items deleted", "user_id", user.UserID)
+	return nil
+}
+
 func (repo *UserSavesRepositoryImpl) GetCategorizedItemsByCategory(user *bootstrap.User, category model.UserItemCategory) ([]model.UserItemsCategorized, error) {
 	var items []model.UserItemsCategorized
 
@@ -465,6 +489,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorizedList(user *bootst
 	}
 	return nil
 }
+
 func (repo *UserSavesRepositoryImpl) DeleteUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error {
 	stmt := UserItemsCategorized.
 		DELETE().
@@ -482,6 +507,20 @@ func (repo *UserSavesRepositoryImpl) DeleteUserItemsCategorized(user *bootstrap.
 	}
 
 	slog.Info("categorized item deleted", "user_id", user.UserID, "niin", categorizedItem.Niin, "category_id", categorizedItem.CategoryID)
+	return nil
+}
+
+// DeleteAllUserItemsCategorized deletes all categorized items for a user
+func (repo *UserSavesRepositoryImpl) DeleteAllUserItemsCategorized(user *bootstrap.User) error {
+	stmt := UserItemsCategorized.DELETE().
+		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
+
+	_, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return errors.New("error deleting all categorized items: " + err.Error())
+	}
+
+	slog.Info("all categorized items deleted", "user_id", user.UserID)
 	return nil
 }
 

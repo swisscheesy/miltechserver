@@ -24,6 +24,7 @@ type UserSavesRepository interface {
 	GetUserItemCategories(user *bootstrap.User) ([]model.UserItemCategory, error)
 	UpsertUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error
 	DeleteUserItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error
+	DeleteAllUserItemCategories(user *bootstrap.User) error
 
 	// Categorized Items
 	GetCategorizedItemsByCategory(user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error)
@@ -31,6 +32,7 @@ type UserSavesRepository interface {
 	UpsertUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
 	UpsertUserItemsCategorizedList(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
 	DeleteUserItemsCategorized(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+	DeleteAllUserItemsCategorized(user *bootstrap.User) error
 
 	// Image Management
 	UploadItemImage(user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error)
