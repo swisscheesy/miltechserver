@@ -18,8 +18,8 @@ func NewSqlClient(env *Env) *sql.DB {
 	err = db.Ping()
 
 	if err != nil {
-		slog.Error("Unable to connect to database: %s", err)
-		panic(nil)
+		slog.Error("Unable to connect to database", "error", err)
+		panic(err)
 	}
 
 	slog.Info("Connected to Database!")

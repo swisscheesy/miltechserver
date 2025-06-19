@@ -279,7 +279,7 @@ func (repo *UserSavesRepositoryImpl) GetSerializedItemsByUserId(user *bootstrap.
 
 		err := stmt.Query(repo.Db, &items)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("error retrieving serialized saves for user %s", user.UserID))
+			return nil, fmt.Errorf("error retrieving serialized saves for user %s", user.UserID)
 		} else {
 			slog.Info("serialized saves retrieved for user", "user_id", user.UserID)
 			return items, nil
@@ -385,7 +385,7 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemListByUser(user *bo
 
 	}
 	if len(failedNiins) > 0 {
-		return errors.New(fmt.Sprintf("failed to save following items: %s", failedNiins))
+		return fmt.Errorf("failed to save following items: %s", failedNiins)
 	} else {
 		slog.Info("serialized save item list inserted", "user_id", user.UserID)
 		return nil
@@ -428,7 +428,7 @@ func (repo *UserSavesRepositoryImpl) GetUserItemCategories(user *bootstrap.User)
 
 		err := stmt.Query(repo.Db, &categories)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("error retrieving item categories for user %s", user.UserID))
+			return nil, fmt.Errorf("error retrieving item categories for user %s", user.UserID)
 		} else {
 			slog.Info("item categories retrieved for user", "user_id", user.UserID)
 			return categories, nil
@@ -599,7 +599,7 @@ func (repo *UserSavesRepositoryImpl) GetCategorizedItemsByCategory(user *bootstr
 		err := stmt.Query(repo.Db, &items)
 
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("error retrieving categorized items for user %s", user.UserID))
+			return nil, fmt.Errorf("error retrieving categorized items for user %s", user.UserID)
 		} else {
 			return items, nil
 		}
@@ -620,7 +620,7 @@ func (repo *UserSavesRepositoryImpl) GetCategorizedItemsByUser(user *bootstrap.U
 		err := stmt.Query(repo.Db, &items)
 
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("error retrieving categorized items for user %s", user.UserID))
+			return nil, fmt.Errorf("error retrieving categorized items for user %s", user.UserID)
 		} else {
 			slog.Info("categorized items retrieved for user", "user_id", user.UserID)
 			return items, nil
@@ -716,7 +716,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorizedList(user *bootst
 	}
 
 	if len(failedNiins) > 0 {
-		return errors.New(fmt.Sprintf("failed to save following items: %s", failedNiins))
+		return fmt.Errorf("failed to save following items: %s", failedNiins)
 	} else {
 		slog.Info("categorized item list inserted", "user_id", user.UserID)
 	}

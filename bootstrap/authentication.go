@@ -2,12 +2,13 @@ package bootstrap
 
 import (
 	"context"
-	firebase "firebase.google.com/go/v4"
-	"firebase.google.com/go/v4/auth"
 	"fmt"
-	"google.golang.org/api/option"
 	"log/slog"
 	"os"
+
+	firebase "firebase.google.com/go/v4"
+	"firebase.google.com/go/v4/auth"
+	"google.golang.org/api/option"
 )
 
 type User struct {
@@ -37,7 +38,7 @@ func NewFireAuth(ctx context.Context) *auth.Client {
 	}
 	authClient, err := fireApp.Auth(ctx)
 	if err != nil {
-		slog.Error("error getting auth client: %v", err)
+		slog.Error("error getting auth client", "error", err)
 		return nil
 	}
 	slog.Info("Firebase Auth client created")

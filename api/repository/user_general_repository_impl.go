@@ -20,7 +20,6 @@ func NewUserGeneralRepositoryImpl(db *sql.DB) *UserGeneralRepositoryImpl {
 }
 
 func (repo *UserGeneralRepositoryImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDto) error {
-
 	stmt := Users.INSERT(Users.UID, Users.Email, Users.Username, Users.CreatedAt, Users.IsEnabled, Users.LastLogin).
 		MODEL(userDto).
 		ON_CONFLICT(Users.UID).
@@ -29,12 +28,11 @@ func (repo *UserGeneralRepositoryImpl) UpsertUser(user *bootstrap.User, userDto 
 				Users.Email.SET(String(userDto.Email)),
 				Users.Username.SET(String(userDto.Username)),
 				Users.LastLogin.SET(TimestampT(userDto.LastLogin)),
-				Users.IsEnabled.SET(Bool(userDto.IsEnabled)),
-				Users.CreatedAt.SET(TimestampT(userDto.CreatedAt))).
+				Users.IsEnabled.SET(Bool(userDto.IsEnabled))).
 				WHERE(Users.UID.EQ(String(userDto.UID)))).
 		RETURNING(Users.AllColumns)
 
-	err := stmt.Query(repo.Db, &userDto)
+	_, err := stmt.Exec(repo.Db)
 	if err != nil {
 		return errors.New("error upserting user: " + err.Error())
 	}
