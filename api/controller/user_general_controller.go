@@ -3,6 +3,7 @@ package controller
 import (
 	"log/slog"
 	"miltechserver/api/auth"
+	"miltechserver/api/request"
 	"miltechserver/api/service"
 	"miltechserver/bootstrap"
 
@@ -41,4 +42,34 @@ func (controller *UserGeneralController) UpsertUser(c *gin.Context) {
 			c.Status(200)
 		}
 	}
+}
+
+func (controller *UserGeneralController) DeleteUser(c *gin.Context) {
+	_, ok := c.Get("user")
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var deleteRequest request.UserDeleteRequest
+	if err := c.ShouldBindJSON(&deleteRequest); err != nil {
+		c.JSON(400, gin.H{"message": "invalid request body"})
+		slog.Info("Invalid request body", "error", err)
+		return
+	}
+
+	err := controller.UserGeneralService.DeleteUser(deleteRequest.UID)
+	if err != nil {
+		if err.Error() == "user not found" {
+			c.JSON(404, gin.H{"message": "user not found"})
+			slog.Info("User not found", "uid", deleteRequest.UID)
+		} else {
+			c.Error(err)
+		}
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "user deleted successfully"})
+	slog.Info("User deleted successfully", "uid", deleteRequest.UID)
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/auth"
@@ -38,5 +39,26 @@ func (repo *UserGeneralRepositoryImpl) UpsertUser(user *bootstrap.User, userDto 
 	}
 
 	slog.Info("user UPDATED", "user_id", userDto.UID, "user_email", userDto.Email, "user_username", userDto.Username)
+	return nil
+}
+
+func (repo *UserGeneralRepositoryImpl) DeleteUser(uid string) error {
+	stmt := Users.DELETE().WHERE(Users.UID.EQ(String(uid)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("error deleting user: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	slog.Info("user DELETED", "user_id", uid)
 	return nil
 }

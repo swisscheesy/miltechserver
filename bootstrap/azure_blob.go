@@ -23,9 +23,5 @@ func NewAzureBlobClient(env *Env) *azblob.Client {
 		panic(err)
 	}
 
-	// containerClient := blobClient.ServiceClient().NewContainerClient("user")
-
-	// containerClient.Create(context.Background(), nil)
-
 	return blobClient
 }

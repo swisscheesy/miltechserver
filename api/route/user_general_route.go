@@ -19,4 +19,5 @@ func NewUserGeneralRouter(db *sql.DB, group *gin.RouterGroup) {
 	}
 
 	group.POST("/user/general/refresh", pc.UpsertUser)
+	group.DELETE("/user/general/delete_user", pc.DeleteUser)
 }

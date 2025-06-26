@@ -18,3 +18,7 @@ func NewUserGeneralServiceImpl(userGeneralRepository repository.UserGeneralRepos
 func (service *UserGeneralServiceImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDto) error {
 	return service.UserGeneralRepository.UpsertUser(user, userDto)
 }
+
+func (service *UserGeneralServiceImpl) DeleteUser(uid string) error {
+	return service.UserGeneralRepository.DeleteUser(uid)
+}
