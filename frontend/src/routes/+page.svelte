@@ -3,15 +3,15 @@
 </script>
 
 <svelte:head>
-  <title>MilTech - Mobile App</title>
-  <meta name="description" content="Download MilTech mobile app for iOS and Android devices." />
+  <title>Miltech - Mobile App</title>
+  <meta name="description" content="Download Miltech mobile app for iOS and Android devices." />
 </svelte:head>
 
 <!-- Main Content -->
 <section class="min-h-screen bg-gradient-to-br from-dark-900 via-dark-800 to-primary-900 flex items-center justify-center">
   <div class="text-center px-4 sm:px-6 lg:px-8">
     <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
-      MilTech
+      Miltech
     </h1>
     
     <p class="text-lg text-gray-400 mb-12 max-w-md mx-auto">
