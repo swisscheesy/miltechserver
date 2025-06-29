@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply text-gray-100 bg-dark-900;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-900 transition-all duration-200;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-lg hover:shadow-primary-500/25;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-dark-700 text-gray-200 hover:bg-dark-600 focus:ring-dark-500 border-dark-600;
+  }
+  
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-lg hover:shadow-red-500/25;
+  }
+  
+  .btn-outline {
+    @apply btn border-dark-600 text-gray-300 bg-transparent hover:bg-dark-800 focus:ring-primary-500;
+  }
+  
+  .form-input {
+    @apply block w-full px-3 py-2 border border-dark-600 rounded-lg shadow-sm placeholder-gray-500 focus:outline-none focus:ring-primary-500 focus:border-primary-500 bg-dark-800 text-gray-200;
+  }
+  
+  .form-label {
+    @apply block text-sm font-medium text-gray-300 mb-1;
+  }
+  
+  .card {
+    @apply bg-dark-800 shadow-xl rounded-lg border border-dark-700;
+  }
+  
+  .card-header {
+    @apply px-6 py-4 border-b border-dark-700;
+  }
+  
+  .card-body {
+    @apply px-6 py-4;
+  }
+  
+  .alert {
+    @apply p-4 rounded-lg text-sm border;
+  }
+  
+  .alert-success {
+    @apply alert bg-accent-500/10 text-accent-400 border-accent-500/20;
+  }
+  
+  .alert-error {
+    @apply alert bg-red-500/10 text-red-400 border-red-500/20;
+  }
+  
+  .alert-warning {
+    @apply alert bg-yellow-500/10 text-yellow-400 border-yellow-500/20;
+  }
+  
+  .alert-info {
+    @apply alert bg-primary-500/10 text-primary-400 border-primary-500/20;
+  }
+} 
