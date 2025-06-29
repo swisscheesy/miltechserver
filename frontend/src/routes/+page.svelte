@@ -13,9 +13,8 @@
     <h1 class="text-4xl md:text-5xl font-bold text-white mb-4">
       Miltech
     </h1>
-    
     <p class="text-lg text-gray-400 mb-12 max-w-md mx-auto">
-      Download our mobile app today.
+      The ultimate mobile replacement for FedLog, and so much more. <br>Download the mobile app today!
     </p>
     
     <div class="flex flex-col sm:flex-row gap-6 justify-center items-center">
