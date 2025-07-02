@@ -33,6 +33,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewUserSavesRouter(db, blobClient, env, authRoutes)
 	NewUserGeneralRouter(db, authRoutes)
 	NewUserVehicleRouter(db, authRoutes)
+	NewShopsRouter(db, env, authRoutes)
 
 	// Serve static assets (CSS, JS, images, etc.)
 	router.Static("/_app", "./static/_app")
