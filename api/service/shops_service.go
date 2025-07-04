@@ -19,7 +19,7 @@ type ShopsService interface {
 	GetShopMembers(user *bootstrap.User, shopID string) ([]model.ShopMembers, error)
 
 	// Shop Invite Code Operations
-	GenerateInviteCode(user *bootstrap.User, shopID string, maxUses *int32, expiresAt *string) (*model.ShopInviteCodes, error)
+	GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error)
 	GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error)
 	DeactivateInviteCode(user *bootstrap.User, codeID string) error
 

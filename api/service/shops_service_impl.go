@@ -135,16 +135,6 @@ func (service *ShopsServiceImpl) JoinShopViaInviteCode(user *bootstrap.User, inv
 		return errors.New("invite code is inactive")
 	}
 
-	// Check if code has expired
-	if code.ExpiresAt != nil && time.Now().After(*code.ExpiresAt) {
-		return errors.New("invite code has expired")
-	}
-
-	// Check if code has reached max uses
-	if code.MaxUses != nil && code.CurrentUses != nil && *code.CurrentUses >= *code.MaxUses {
-		return errors.New("invite code has reached maximum uses")
-	}
-
 	// Check if user is already a member
 	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, code.ShopID)
 	if err != nil {
@@ -159,13 +149,6 @@ func (service *ShopsServiceImpl) JoinShopViaInviteCode(user *bootstrap.User, inv
 	err = service.ShopsRepository.AddMemberToShop(user, code.ShopID, "member")
 	if err != nil {
 		return fmt.Errorf("failed to add member to shop: %w", err)
-	}
-
-	// Increment invite code usage
-	err = service.ShopsRepository.IncrementInviteCodeUsage(code.ID)
-	if err != nil {
-		slog.Error("Failed to increment invite code usage", "error", err, "code_id", code.ID)
-		// Don't return error as user was successfully added
 	}
 
 	slog.Info("User joined shop via invite code", "user_id", user.UserID, "shop_id", code.ShopID, "invite_code", inviteCode)
@@ -253,7 +236,7 @@ func (service *ShopsServiceImpl) GetShopMembers(user *bootstrap.User, shopID str
 }
 
 // Shop Invite Code Operations
-func (service *ShopsServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID string, maxUses *int32, expiresAt *string) (*model.ShopInviteCodes, error) {
+func (service *ShopsServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -275,22 +258,11 @@ func (service *ShopsServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID
 	}
 
 	inviteCode := model.ShopInviteCodes{
-		ID:          uuid.New().String(),
-		ShopID:      shopID,
-		Code:        code,
-		CreatedBy:   user.UserID,
-		MaxUses:     maxUses,
-		CurrentUses: func() *int32 { i := int32(0); return &i }(),
-		IsActive:    func() *bool { b := true; return &b }(),
-	}
-
-	// Parse expiration date if provided
-	if expiresAt != nil && *expiresAt != "" {
-		expTime, err := time.Parse(time.RFC3339, *expiresAt)
-		if err != nil {
-			return nil, fmt.Errorf("invalid expiration date format: %w", err)
-		}
-		inviteCode.ExpiresAt = &expTime
+		ID:        uuid.New().String(),
+		ShopID:    shopID,
+		Code:      code,
+		CreatedBy: user.UserID,
+		IsActive:  func() *bool { b := true; return &b }(),
 	}
 
 	now := time.Now()

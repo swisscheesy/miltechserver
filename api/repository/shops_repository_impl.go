@@ -210,9 +210,6 @@ func (repo *ShopsRepositoryImpl) CreateInviteCode(user *bootstrap.User, inviteCo
 		ShopInviteCodes.ShopID,
 		ShopInviteCodes.Code,
 		ShopInviteCodes.CreatedBy,
-		ShopInviteCodes.ExpiresAt,
-		ShopInviteCodes.MaxUses,
-		ShopInviteCodes.CurrentUses,
 		ShopInviteCodes.IsActive,
 		ShopInviteCodes.CreatedAt,
 	).MODEL(inviteCode).RETURNING(ShopInviteCodes.AllColumns)
@@ -253,21 +250,6 @@ func (repo *ShopsRepositoryImpl) GetInviteCodesByShop(user *bootstrap.User, shop
 	}
 
 	return codes, nil
-}
-
-func (repo *ShopsRepositoryImpl) IncrementInviteCodeUsage(codeID string) error {
-	stmt := ShopInviteCodes.UPDATE(
-		ShopInviteCodes.CurrentUses,
-	).SET(
-		ShopInviteCodes.CurrentUses.SET(ShopInviteCodes.CurrentUses.ADD(Int32(1))),
-	).WHERE(ShopInviteCodes.ID.EQ(String(codeID)))
-
-	_, err := stmt.Exec(repo.Db)
-	if err != nil {
-		return fmt.Errorf("failed to increment invite code usage: %w", err)
-	}
-
-	return nil
 }
 
 func (repo *ShopsRepositoryImpl) DeactivateInviteCode(user *bootstrap.User, codeID string) error {

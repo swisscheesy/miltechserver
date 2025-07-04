@@ -107,15 +107,12 @@ func ToShopMemberResponse(member model.ShopMembers) ShopMemberResponse {
 
 func ToShopInviteCodeResponse(code model.ShopInviteCodes) ShopInviteCodeResponse {
 	return ShopInviteCodeResponse{
-		ID:          code.ID,
-		ShopID:      code.ShopID,
-		Code:        code.Code,
-		CreatedBy:   code.CreatedBy,
-		ExpiresAt:   code.ExpiresAt,
-		MaxUses:     code.MaxUses,
-		CurrentUses: code.CurrentUses,
-		IsActive:    code.IsActive,
-		CreatedAt:   code.CreatedAt,
+		ID:        code.ID,
+		ShopID:    code.ShopID,
+		Code:      code.Code,
+		CreatedBy: code.CreatedBy,
+		IsActive:  code.IsActive,
+		CreatedAt: code.CreatedAt,
 	}
 }
 

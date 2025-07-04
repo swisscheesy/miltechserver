@@ -280,7 +280,7 @@ func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
 		return
 	}
 
-	code, err := controller.ShopsService.GenerateInviteCode(user, req.ShopID, req.MaxUses, req.ExpiresAt)
+	code, err := controller.ShopsService.GenerateInviteCode(user, req.ShopID)
 	if err != nil {
 		c.Error(err)
 		return

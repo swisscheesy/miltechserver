@@ -23,7 +23,6 @@ type ShopsRepository interface {
 	CreateInviteCode(user *bootstrap.User, inviteCode model.ShopInviteCodes) (*model.ShopInviteCodes, error)
 	GetInviteCodeByCode(code string) (*model.ShopInviteCodes, error)
 	GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error)
-	IncrementInviteCodeUsage(codeID string) error
 	DeactivateInviteCode(user *bootstrap.User, codeID string) error
 
 	// Shop Message Operations
