@@ -54,7 +54,7 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Shop created successfully",
-		Data:    response.ToShopResponse(*createdShop),
+		Data:    *createdShop,
 	})
 }
 
@@ -101,15 +101,10 @@ func (controller *ShopsController) GetUserShops(c *gin.Context) {
 		return
 	}
 
-	var shopResponses []response.ShopResponse
-	for _, shop := range shops {
-		shopResponses = append(shopResponses, response.ToShopResponse(shop))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    shopResponses,
+		Data:    shops,
 	})
 }
 
@@ -139,7 +134,7 @@ func (controller *ShopsController) GetShopByID(c *gin.Context) {
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    response.ToShopResponse(*shop),
+		Data:    *shop,
 	})
 }
 
@@ -248,15 +243,10 @@ func (controller *ShopsController) GetShopMembers(c *gin.Context) {
 		return
 	}
 
-	var memberResponses []response.ShopMemberResponse
-	for _, member := range members {
-		memberResponses = append(memberResponses, response.ToShopMemberResponse(member))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    memberResponses,
+		Data:    members,
 	})
 }
 
@@ -289,7 +279,7 @@ func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Invite code generated successfully",
-		Data:    response.ToShopInviteCodeResponse(*code),
+		Data:    *code,
 	})
 }
 
@@ -316,15 +306,10 @@ func (controller *ShopsController) GetInviteCodesByShop(c *gin.Context) {
 		return
 	}
 
-	var codeResponses []response.ShopInviteCodeResponse
-	for _, code := range codes {
-		codeResponses = append(codeResponses, response.ToShopInviteCodeResponse(code))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    codeResponses,
+		Data:    codes,
 	})
 }
 
@@ -388,7 +373,7 @@ func (controller *ShopsController) CreateShopMessage(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Message created successfully",
-		Data:    response.ToShopMessageResponse(*createdMessage),
+		Data:    *createdMessage,
 	})
 }
 
@@ -415,15 +400,10 @@ func (controller *ShopsController) GetShopMessages(c *gin.Context) {
 		return
 	}
 
-	var messageResponses []response.ShopMessageResponse
-	for _, message := range messages {
-		messageResponses = append(messageResponses, response.ToShopMessageResponse(message))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    messageResponses,
+		Data:    messages,
 	})
 }
 
@@ -525,7 +505,7 @@ func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Vehicle created successfully",
-		Data:    response.ToShopVehicleResponse(*createdVehicle),
+		Data:    *createdVehicle,
 	})
 }
 
@@ -552,15 +532,10 @@ func (controller *ShopsController) GetShopVehicles(c *gin.Context) {
 		return
 	}
 
-	var vehicleResponses []response.ShopVehicleResponse
-	for _, vehicle := range vehicles {
-		vehicleResponses = append(vehicleResponses, response.ToShopVehicleResponse(vehicle))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    vehicleResponses,
+		Data:    vehicles,
 	})
 }
 
@@ -590,7 +565,7 @@ func (controller *ShopsController) GetShopVehicleByID(c *gin.Context) {
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    response.ToShopVehicleResponse(*vehicle),
+		Data:    *vehicle,
 	})
 }
 
@@ -694,7 +669,7 @@ func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Notification created successfully",
-		Data:    response.ToShopVehicleNotificationResponse(*createdNotification),
+		Data:    *createdNotification,
 	})
 }
 
@@ -721,15 +696,10 @@ func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
 		return
 	}
 
-	var notificationResponses []response.ShopVehicleNotificationResponse
-	for _, notification := range notifications {
-		notificationResponses = append(notificationResponses, response.ToShopVehicleNotificationResponse(notification))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    notificationResponses,
+		Data:    notifications,
 	})
 }
 
@@ -759,7 +729,7 @@ func (controller *ShopsController) GetVehicleNotificationByID(c *gin.Context) {
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    response.ToShopVehicleNotificationResponse(*notification),
+		Data:    *notification,
 	})
 }
 
@@ -860,7 +830,7 @@ func (controller *ShopsController) AddNotificationItem(c *gin.Context) {
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Item added successfully",
-		Data:    response.ToShopNotificationItemResponse(*createdItem),
+		Data:    *createdItem,
 	})
 }
 
@@ -887,15 +857,10 @@ func (controller *ShopsController) GetNotificationItems(c *gin.Context) {
 		return
 	}
 
-	var itemResponses []response.ShopNotificationItemResponse
-	for _, item := range items {
-		itemResponses = append(itemResponses, response.ToShopNotificationItemResponse(item))
-	}
-
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "",
-		Data:    itemResponses,
+		Data:    items,
 	})
 }
 
