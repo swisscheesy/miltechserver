@@ -101,7 +101,7 @@ func (repo *ShopsRepositoryImpl) GetShopByID(user *bootstrap.User, shopID string
 }
 
 func (repo *ShopsRepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID)).
+	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
@@ -109,13 +109,15 @@ func (repo *ShopsRepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID st
 				AND(ShopMembers.Role.EQ(String("admin"))),
 		)
 
-	var count int64
-	err := stmt.Query(repo.Db, &count)
+	var result struct {
+		Count int64 `sql:"primary_key"`
+	}
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check admin status: %w", err)
 	}
 
-	return count > 0, nil
+	return result.Count > 0, nil
 }
 
 // Shop Member Operations
@@ -187,20 +189,22 @@ func (repo *ShopsRepositoryImpl) GetShopMembers(user *bootstrap.User, shopID str
 }
 
 func (repo *ShopsRepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID)).
+	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(user.UserID))),
 		)
 
-	var count int64
-	err := stmt.Query(repo.Db, &count)
+	var result struct {
+		Count int64 `sql:"primary_key"`
+	}
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
 
-	return count > 0, nil
+	return result.Count > 0, nil
 }
 
 // Shop Invite Code Operations

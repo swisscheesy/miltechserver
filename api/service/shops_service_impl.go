@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"strings"
 	"time"
@@ -116,6 +117,25 @@ func (service *ShopsServiceImpl) GetShopByID(user *bootstrap.User, shopID string
 	}
 
 	return shop, nil
+}
+
+func (service *ShopsServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*response.UserShopsResponse, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	shops, err := service.GetShopsByUser(user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user shops: %w", err)
+	}
+
+	userShopsResponse := &response.UserShopsResponse{
+		User:  user,
+		Shops: shops,
+	}
+
+	slog.Info("User data with shops retrieved", "user_id", user.UserID, "shops_count", len(shops))
+	return userShopsResponse, nil
 }
 
 // Shop Member Operations

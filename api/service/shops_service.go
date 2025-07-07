@@ -2,6 +2,7 @@ package service
 
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
 
@@ -11,6 +12,7 @@ type ShopsService interface {
 	DeleteShop(user *bootstrap.User, shopID string) error
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
 	GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error)
+	GetUserDataWithShops(user *bootstrap.User) (*response.UserShopsResponse, error)
 
 	// Shop Member Operations
 	JoinShopViaInviteCode(user *bootstrap.User, inviteCode string) error

@@ -20,6 +20,7 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	// Shop Operations
 	group.POST("/shops", pc.CreateShop)
 	group.GET("/shops", pc.GetUserShops)
+	group.GET("/shops/user-data", pc.GetUserDataWithShops)
 	group.GET("/shops/:shop_id", pc.GetShopByID)
 	group.DELETE("/shops/:shop_id", pc.DeleteShop)
 

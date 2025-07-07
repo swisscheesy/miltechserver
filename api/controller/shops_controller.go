@@ -108,6 +108,30 @@ func (controller *ShopsController) GetUserShops(c *gin.Context) {
 	})
 }
 
+// GetUserDataWithShops returns user data along with all shops they are a part of
+func (controller *ShopsController) GetUserDataWithShops(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	userShopsData, err := controller.ShopsService.GetUserDataWithShops(user)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "User data and shops retrieved successfully",
+		Data:    *userShopsData,
+	})
+}
+
 // GetShopByID returns a specific shop by ID
 func (controller *ShopsController) GetShopByID(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
