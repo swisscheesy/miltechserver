@@ -129,12 +129,38 @@ func (service *ShopsServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*re
 		return nil, fmt.Errorf("failed to get user shops: %w", err)
 	}
 
-	userShopsResponse := &response.UserShopsResponse{
-		User:  user,
-		Shops: shops,
+	// Build shops with statistics
+	shopsWithStats := make([]response.ShopWithStats, 0, len(shops))
+	for _, shop := range shops {
+		// Get member count for this shop
+		memberCount, err := service.ShopsRepository.GetShopMemberCount(user, shop.ID)
+		if err != nil {
+			slog.Warn("Failed to get member count for shop", "shop_id", shop.ID, "error", err)
+			memberCount = 0
+		}
+
+		// Get vehicle count for this shop
+		vehicleCount, err := service.ShopsRepository.GetShopVehicleCount(user, shop.ID)
+		if err != nil {
+			slog.Warn("Failed to get vehicle count for shop", "shop_id", shop.ID, "error", err)
+			vehicleCount = 0
+		}
+
+		shopWithStats := response.ShopWithStats{
+			Shop:         shop,
+			MemberCount:  memberCount,
+			VehicleCount: vehicleCount,
+		}
+
+		shopsWithStats = append(shopsWithStats, shopWithStats)
 	}
 
-	slog.Info("User data with shops retrieved", "user_id", user.UserID, "shops_count", len(shops))
+	userShopsResponse := &response.UserShopsResponse{
+		User:  user,
+		Shops: shopsWithStats,
+	}
+
+	slog.Info("User data with shops and statistics retrieved", "user_id", user.UserID, "shops_count", len(shops))
 	return userShopsResponse, nil
 }
 

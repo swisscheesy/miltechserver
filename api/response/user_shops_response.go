@@ -5,7 +5,13 @@ import (
 	"miltechserver/bootstrap"
 )
 
+type ShopWithStats struct {
+	Shop         model.Shops `json:"shop"`
+	MemberCount  int64       `json:"member_count"`
+	VehicleCount int64       `json:"vehicle_count"`
+}
+
 type UserShopsResponse struct {
 	User  *bootstrap.User `json:"user"`
-	Shops []model.Shops   `json:"shops"`
+	Shops []ShopWithStats `json:"shops"`
 }

@@ -40,9 +40,8 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 	}
 
 	shop := model.Shops{
-		Name:         req.Name,
-		Details:      req.Details,
-		PasswordHash: req.PasswordHash,
+		Name:    req.Name,
+		Details: req.Details,
 	}
 
 	createdShop, err := controller.ShopsService.CreateShop(user, shop)

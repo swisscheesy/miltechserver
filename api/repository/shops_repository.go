@@ -17,7 +17,11 @@ type ShopsRepository interface {
 	AddMemberToShop(user *bootstrap.User, shopID string, role string) error
 	RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error
 	GetShopMembers(user *bootstrap.User, shopID string) ([]model.ShopMembers, error)
+	GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error)
 	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
+
+	// Shop Vehicle Operations
+	GetShopVehicleCount(user *bootstrap.User, shopID string) (int64, error)
 
 	// Shop Invite Code Operations
 	CreateInviteCode(user *bootstrap.User, inviteCode model.ShopInviteCodes) (*model.ShopInviteCodes, error)

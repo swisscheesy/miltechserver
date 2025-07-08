@@ -8,6 +8,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/bootstrap"
+	"time"
 
 	. "github.com/go-jet/jet/v2/postgres"
 )
@@ -26,7 +27,6 @@ func (repo *ShopsRepositoryImpl) CreateShop(user *bootstrap.User, shop model.Sho
 		Shops.ID,
 		Shops.Name,
 		Shops.Details,
-		Shops.PasswordHash,
 		Shops.CreatedBy,
 		Shops.CreatedAt,
 		Shops.UpdatedAt,
@@ -122,11 +122,13 @@ func (repo *ShopsRepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID st
 
 // Shop Member Operations
 func (repo *ShopsRepositoryImpl) AddMemberToShop(user *bootstrap.User, shopID string, role string) error {
+	curTime := time.Now().UTC()
 	member := model.ShopMembers{
-		ID:     fmt.Sprintf("%s_%s", shopID, user.UserID), // Simple composite ID
-		ShopID: shopID,
-		UserID: user.UserID,
-		Role:   role,
+		ID:       fmt.Sprintf("%s_%s", shopID, user.UserID), // Simple composite ID
+		ShopID:   shopID,
+		UserID:   user.UserID,
+		Role:     role,
+		JoinedAt: &curTime,
 	}
 
 	stmt := ShopMembers.INSERT(
@@ -205,6 +207,38 @@ func (repo *ShopsRepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID
 	}
 
 	return result.Count > 0, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error) {
+	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
+		FROM(ShopMembers).
+		WHERE(ShopMembers.ShopID.EQ(String(shopID)))
+
+	var result struct {
+		Count int64 `sql:"primary_key"`
+	}
+	err := stmt.Query(repo.Db, &result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get member count: %w", err)
+	}
+
+	return result.Count, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopVehicleCount(user *bootstrap.User, shopID string) (int64, error) {
+	stmt := SELECT(COUNT(ShopVehicle.ID).AS("count")).
+		FROM(ShopVehicle).
+		WHERE(ShopVehicle.ShopID.EQ(String(shopID)))
+
+	var result struct {
+		Count int64 `sql:"primary_key"`
+	}
+	err := stmt.Query(repo.Db, &result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get vehicle count: %w", err)
+	}
+
+	return result.Count, nil
 }
 
 // Shop Invite Code Operations
