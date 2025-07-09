@@ -146,10 +146,18 @@ func (service *ShopsServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*re
 			vehicleCount = 0
 		}
 
+		// Check if user is admin of this shop
+		isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shop.ID)
+		if err != nil {
+			slog.Warn("Failed to check admin status for shop", "shop_id", shop.ID, "error", err)
+			isAdmin = false
+		}
+
 		shopWithStats := response.ShopWithStats{
 			Shop:         shop,
 			MemberCount:  memberCount,
 			VehicleCount: vehicleCount,
+			IsAdmin:      isAdmin,
 		}
 
 		shopsWithStats = append(shopsWithStats, shopWithStats)

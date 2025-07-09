@@ -10,6 +10,7 @@ type ShopWithStats struct {
 	Shop         model.Shops `json:"shop"`
 	MemberCount  int64       `json:"member_count"`
 	VehicleCount int64       `json:"vehicle_count"`
+	IsAdmin      bool        `json:"is_admin"`
 }
 
 type UserShopsResponse struct {
