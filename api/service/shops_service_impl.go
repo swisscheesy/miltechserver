@@ -254,7 +254,7 @@ func (service *ShopsServiceImpl) RemoveMemberFromShop(user *bootstrap.User, shop
 	return nil
 }
 
-func (service *ShopsServiceImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]model.ShopMembers, error) {
+func (service *ShopsServiceImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -275,7 +275,7 @@ func (service *ShopsServiceImpl) GetShopMembers(user *bootstrap.User, shopID str
 	}
 
 	if members == nil {
-		return []model.ShopMembers{}, nil
+		return []response.ShopMemberWithUsername{}, nil
 	}
 
 	return members, nil

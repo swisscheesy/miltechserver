@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"time"
 
@@ -15,6 +16,16 @@ import (
 
 type ShopsRepositoryImpl struct {
 	Db *sql.DB
+}
+
+// shopMemberWithUsernameDB is used for Jet ORM mapping of JOIN query results
+type shopMemberWithUsernameDB struct {
+	ID       string     `sql:"shop_members.id"`
+	ShopID   string     `sql:"shop_members.shop_id"`
+	UserID   string     `sql:"shop_members.user_id"`
+	Role     string     `sql:"shop_members.role"`
+	JoinedAt *time.Time `sql:"shop_members.joined_at"`
+	Username *string    `sql:"users.username"`
 }
 
 func NewShopsRepositoryImpl(db *sql.DB) *ShopsRepositoryImpl {
@@ -175,16 +186,39 @@ func (repo *ShopsRepositoryImpl) RemoveMemberFromShop(user *bootstrap.User, shop
 	return nil
 }
 
-func (repo *ShopsRepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]model.ShopMembers, error) {
-	stmt := SELECT(ShopMembers.AllColumns).
-		FROM(ShopMembers).
-		WHERE(ShopMembers.ShopID.EQ(String(shopID))).
-		ORDER_BY(ShopMembers.JoinedAt.ASC())
+func (repo *ShopsRepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
+	rawSQL := `
+		SELECT 
+			sm.id,
+			sm.shop_id,
+			sm.user_id,
+			sm.role,
+			sm.joined_at,
+			u.username
+		FROM shop_members sm
+		LEFT JOIN users u ON sm.user_id = u.uid
+		WHERE sm.shop_id = $1
+		ORDER BY sm.joined_at ASC
+	`
 
-	var members []model.ShopMembers
-	err := stmt.Query(repo.Db, &members)
+	rows, err := repo.Db.Query(rawSQL, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop members: %w", err)
+	}
+	defer rows.Close()
+
+	var members []response.ShopMemberWithUsername
+	for rows.Next() {
+		var member response.ShopMemberWithUsername
+		err := rows.Scan(&member.ID, &member.ShopID, &member.UserID, &member.Role, &member.JoinedAt, &member.Username)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan member row: %w", err)
+		}
+		members = append(members, member)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
 	return members, nil

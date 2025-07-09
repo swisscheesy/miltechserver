@@ -3,6 +3,7 @@ package response
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
+	"time"
 )
 
 type ShopWithStats struct {
@@ -14,4 +15,13 @@ type ShopWithStats struct {
 type UserShopsResponse struct {
 	User  *bootstrap.User `json:"user"`
 	Shops []ShopWithStats `json:"shops"`
+}
+
+type ShopMemberWithUsername struct {
+	ID       string     `json:"id"`
+	ShopID   string     `json:"shop_id"`
+	UserID   string     `json:"user_id"`
+	Role     string     `json:"role"`
+	JoinedAt *time.Time `json:"joined_at"`
+	Username *string    `json:"username"`
 }

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
 
@@ -16,7 +17,7 @@ type ShopsRepository interface {
 	// Shop Member Operations
 	AddMemberToShop(user *bootstrap.User, shopID string, role string) error
 	RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error
-	GetShopMembers(user *bootstrap.User, shopID string) ([]model.ShopMembers, error)
+	GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error)
 	GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error)
 	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
 
