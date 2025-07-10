@@ -419,7 +419,19 @@ func (repo *ShopsRepositoryImpl) DeleteShopMessage(user *bootstrap.User, message
 	stmt := ShopMessages.DELETE().
 		WHERE(
 			ShopMessages.ID.EQ(String(messageID)).
-				AND(ShopMessages.UserID.EQ(String(user.UserID))),
+				AND(
+					ShopMessages.UserID.EQ(String(user.UserID)).
+						OR(
+							ShopMessages.ShopID.IN(
+								SELECT(ShopMembers.ShopID).
+									FROM(ShopMembers).
+									WHERE(
+										ShopMembers.UserID.EQ(String(user.UserID)).
+											AND(ShopMembers.Role.EQ(String("admin"))),
+									),
+							),
+						),
+				),
 		)
 
 	result, err := stmt.Exec(repo.Db)
