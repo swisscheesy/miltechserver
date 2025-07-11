@@ -483,13 +483,36 @@ func (service *ShopsServiceImpl) CreateShopVehicle(user *bootstrap.User, vehicle
 
 	vehicle.ID = uuid.New().String()
 	vehicle.CreatorID = user.UserID
-	vehicle.Admin = user.UserID // Creator becomes the admin
-	now := time.Now()
+	now := time.Now().UTC()
 	vehicle.SaveTime = now
 	vehicle.LastUpdated = now
 
+	// Handle null/empty values for string fields
+	if vehicle.Niin == "" {
+		vehicle.Niin = ""
+	}
+	if vehicle.Model == "" {
+		vehicle.Model = ""
+	}
+	if vehicle.Serial == "" {
+		vehicle.Serial = ""
+	}
+	if vehicle.Comment == "" {
+		vehicle.Comment = ""
+	}
+	if vehicle.Admin == "" {
+		vehicle.Admin = ""
+	}
 	if vehicle.Uoc == "" {
 		vehicle.Uoc = "UNK"
+	}
+
+	// Handle null values for int fields (already 0 by default in Go, but being explicit)
+	if vehicle.Mileage == 0 {
+		vehicle.Mileage = 0
+	}
+	if vehicle.Hours == 0 {
+		vehicle.Hours = 0
 	}
 
 	createdVehicle, err := service.ShopsRepository.CreateShopVehicle(user, vehicle)
@@ -556,23 +579,55 @@ func (service *ShopsServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle
 		return errors.New("unauthorized user")
 	}
 
-	// Get current vehicle to check permissions
+	// Get current vehicle to check permissions and get ShopID
 	currentVehicle, err := service.ShopsRepository.GetShopVehicleByID(user, vehicle.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get current vehicle: %w", err)
 	}
 
-	// Check if user is member of the shop
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, currentVehicle.ShopID)
+	// Populate ShopID from current vehicle to ensure correct vehicle is updated
+	vehicle.ShopID = currentVehicle.ShopID
+
+	// Check if user is vehicle creator OR shop admin
+	isCreator := currentVehicle.CreatorID == user.UserID
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, currentVehicle.ShopID)
 	if err != nil {
-		return fmt.Errorf("failed to verify membership: %w", err)
+		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
 
-	if !isMember {
-		return errors.New("access denied: user is not a member of this shop")
+	if !isCreator && !isAdmin {
+		return errors.New("access denied: only vehicle creator or shop admin can update vehicles")
 	}
 
-	vehicle.LastUpdated = time.Now()
+	// Handle null/empty values for string fields
+	if vehicle.Niin == "" {
+		vehicle.Niin = ""
+	}
+	if vehicle.Model == "" {
+		vehicle.Model = ""
+	}
+	if vehicle.Serial == "" {
+		vehicle.Serial = ""
+	}
+	if vehicle.Comment == "" {
+		vehicle.Comment = ""
+	}
+	if vehicle.Admin == "" {
+		vehicle.Admin = ""
+	}
+	if vehicle.Uoc == "" {
+		vehicle.Uoc = "UNK"
+	}
+
+	// Handle null values for int fields (already 0 by default in Go, but being explicit)
+	if vehicle.Mileage == 0 {
+		vehicle.Mileage = 0
+	}
+	if vehicle.Hours == 0 {
+		vehicle.Hours = 0
+	}
+
+	vehicle.LastUpdated = time.Now().UTC()
 
 	err = service.ShopsRepository.UpdateShopVehicle(user, vehicle)
 	if err != nil {
@@ -594,14 +649,15 @@ func (service *ShopsServiceImpl) DeleteShopVehicle(user *bootstrap.User, vehicle
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	// Check if user is member of the shop
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, vehicle.ShopID)
+	// Check if user is vehicle creator OR shop admin
+	isCreator := vehicle.CreatorID == user.UserID
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, vehicle.ShopID)
 	if err != nil {
-		return fmt.Errorf("failed to verify membership: %w", err)
+		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
 
-	if !isMember {
-		return errors.New("access denied: user is not a member of this shop")
+	if !isCreator && !isAdmin {
+		return errors.New("access denied: only vehicle creator or shop admin can delete vehicles")
 	}
 
 	err = service.ShopsRepository.DeleteShopVehicle(user, vehicleID)

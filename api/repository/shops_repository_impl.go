@@ -511,6 +511,7 @@ func (repo *ShopsRepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle
 	stmt := ShopVehicle.UPDATE(
 		ShopVehicle.Model,
 		ShopVehicle.Serial,
+		ShopVehicle.Niin,
 		ShopVehicle.Uoc,
 		ShopVehicle.Mileage,
 		ShopVehicle.Hours,
@@ -519,6 +520,7 @@ func (repo *ShopsRepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle
 	).SET(
 		ShopVehicle.Model.SET(String(vehicle.Model)),
 		ShopVehicle.Serial.SET(String(vehicle.Serial)),
+		ShopVehicle.Niin.SET(String(vehicle.Niin)),
 		ShopVehicle.Uoc.SET(String(vehicle.Uoc)),
 		ShopVehicle.Mileage.SET(Int32(vehicle.Mileage)),
 		ShopVehicle.Hours.SET(Int32(vehicle.Hours)),

@@ -511,6 +511,7 @@ func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
 	vehicle := model.ShopVehicle{
 		ShopID:  req.ShopID,
 		Niin:    req.Niin,
+		Admin:   req.Admin,
 		Model:   req.Model,
 		Serial:  req.Serial,
 		Uoc:     req.Uoc,
@@ -612,6 +613,8 @@ func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
 
 	vehicle := model.ShopVehicle{
 		ID:      req.VehicleID,
+		Admin:   req.Admin,
+		Niin:    req.Niin,
 		Model:   req.Model,
 		Serial:  req.Serial,
 		Uoc:     req.Uoc,

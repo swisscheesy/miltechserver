@@ -33,9 +33,10 @@ type UpdateShopMessageRequest struct {
 
 type CreateShopVehicleRequest struct {
 	ShopID  string `json:"shop_id" binding:"required"`
-	Niin    string `json:"niin" binding:"required"`
-	Model   string `json:"model" binding:"required"`
-	Serial  string `json:"serial" binding:"required"`
+	Niin    string `json:"niin"`
+	Admin   string `json:"admin" binding:"required"`
+	Model   string `json:"model"`
+	Serial  string `json:"serial"`
 	Uoc     string `json:"uoc"`
 	Mileage int32  `json:"mileage"`
 	Hours   int32  `json:"hours"`
@@ -44,8 +45,10 @@ type CreateShopVehicleRequest struct {
 
 type UpdateShopVehicleRequest struct {
 	VehicleID string `json:"vehicle_id" binding:"required"`
-	Model     string `json:"model" binding:"required"`
-	Serial    string `json:"serial" binding:"required"`
+	Admin     string `json:"admin" binding:"required"`
+	Niin      string `json:"niin"`
+	Model     string `json:"model"`
+	Serial    string `json:"serial"`
 	Uoc       string `json:"uoc"`
 	Mileage   int32  `json:"mileage"`
 	Hours     int32  `json:"hours"`
