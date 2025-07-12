@@ -27,8 +27,10 @@ type ShopsRepository interface {
 	// Shop Invite Code Operations
 	CreateInviteCode(user *bootstrap.User, inviteCode model.ShopInviteCodes) (*model.ShopInviteCodes, error)
 	GetInviteCodeByCode(code string) (*model.ShopInviteCodes, error)
+	GetInviteCodeByID(codeID string) (*model.ShopInviteCodes, error)
 	GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error)
 	DeactivateInviteCode(user *bootstrap.User, codeID string) error
+	DeleteInviteCode(user *bootstrap.User, codeID string) error
 
 	// Shop Message Operations
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)

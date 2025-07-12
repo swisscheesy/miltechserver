@@ -224,12 +224,28 @@ func (service *ShopsServiceImpl) LeaveShop(user *bootstrap.User, shopID string) 
 		return errors.New("user is not a member of this shop")
 	}
 
-	err = service.ShopsRepository.RemoveMemberFromShop(user, shopID, user.UserID)
+	// Check the current member count
+	memberCount, err := service.ShopsRepository.GetShopMemberCount(user, shopID)
 	if err != nil {
-		return fmt.Errorf("failed to leave shop: %w", err)
+		return fmt.Errorf("failed to get member count: %w", err)
 	}
 
-	slog.Info("User left shop", "user_id", user.UserID, "shop_id", shopID)
+	// If this is the only member, delete the entire shop
+	if memberCount == 1 {
+		err = service.ShopsRepository.DeleteShop(user, shopID)
+		if err != nil {
+			return fmt.Errorf("failed to delete shop: %w", err)
+		}
+		slog.Info("Shop deleted as last member left", "user_id", user.UserID, "shop_id", shopID)
+	} else {
+		// Otherwise, just remove this member
+		err = service.ShopsRepository.RemoveMemberFromShop(user, shopID, user.UserID)
+		if err != nil {
+			return fmt.Errorf("failed to leave shop: %w", err)
+		}
+		slog.Info("User left shop", "user_id", user.UserID, "shop_id", shopID)
+	}
+
 	return nil
 }
 
@@ -363,12 +379,58 @@ func (service *ShopsServiceImpl) DeactivateInviteCode(user *bootstrap.User, code
 		return errors.New("unauthorized user")
 	}
 
-	err := service.ShopsRepository.DeactivateInviteCode(user, codeID)
+	// Get invite code to check shop ownership
+	inviteCode, err := service.ShopsRepository.GetInviteCodeByID(codeID)
+	if err != nil {
+		return fmt.Errorf("failed to get invite code: %w", err)
+	}
+
+	// Check if user is admin of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, inviteCode.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return errors.New("only shop administrators can deactivate invite codes")
+	}
+
+	err = service.ShopsRepository.DeactivateInviteCode(user, codeID)
 	if err != nil {
 		return fmt.Errorf("failed to deactivate invite code: %w", err)
 	}
 
 	slog.Info("Invite code deactivated", "user_id", user.UserID, "code_id", codeID)
+	return nil
+}
+
+func (service *ShopsServiceImpl) DeleteInviteCode(user *bootstrap.User, codeID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Get invite code to check shop ownership
+	inviteCode, err := service.ShopsRepository.GetInviteCodeByID(codeID)
+	if err != nil {
+		return fmt.Errorf("failed to get invite code: %w", err)
+	}
+
+	// Check if user is admin of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, inviteCode.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return errors.New("only shop administrators can delete invite codes")
+	}
+
+	err = service.ShopsRepository.DeleteInviteCode(user, codeID)
+	if err != nil {
+		return fmt.Errorf("failed to delete invite code: %w", err)
+	}
+
+	slog.Info("Invite code deleted", "user_id", user.UserID, "code_id", codeID)
 	return nil
 }
 

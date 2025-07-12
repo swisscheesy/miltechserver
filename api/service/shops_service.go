@@ -24,6 +24,7 @@ type ShopsService interface {
 	GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error)
 	GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error)
 	DeactivateInviteCode(user *bootstrap.User, codeID string) error
+	DeleteInviteCode(user *bootstrap.User, codeID string) error
 
 	// Shop Message Operations
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)

@@ -34,6 +34,7 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	group.POST("/shops/invite-codes", pc.GenerateInviteCode)
 	group.GET("/shops/:shop_id/invite-codes", pc.GetInviteCodesByShop)
 	group.DELETE("/shops/invite-codes/:code_id", pc.DeactivateInviteCode)
+	group.DELETE("/shops/invite-codes/:code_id/delete", pc.DeleteInviteCode)
 
 	// Shop Message Operations
 	group.POST("/shops/messages", pc.CreateShopMessage)

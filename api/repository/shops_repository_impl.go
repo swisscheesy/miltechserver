@@ -309,6 +309,20 @@ func (repo *ShopsRepositoryImpl) GetInviteCodeByCode(code string) (*model.ShopIn
 	return &inviteCode, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetInviteCodeByID(codeID string) (*model.ShopInviteCodes, error) {
+	stmt := SELECT(ShopInviteCodes.AllColumns).
+		FROM(ShopInviteCodes).
+		WHERE(ShopInviteCodes.ID.EQ(String(codeID)))
+
+	var inviteCode model.ShopInviteCodes
+	err := stmt.Query(repo.Db, &inviteCode)
+	if err != nil {
+		return nil, fmt.Errorf("invite code not found: %w", err)
+	}
+
+	return &inviteCode, nil
+}
+
 func (repo *ShopsRepositoryImpl) GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error) {
 	stmt := SELECT(ShopInviteCodes.AllColumns).
 		FROM(ShopInviteCodes).
@@ -345,6 +359,27 @@ func (repo *ShopsRepositoryImpl) DeactivateInviteCode(user *bootstrap.User, code
 		return errors.New("invite code not found")
 	}
 
+	return nil
+}
+
+func (repo *ShopsRepositoryImpl) DeleteInviteCode(user *bootstrap.User, codeID string) error {
+	stmt := ShopInviteCodes.DELETE().WHERE(ShopInviteCodes.ID.EQ(String(codeID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to delete invite code: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("invite code not found")
+	}
+
+	slog.Info("Invite code deleted from database", "code_id", codeID, "deleted_by", user.UserID)
 	return nil
 }
 

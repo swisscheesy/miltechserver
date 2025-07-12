@@ -362,6 +362,32 @@ func (controller *ShopsController) DeactivateInviteCode(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Invite code deactivated successfully"})
 }
 
+// DeleteInviteCode permanently deletes an invite code
+func (controller *ShopsController) DeleteInviteCode(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	codeID := c.Param("code_id")
+	if codeID == "" {
+		c.JSON(400, gin.H{"message": "code_id is required"})
+		return
+	}
+
+	err := controller.ShopsService.DeleteInviteCode(user, codeID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Invite code deleted successfully"})
+}
+
 // Shop Message Operations
 
 // CreateShopMessage creates a new message in the shop chat
