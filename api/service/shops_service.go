@@ -43,6 +43,7 @@ type ShopsService interface {
 	// Shop Vehicle Notification Operations
 	CreateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error)
 	GetVehicleNotifications(user *bootstrap.User, vehicleID string) ([]model.ShopVehicleNotifications, error)
+	GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error)
 	GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error)
 	UpdateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) error
 	DeleteVehicleNotification(user *bootstrap.User, notificationID string) error
@@ -50,6 +51,7 @@ type ShopsService interface {
 	// Shop Notification Item Operations
 	AddNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error)
 	GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error)
+	GetShopNotificationItems(user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error)
 	AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error)
 	RemoveNotificationItem(user *bootstrap.User, itemID string) error
 	RemoveNotificationItemList(user *bootstrap.User, itemIDs []string) error

@@ -838,6 +838,33 @@ func (service *ShopsServiceImpl) GetVehicleNotifications(user *bootstrap.User, v
 	return notifications, nil
 }
 
+func (service *ShopsServiceImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	notifications, err := service.ShopsRepository.GetShopNotifications(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notifications: %w", err)
+	}
+
+	if notifications == nil {
+		return []model.ShopVehicleNotifications{}, nil
+	}
+
+	return notifications, nil
+}
+
 func (service *ShopsServiceImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
@@ -982,6 +1009,33 @@ func (service *ShopsServiceImpl) GetNotificationItems(user *bootstrap.User, noti
 	items, err := service.ShopsRepository.GetNotificationItems(user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification items: %w", err)
+	}
+
+	if items == nil {
+		return []model.ShopNotificationItems{}, nil
+	}
+
+	return items, nil
+}
+
+func (service *ShopsServiceImpl) GetShopNotificationItems(user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	items, err := service.ShopsRepository.GetShopNotificationItems(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notification items: %w", err)
 	}
 
 	if items == nil {

@@ -681,6 +681,21 @@ func (repo *ShopsRepositoryImpl) GetVehicleNotifications(user *bootstrap.User, v
 	return notifications, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
+	stmt := SELECT(ShopVehicleNotifications.AllColumns).
+		FROM(ShopVehicleNotifications).
+		WHERE(ShopVehicleNotifications.ShopID.EQ(String(shopID))).
+		ORDER_BY(ShopVehicleNotifications.SaveTime.DESC())
+
+	var notifications []model.ShopVehicleNotifications
+	err := stmt.Query(repo.Db, &notifications)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notifications: %w", err)
+	}
+
+	return notifications, nil
+}
+
 func (repo *ShopsRepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
 	stmt := SELECT(ShopVehicleNotifications.AllColumns).
 		FROM(ShopVehicleNotifications).
@@ -779,6 +794,21 @@ func (repo *ShopsRepositoryImpl) GetNotificationItems(user *bootstrap.User, noti
 	err := stmt.Query(repo.Db, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification items: %w", err)
+	}
+
+	return items, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopNotificationItems(user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
+	stmt := SELECT(ShopNotificationItems.AllColumns).
+		FROM(ShopNotificationItems).
+		WHERE(ShopNotificationItems.ShopID.EQ(String(shopID))).
+		ORDER_BY(ShopNotificationItems.SaveTime.DESC())
+
+	var items []model.ShopNotificationItems
+	err := stmt.Query(repo.Db, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notification items: %w", err)
 	}
 
 	return items, nil
