@@ -9,6 +9,7 @@ import (
 type ShopsRepository interface {
 	// Shop Operations
 	CreateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
+	UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
 	DeleteShop(user *bootstrap.User, shopID string) error
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
 	GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error)
@@ -55,7 +56,7 @@ type ShopsRepository interface {
 	// Shop Notification Item Operations
 	CreateNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error)
 	GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error)
-	CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) error
+	CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error)
 	DeleteNotificationItem(user *bootstrap.User, itemID string) error
 	DeleteNotificationItemList(user *bootstrap.User, itemIDs []string) error
 }
