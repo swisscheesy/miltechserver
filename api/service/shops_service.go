@@ -9,6 +9,7 @@ import (
 type ShopsService interface {
 	// Shop Operations
 	CreateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
+	UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
 	DeleteShop(user *bootstrap.User, shopID string) error
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
 	GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error)
@@ -49,7 +50,7 @@ type ShopsService interface {
 	// Shop Notification Item Operations
 	AddNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error)
 	GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error)
-	AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) error
+	AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error)
 	RemoveNotificationItem(user *bootstrap.User, itemID string) error
 	RemoveNotificationItemList(user *bootstrap.User, itemIDs []string) error
 }

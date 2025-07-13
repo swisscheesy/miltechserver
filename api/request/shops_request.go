@@ -56,16 +56,17 @@ type UpdateShopVehicleRequest struct {
 }
 
 type CreateVehicleNotificationRequest struct {
+	ShopID      string `json:"shop_id" binding:"required"`
 	VehicleID   string `json:"vehicle_id" binding:"required"`
 	Title       string `json:"title" binding:"required"`
-	Description string `json:"description" binding:"required"`
+	Description string `json:"description"`
 	Type        string `json:"type" binding:"required"` // M1, PM, MW
 }
 
 type UpdateVehicleNotificationRequest struct {
 	NotificationID string `json:"notification_id" binding:"required"`
 	Title          string `json:"title" binding:"required"`
-	Description    string `json:"description" binding:"required"`
+	Description    string `json:"description"`
 	Type           string `json:"type" binding:"required"`
 	Completed      bool   `json:"completed"`
 }
@@ -84,4 +85,9 @@ type AddNotificationItemListRequest struct {
 
 type RemoveNotificationItemListRequest struct {
 	ItemIDs []string `json:"item_ids" binding:"required"`
+}
+
+type UpdateShopRequest struct {
+	Name    string  `json:"name" binding:"required"`
+	Details *string `json:"details"`
 }

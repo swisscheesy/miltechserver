@@ -161,6 +161,49 @@ func (controller *ShopsController) GetShopByID(c *gin.Context) {
 	})
 }
 
+// UpdateShop handles shop updates
+func (controller *ShopsController) UpdateShop(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	var req request.UpdateShopRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	shop := model.Shops{
+		ID:      shopID,
+		Name:    req.Name,
+		Details: req.Details,
+	}
+
+	updatedShop, err := controller.ShopsService.UpdateShop(user, shop)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Shop updated successfully",
+		Data:    *updatedShop,
+	})
+}
+
 // Shop Member Operations
 
 // JoinShopViaInviteCode allows a user to join a shop using an invite code
@@ -706,6 +749,7 @@ func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
 
 	notification := model.ShopVehicleNotifications{
 		VehicleID:   req.VehicleID,
+		ShopID:      req.ShopID,
 		Title:       req.Title,
 		Description: req.Description,
 		Type:        req.Type,
@@ -945,13 +989,17 @@ func (controller *ShopsController) AddNotificationItemList(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	err := controller.ShopsService.AddNotificationItemList(user, items)
+	createdItems, err := controller.ShopsService.AddNotificationItemList(user, items)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(201, gin.H{"message": "Items added successfully", "count": len(items)})
+	c.JSON(201, response.StandardResponse{
+		Status:  201,
+		Message: "Items added successfully",
+		Data:    createdItems,
+	})
 }
 
 // RemoveNotificationItem removes an item from a vehicle notification

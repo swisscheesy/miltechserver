@@ -54,6 +54,30 @@ func (service *ShopsServiceImpl) CreateShop(user *bootstrap.User, shop model.Sho
 	return createdShop, nil
 }
 
+func (service *ShopsServiceImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is admin or creator of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shop.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return nil, errors.New("access denied: only shop admins can update shops")
+	}
+
+	updatedShop, err := service.ShopsRepository.UpdateShop(user, shop)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update shop: %w", err)
+	}
+
+	slog.Info("Shop updated successfully", "user_id", user.UserID, "shop_id", shop.ID, "shop_name", shop.Name)
+	return updatedShop, nil
+}
+
 func (service *ShopsServiceImpl) DeleteShop(user *bootstrap.User, shopID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
@@ -967,29 +991,29 @@ func (service *ShopsServiceImpl) GetNotificationItems(user *bootstrap.User, noti
 	return items, nil
 }
 
-func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) error {
+func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
 	if user == nil {
-		return errors.New("unauthorized user")
+		return nil, errors.New("unauthorized user")
 	}
 
 	if len(items) == 0 {
-		return errors.New("no items to add")
+		return nil, errors.New("no items to add")
 	}
 
 	// Get notification to verify access (use first item's notification ID)
 	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, items[0].NotificationID)
 	if err != nil {
-		return fmt.Errorf("failed to get notification: %w", err)
+		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
 	// Check if user is member of the shop
 	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, notification.ShopID)
 	if err != nil {
-		return fmt.Errorf("failed to verify membership: %w", err)
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
 
 	if !isMember {
-		return errors.New("access denied: user is not a member of this shop")
+		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
 	// Set IDs and shop ID for all items
@@ -1000,13 +1024,13 @@ func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, i
 		items[i].SaveTime = now
 	}
 
-	err = service.ShopsRepository.CreateNotificationItemList(user, items)
+	createdItems, err := service.ShopsRepository.CreateNotificationItemList(user, items)
 	if err != nil {
-		return fmt.Errorf("failed to add notification items: %w", err)
+		return nil, fmt.Errorf("failed to add notification items: %w", err)
 	}
 
-	slog.Info("Notification items added", "user_id", user.UserID, "notification_id", items[0].NotificationID, "count", len(items))
-	return nil
+	slog.Info("Notification items added", "user_id", user.UserID, "notification_id", items[0].NotificationID, "count", len(createdItems))
+	return createdItems, nil
 }
 
 func (service *ShopsServiceImpl) RemoveNotificationItem(user *bootstrap.User, itemID string) error {

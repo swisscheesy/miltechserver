@@ -53,6 +53,48 @@ func (repo *ShopsRepositoryImpl) CreateShop(user *bootstrap.User, shop model.Sho
 	return &createdShop, nil
 }
 
+func (repo *ShopsRepositoryImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+	// Set updated timestamp
+	now := time.Now()
+	shop.UpdatedAt = &now
+
+	// Build the update statement based on whether details is provided
+	updateStmt := Shops.UPDATE(
+		Shops.Name,
+		Shops.UpdatedAt,
+	).SET(
+		Shops.Name.SET(String(shop.Name)),
+		Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
+	)
+
+	// If details is provided, add it to the update
+	if shop.Details != nil {
+		updateStmt = Shops.UPDATE(
+			Shops.Name,
+			Shops.Details,
+			Shops.UpdatedAt,
+		).SET(
+			Shops.Name.SET(String(shop.Name)),
+			Shops.Details.SET(String(*shop.Details)),
+			Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
+		)
+	}
+
+	stmt := updateStmt.WHERE(
+		Shops.ID.EQ(String(shop.ID)).
+			AND(Shops.CreatedBy.EQ(String(user.UserID))),
+	).RETURNING(Shops.AllColumns)
+
+	var updatedShop model.Shops
+	err := stmt.Query(repo.Db, &updatedShop)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update shop: %w", err)
+	}
+
+	slog.Info("Shop updated in database", "shop_id", shop.ID, "updated_by", user.UserID)
+	return &updatedShop, nil
+}
+
 func (repo *ShopsRepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) error {
 	// Delete shop will cascade delete related records (members, messages, vehicles, etc.)
 	stmt := Shops.DELETE().WHERE(
@@ -742,9 +784,9 @@ func (repo *ShopsRepositoryImpl) GetNotificationItems(user *bootstrap.User, noti
 	return items, nil
 }
 
-func (repo *ShopsRepositoryImpl) CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) error {
+func (repo *ShopsRepositoryImpl) CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
 	if len(items) == 0 {
-		return nil
+		return []model.ShopNotificationItems{}, nil
 	}
 
 	stmt := ShopNotificationItems.INSERT(
@@ -755,14 +797,15 @@ func (repo *ShopsRepositoryImpl) CreateNotificationItemList(user *bootstrap.User
 		ShopNotificationItems.Nomenclature,
 		ShopNotificationItems.Quantity,
 		ShopNotificationItems.SaveTime,
-	).MODELS(items)
+	).MODELS(items).RETURNING(ShopNotificationItems.AllColumns)
 
-	_, err := stmt.Exec(repo.Db)
+	var createdItems []model.ShopNotificationItems
+	err := stmt.Query(repo.Db, &createdItems)
 	if err != nil {
-		return fmt.Errorf("failed to create notification items: %w", err)
+		return nil, fmt.Errorf("failed to create notification items: %w", err)
 	}
 
-	return nil
+	return createdItems, nil
 }
 
 func (repo *ShopsRepositoryImpl) DeleteNotificationItem(user *bootstrap.User, itemID string) error {
