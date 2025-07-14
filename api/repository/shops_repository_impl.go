@@ -681,6 +681,36 @@ func (repo *ShopsRepositoryImpl) GetVehicleNotifications(user *bootstrap.User, v
 	return notifications, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetVehicleNotificationsWithItems(user *bootstrap.User, vehicleID string) ([]response.VehicleNotificationWithItems, error) {
+	// First get all notifications for the vehicle
+	notifications, err := repo.GetVehicleNotifications(user, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle notifications: %w", err)
+	}
+
+	var result []response.VehicleNotificationWithItems
+
+	// For each notification, get its items
+	for _, notification := range notifications {
+		items, err := repo.GetNotificationItems(user, notification.ID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get items for notification %s: %w", notification.ID, err)
+		}
+
+		// If no items found, provide empty slice instead of nil
+		if items == nil {
+			items = []model.ShopNotificationItems{}
+		}
+
+		result = append(result, response.VehicleNotificationWithItems{
+			Notification: notification,
+			Items:        items,
+		})
+	}
+
+	return result, nil
+}
+
 func (repo *ShopsRepositoryImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
 	stmt := SELECT(ShopVehicleNotifications.AllColumns).
 		FROM(ShopVehicleNotifications).

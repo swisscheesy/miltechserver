@@ -838,6 +838,39 @@ func (service *ShopsServiceImpl) GetVehicleNotifications(user *bootstrap.User, v
 	return notifications, nil
 }
 
+func (service *ShopsServiceImpl) GetVehicleNotificationsWithItems(user *bootstrap.User, vehicleID string) ([]response.VehicleNotificationWithItems, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Get vehicle to verify access
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, vehicle.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	notificationsWithItems, err := service.ShopsRepository.GetVehicleNotificationsWithItems(user, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle notifications with items: %w", err)
+	}
+
+	if notificationsWithItems == nil {
+		return []response.VehicleNotificationWithItems{}, nil
+	}
+
+	return notificationsWithItems, nil
+}
+
 func (service *ShopsServiceImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")

@@ -799,6 +799,36 @@ func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
 	})
 }
 
+// GetVehicleNotificationsWithItems returns all notifications for a vehicle with their items
+func (controller *ShopsController) GetVehicleNotificationsWithItems(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	vehicleID := c.Param("vehicle_id")
+	if vehicleID == "" {
+		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		return
+	}
+
+	notificationsWithItems, err := controller.ShopsService.GetVehicleNotificationsWithItems(user, vehicleID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "",
+		Data:    notificationsWithItems,
+	})
+}
+
 // GetShopNotifications returns all notifications for a shop
 func (controller *ShopsController) GetShopNotifications(c *gin.Context) {
 	ctxUser, ok := c.Get("user")

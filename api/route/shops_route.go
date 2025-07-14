@@ -53,6 +53,7 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	// Shop Vehicle Notification Operations
 	group.POST("/shops/vehicles/notifications", pc.CreateVehicleNotification)
 	group.GET("/shops/vehicles/:vehicle_id/notifications", pc.GetVehicleNotifications)
+	group.GET("/shops/vehicles/:vehicle_id/notifications-with-items", pc.GetVehicleNotificationsWithItems)
 	group.GET("/shops/:shop_id/notifications", pc.GetShopNotifications)
 	group.GET("/shops/vehicles/notifications/:notification_id", pc.GetVehicleNotificationByID)
 	group.PUT("/shops/vehicles/notifications", pc.UpdateVehicleNotification)
