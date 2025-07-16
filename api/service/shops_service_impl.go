@@ -148,43 +148,9 @@ func (service *ShopsServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*re
 		return nil, errors.New("unauthorized user")
 	}
 
-	shops, err := service.GetShopsByUser(user)
+	shopsWithStats, err := service.ShopsRepository.GetShopsWithStatsForUser(user)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user shops: %w", err)
-	}
-
-	// Build shops with statistics
-	shopsWithStats := make([]response.ShopWithStats, 0, len(shops))
-	for _, shop := range shops {
-		// Get member count for this shop
-		memberCount, err := service.ShopsRepository.GetShopMemberCount(user, shop.ID)
-		if err != nil {
-			slog.Warn("Failed to get member count for shop", "shop_id", shop.ID, "error", err)
-			memberCount = 0
-		}
-
-		// Get vehicle count for this shop
-		vehicleCount, err := service.ShopsRepository.GetShopVehicleCount(user, shop.ID)
-		if err != nil {
-			slog.Warn("Failed to get vehicle count for shop", "shop_id", shop.ID, "error", err)
-			vehicleCount = 0
-		}
-
-		// Check if user is admin of this shop
-		isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shop.ID)
-		if err != nil {
-			slog.Warn("Failed to check admin status for shop", "shop_id", shop.ID, "error", err)
-			isAdmin = false
-		}
-
-		shopWithStats := response.ShopWithStats{
-			Shop:         shop,
-			MemberCount:  memberCount,
-			VehicleCount: vehicleCount,
-			IsAdmin:      isAdmin,
-		}
-
-		shopsWithStats = append(shopsWithStats, shopWithStats)
+		return nil, fmt.Errorf("failed to get user shops with stats: %w", err)
 	}
 
 	userShopsResponse := &response.UserShopsResponse{
@@ -192,7 +158,7 @@ func (service *ShopsServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*re
 		Shops: shopsWithStats,
 	}
 
-	slog.Info("User data with shops and statistics retrieved", "user_id", user.UserID, "shops_count", len(shops))
+	slog.Info("User data with shops and statistics retrieved", "user_id", user.UserID, "shops_count", len(shopsWithStats))
 	return userShopsResponse, nil
 }
 

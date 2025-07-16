@@ -153,6 +153,82 @@ func (repo *ShopsRepositoryImpl) GetShopByID(user *bootstrap.User, shopID string
 	return &shop, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error) {
+	rawSQL := `
+		SELECT 
+			s.id,
+			s.name,
+			s.details,
+			s.created_by,
+			s.created_at,
+			s.updated_at,
+			COALESCE(member_stats.member_count, 0) as member_count,
+			COALESCE(vehicle_stats.vehicle_count, 0) as vehicle_count,
+			CASE WHEN admin_check.user_id IS NOT NULL THEN true ELSE false END as is_admin
+		FROM shops s
+		INNER JOIN shop_members sm ON s.id = sm.shop_id
+		LEFT JOIN (
+			SELECT shop_id, COUNT(*) as member_count
+			FROM shop_members
+			GROUP BY shop_id
+		) member_stats ON s.id = member_stats.shop_id
+		LEFT JOIN (
+			SELECT shop_id, COUNT(*) as vehicle_count
+			FROM shop_vehicle
+			GROUP BY shop_id
+		) vehicle_stats ON s.id = vehicle_stats.shop_id
+		LEFT JOIN (
+			SELECT shop_id, user_id
+			FROM shop_members
+			WHERE role = 'admin'
+		) admin_check ON s.id = admin_check.shop_id AND admin_check.user_id = $1
+		WHERE sm.user_id = $1
+		ORDER BY s.created_at DESC
+	`
+
+	rows, err := repo.Db.Query(rawSQL, user.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shops with stats: %w", err)
+	}
+	defer rows.Close()
+
+	var results []response.ShopWithStats
+	for rows.Next() {
+		var shop model.Shops
+		var memberCount, vehicleCount int64
+		var isAdmin bool
+
+		err := rows.Scan(
+			&shop.ID,
+			&shop.Name,
+			&shop.Details,
+			&shop.CreatedBy,
+			&shop.CreatedAt,
+			&shop.UpdatedAt,
+			&memberCount,
+			&vehicleCount,
+			&isAdmin,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shop row: %w", err)
+		}
+
+		results = append(results, response.ShopWithStats{
+			Shop:         shop,
+			MemberCount:  memberCount,
+			VehicleCount: vehicleCount,
+			IsAdmin:      isAdmin,
+		})
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	slog.Info("Shops with stats retrieved for user", "user_id", user.UserID, "count", len(results))
+	return results, nil
+}
+
 func (repo *ShopsRepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
 		FROM(ShopMembers).
