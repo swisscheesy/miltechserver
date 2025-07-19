@@ -2,12 +2,13 @@ package middleware
 
 import (
 	"context"
-	"firebase.google.com/go/v4/auth"
-	"github.com/gin-gonic/gin"
 	"log/slog"
 	"miltechserver/bootstrap"
 	"strings"
 	"time"
+
+	"firebase.google.com/go/v4/auth"
+	"github.com/gin-gonic/gin"
 )
 
 func AuthenticationMiddleware(client *auth.Client) gin.HandlerFunc {
@@ -54,12 +55,17 @@ func ProcessToken(c *gin.Context, auth *auth.Client, token *auth.Token) {
 		c.Abort()
 		return
 	}
+	username, err := auth.GetUser(context.Background(), token.UID)
+	if err != nil {
+		slog.Error("Error getting user: ", "error", err)
+	}
 
 	// role, ok := token.Claims["role"].(string)
 
 	user := &bootstrap.User{
-		UserID: token.UID,
-		Email:  email,
+		UserID:   token.UID,
+		Username: username.DisplayName,
+		Email:    email,
 	}
 	c.Set("user", user)
 

@@ -63,4 +63,23 @@ type ShopsRepository interface {
 	CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error)
 	DeleteNotificationItem(user *bootstrap.User, itemID string) error
 	DeleteNotificationItemList(user *bootstrap.User, itemIDs []string) error
+
+	// Shop List Operations
+	CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error)
+	GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error)
+	GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error)
+	UpdateShopList(user *bootstrap.User, list model.ShopLists) error
+	DeleteShopList(user *bootstrap.User, listID string) error
+
+	// Shop List Item Operations
+	AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error)
+	GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error)
+	GetListItemByID(user *bootstrap.User, itemID string) (*model.ShopListItems, error)
+	UpdateListItem(user *bootstrap.User, item model.ShopListItems) error
+	RemoveListItem(user *bootstrap.User, itemID string) error
+	AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error)
+	RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error
+
+	// Helper method for permissions
+	GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error)
 }

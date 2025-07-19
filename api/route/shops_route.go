@@ -66,4 +66,19 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	group.POST("/shops/notifications/items/bulk", pc.AddNotificationItemList)
 	group.DELETE("/shops/notifications/items/:item_id", pc.RemoveNotificationItem)
 	group.DELETE("/shops/notifications/items/bulk", pc.RemoveNotificationItemList)
+
+	// Shop List Operations
+	group.POST("/shops/lists", pc.CreateShopList)
+	group.GET("/shops/:shop_id/lists", pc.GetShopLists)
+	group.GET("/shops/lists/:list_id", pc.GetShopListByID)
+	group.PUT("/shops/lists", pc.UpdateShopList)
+	group.DELETE("/shops/lists", pc.DeleteShopList)
+
+	// Shop List Item Operations
+	group.POST("/shops/lists/items", pc.AddListItem)
+	group.GET("/shops/lists/:list_id/items", pc.GetListItems)
+	group.PUT("/shops/lists/items", pc.UpdateListItem)
+	group.DELETE("/shops/lists/items", pc.RemoveListItem)
+	group.POST("/shops/lists/items/bulk", pc.AddListItemBatch)
+	group.DELETE("/shops/lists/items/bulk", pc.RemoveListItemBatch)
 }

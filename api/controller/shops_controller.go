@@ -1144,3 +1144,360 @@ func (controller *ShopsController) RemoveNotificationItemList(c *gin.Context) {
 
 	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
 }
+
+// Shop List Operations
+
+// CreateShopList creates a new list for a shop
+func (controller *ShopsController) CreateShopList(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.CreateShopListRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	list := model.ShopLists{
+		ShopID:      req.ShopID,
+		Description: req.Description,
+	}
+
+	createdList, err := controller.ShopsService.CreateShopList(user, list)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(201, response.StandardResponse{
+		Status:  201,
+		Message: "List created successfully",
+		Data:    *createdList,
+	})
+}
+
+// GetShopLists returns all lists for a shop with creator usernames
+func (controller *ShopsController) GetShopLists(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	lists, err := controller.ShopsService.GetShopLists(user, shopID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "",
+		Data:    lists,
+	})
+}
+
+// GetShopListByID returns a specific list by ID
+func (controller *ShopsController) GetShopListByID(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	listID := c.Param("list_id")
+	if listID == "" {
+		c.JSON(400, gin.H{"message": "list_id is required"})
+		return
+	}
+
+	list, err := controller.ShopsService.GetShopListByID(user, listID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "",
+		Data:    *list,
+	})
+}
+
+// UpdateShopList updates an existing shop list
+func (controller *ShopsController) UpdateShopList(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.UpdateShopListRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	list := model.ShopLists{
+		ID:          req.ListID,
+		Description: req.Description,
+	}
+
+	err := controller.ShopsService.UpdateShopList(user, list)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "List updated successfully"})
+}
+
+// DeleteShopList deletes a shop list
+func (controller *ShopsController) DeleteShopList(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.DeleteShopListRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.ShopsService.DeleteShopList(user, req.ListID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "List deleted successfully"})
+}
+
+// Shop List Item Operations
+
+// AddListItem adds an item to a shop list
+func (controller *ShopsController) AddListItem(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.AddListItemRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	item := model.ShopListItems{
+		ListID:       req.ListID,
+		Niin:         req.Niin,
+		Nomenclature: req.Nomenclature,
+		Quantity:     req.Quantity,
+	}
+
+	createdItem, err := controller.ShopsService.AddListItem(user, item)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(201, response.StandardResponse{
+		Status:  201,
+		Message: "Item added successfully",
+		Data:    *createdItem,
+	})
+}
+
+// GetListItems returns all items for a list with added by usernames
+func (controller *ShopsController) GetListItems(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	listID := c.Param("list_id")
+	if listID == "" {
+		c.JSON(400, gin.H{"message": "list_id is required"})
+		return
+	}
+
+	items, err := controller.ShopsService.GetListItems(user, listID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "",
+		Data:    items,
+	})
+}
+
+// UpdateListItem updates an existing list item
+func (controller *ShopsController) UpdateListItem(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.UpdateListItemRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	item := model.ShopListItems{
+		ID:           req.ItemID,
+		Niin:         req.Niin,
+		Nomenclature: req.Nomenclature,
+		Quantity:     req.Quantity,
+	}
+
+	err := controller.ShopsService.UpdateListItem(user, item)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Item updated successfully"})
+}
+
+// RemoveListItem removes an item from a list
+func (controller *ShopsController) RemoveListItem(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.RemoveListItemRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.ShopsService.RemoveListItem(user, req.ItemID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Item removed successfully"})
+}
+
+// AddListItemBatch adds multiple items to a list
+func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.AddListItemBatchRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	var items []model.ShopListItems
+	for _, reqItem := range req.Items {
+		item := model.ShopListItems{
+			ListID:       reqItem.ListID,
+			Niin:         reqItem.Niin,
+			Nomenclature: reqItem.Nomenclature,
+			Quantity:     reqItem.Quantity,
+		}
+		items = append(items, item)
+	}
+
+	createdItems, err := controller.ShopsService.AddListItemBatch(user, items)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(201, response.StandardResponse{
+		Status:  201,
+		Message: "Items added successfully",
+		Data:    createdItems,
+	})
+}
+
+// RemoveListItemBatch removes multiple items from lists
+func (controller *ShopsController) RemoveListItemBatch(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.RemoveListItemBatchRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.ShopsService.RemoveListItemBatch(user, req.ItemIDs)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
+}

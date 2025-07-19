@@ -91,3 +91,48 @@ type UpdateShopRequest struct {
 	Name    string  `json:"name" binding:"required"`
 	Details *string `json:"details"`
 }
+
+// Shop List Operations
+
+type CreateShopListRequest struct {
+	ShopID      string `json:"shop_id" binding:"required"`
+	Description string `json:"description" binding:"required"`
+}
+
+type UpdateShopListRequest struct {
+	ListID      string `json:"list_id" binding:"required"`
+	Description string `json:"description" binding:"required"`
+}
+
+// Shop List Item Operations
+
+type AddListItemRequest struct {
+	ListID       string `json:"list_id" binding:"required"`
+	Niin         string `json:"niin" binding:"required"`
+	Nomenclature string `json:"nomenclature" binding:"required"`
+	Quantity     int32  `json:"quantity" binding:"required"`
+}
+
+type UpdateListItemRequest struct {
+	ItemID       string `json:"item_id" binding:"required"`
+	Niin         string `json:"niin" binding:"required"`
+	Nomenclature string `json:"nomenclature" binding:"required"`
+	Quantity     int32  `json:"quantity" binding:"required"`
+}
+
+type DeleteShopListRequest struct {
+	ListID string `json:"list_id" binding:"required"`
+}
+
+type RemoveListItemRequest struct {
+	ItemID string `json:"item_id" binding:"required"`
+}
+
+type AddListItemBatchRequest struct {
+	ListID string                `json:"list_id" binding:"required"`
+	Items  []AddListItemRequest  `json:"items" binding:"required"`
+}
+
+type RemoveListItemBatchRequest struct {
+	ItemIDs []string `json:"item_ids" binding:"required"`
+}

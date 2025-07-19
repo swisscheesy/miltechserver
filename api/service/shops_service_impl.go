@@ -1118,6 +1118,370 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 	return nil
 }
 
+// Shop List Operations
+func (service *ShopsServiceImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	list.ID = uuid.New().String()
+	list.CreatedBy = user.UserID
+	now := time.Now()
+	list.CreatedAt = now
+	list.UpdatedAt = now
+
+	createdList, err := service.ShopsRepository.CreateShopList(user, list)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create shop list: %w", err)
+	}
+
+	slog.Info("Shop list created", "user_id", user.UserID, "shop_id", list.ShopID, "list_id", list.ID)
+	return createdList, nil
+}
+
+func (service *ShopsServiceImpl) GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	lists, err := service.ShopsRepository.GetShopLists(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop lists with usernames: %w", err)
+	}
+
+	if lists == nil {
+		return []response.ShopListWithUsername{}, nil
+	}
+
+	return lists, nil
+}
+
+func (service *ShopsServiceImpl) GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	list, err := service.ShopsRepository.GetShopListByID(user, listID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	return list, nil
+}
+
+func (service *ShopsServiceImpl) UpdateShopList(user *bootstrap.User, list model.ShopLists) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Get the current list to verify permissions
+	currentList, err := service.ShopsRepository.GetShopListByID(user, list.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user can modify this list (either they created it or they're an admin)
+	canModify, err := service.canUserModifyList(user, currentList)
+	if err != nil {
+		return fmt.Errorf("failed to verify permissions: %w", err)
+	}
+
+	if !canModify {
+		return errors.New("access denied: only shop admins or list creator can modify this list")
+	}
+
+	list.UpdatedAt = time.Now()
+
+	err = service.ShopsRepository.UpdateShopList(user, list)
+	if err != nil {
+		return fmt.Errorf("failed to update shop list: %w", err)
+	}
+
+	slog.Info("Shop list updated", "user_id", user.UserID, "list_id", list.ID)
+	return nil
+}
+
+func (service *ShopsServiceImpl) DeleteShopList(user *bootstrap.User, listID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Get the list to verify permissions
+	list, err := service.ShopsRepository.GetShopListByID(user, listID)
+	if err != nil {
+		return fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user can delete this list (either they created it or they're an admin)
+	canDelete, err := service.canUserModifyList(user, list)
+	if err != nil {
+		return fmt.Errorf("failed to verify permissions: %w", err)
+	}
+
+	if !canDelete {
+		return errors.New("access denied: only shop admins or list creator can delete this list")
+	}
+
+	err = service.ShopsRepository.DeleteShopList(user, listID)
+	if err != nil {
+		return fmt.Errorf("failed to delete shop list: %w", err)
+	}
+
+	slog.Info("Shop list deleted", "user_id", user.UserID, "list_id", listID)
+	return nil
+}
+
+// Shop List Item Operations
+func (service *ShopsServiceImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Get the list to verify access
+	list, err := service.ShopsRepository.GetShopListByID(user, item.ListID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	item.ID = uuid.New().String()
+	item.AddedBy = user.UserID
+	now := time.Now()
+	item.CreatedAt = now
+	item.UpdatedAt = now
+
+	createdItem, err := service.ShopsRepository.AddListItem(user, item)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add list item: %w", err)
+	}
+
+	slog.Info("List item added", "user_id", user.UserID, "list_id", item.ListID, "item_id", item.ID)
+	return createdItem, nil
+}
+
+func (service *ShopsServiceImpl) GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Get the list to verify access
+	list, err := service.ShopsRepository.GetShopListByID(user, listID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	items, err := service.ShopsRepository.GetListItems(user, listID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list items with usernames: %w", err)
+	}
+
+	if items == nil {
+		return []response.ShopListItemWithUsername{}, nil
+	}
+
+	return items, nil
+}
+
+func (service *ShopsServiceImpl) UpdateListItem(user *bootstrap.User, item model.ShopListItems) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Get the current item to verify permissions
+	currentItem, err := service.ShopsRepository.GetListItemByID(user, item.ID)
+	if err != nil {
+		return fmt.Errorf("failed to get item: %w", err)
+	}
+
+	// Get the list to verify shop membership
+	list, err := service.ShopsRepository.GetShopListByID(user, currentItem.ListID)
+	if err != nil {
+		return fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	item.UpdatedAt = time.Now()
+
+	err = service.ShopsRepository.UpdateListItem(user, item)
+	if err != nil {
+		return fmt.Errorf("failed to update list item: %w", err)
+	}
+
+	slog.Info("List item updated", "user_id", user.UserID, "item_id", item.ID)
+	return nil
+}
+
+func (service *ShopsServiceImpl) RemoveListItem(user *bootstrap.User, itemID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Get the item to verify permissions
+	item, err := service.ShopsRepository.GetListItemByID(user, itemID)
+	if err != nil {
+		return fmt.Errorf("failed to get item: %w", err)
+	}
+
+	// Get the list to verify shop membership
+	list, err := service.ShopsRepository.GetShopListByID(user, item.ListID)
+	if err != nil {
+		return fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	err = service.ShopsRepository.RemoveListItem(user, itemID)
+	if err != nil {
+		return fmt.Errorf("failed to remove list item: %w", err)
+	}
+
+	slog.Info("List item removed", "user_id", user.UserID, "item_id", itemID)
+	return nil
+}
+
+func (service *ShopsServiceImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	if len(items) == 0 {
+		return nil, errors.New("no items to add")
+	}
+
+	// Get the list to verify access (use first item's list ID)
+	list, err := service.ShopsRepository.GetShopListByID(user, items[0].ListID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Set IDs and metadata for all items
+	now := time.Now()
+	for i := range items {
+		items[i].ID = uuid.New().String()
+		items[i].AddedBy = user.UserID
+		items[i].CreatedAt = now
+		items[i].UpdatedAt = now
+	}
+
+	createdItems, err := service.ShopsRepository.AddListItemBatch(user, items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add list items: %w", err)
+	}
+
+	slog.Info("List items added", "user_id", user.UserID, "list_id", items[0].ListID, "count", len(createdItems))
+	return createdItems, nil
+}
+
+func (service *ShopsServiceImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	if len(itemIDs) == 0 {
+		return errors.New("no items to remove")
+	}
+
+	err := service.ShopsRepository.RemoveListItemBatch(user, itemIDs)
+	if err != nil {
+		return fmt.Errorf("failed to remove list items: %w", err)
+	}
+
+	slog.Info("List items removed", "user_id", user.UserID, "count", len(itemIDs))
+	return nil
+}
+
+// Helper function to check if user can modify a list (they created it or they're a shop admin)
+func (service *ShopsServiceImpl) canUserModifyList(user *bootstrap.User, list *model.ShopLists) (bool, error) {
+	// If user created the list, they can modify it
+	if list.CreatedBy == user.UserID {
+		return true, nil
+	}
+
+	// Check if user is shop admin
+	userRole, err := service.ShopsRepository.GetUserRoleInShop(user, list.ShopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get user role: %w", err)
+	}
+
+	return userRole == "admin", nil
+}
+
 // Helper function to generate a short invite code
 func (service *ShopsServiceImpl) generateShortCode() (string, error) {
 	// Generate 4 random bytes to create an 8-character hex string

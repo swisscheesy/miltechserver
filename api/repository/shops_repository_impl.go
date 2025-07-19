@@ -986,3 +986,329 @@ func (repo *ShopsRepositoryImpl) DeleteNotificationItemList(user *bootstrap.User
 
 	return nil
 }
+
+// Shop List Operations
+func (repo *ShopsRepositoryImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error) {
+	stmt := ShopLists.INSERT(
+		ShopLists.ID,
+		ShopLists.ShopID,
+		ShopLists.CreatedBy,
+		ShopLists.Description,
+		ShopLists.CreatedAt,
+		ShopLists.UpdatedAt,
+	).MODEL(list).RETURNING(ShopLists.AllColumns)
+
+	var createdList model.ShopLists
+	err := stmt.Query(repo.Db, &createdList)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create shop list: %w", err)
+	}
+
+	return &createdList, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error) {
+	stmt := SELECT(
+		ShopLists.ID,
+		ShopLists.ShopID,
+		ShopLists.CreatedBy,
+		ShopLists.Description,
+		ShopLists.CreatedAt,
+		ShopLists.UpdatedAt,
+		Users.Username.AS("created_by_username"),
+	).FROM(
+		ShopLists.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopLists.CreatedBy)),
+	).WHERE(
+		ShopLists.ShopID.EQ(String(shopID)),
+	).ORDER_BY(ShopLists.CreatedAt.DESC())
+
+	var results []struct {
+		model.ShopLists
+		CreatedByUsername *string `sql:"created_by_username"`
+	}
+
+	err := stmt.Query(repo.Db, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop lists with usernames: %w", err)
+	}
+
+	// Convert to response type
+	lists := make([]response.ShopListWithUsername, len(results))
+	for i, r := range results {
+		lists[i] = response.ShopListWithUsername{
+			ID:                r.ID,
+			ShopID:            r.ShopID,
+			CreatedBy:         r.CreatedBy,
+			CreatedByUsername: r.CreatedByUsername,
+			Description:       r.Description,
+			CreatedAt:         &r.CreatedAt,
+			UpdatedAt:         &r.UpdatedAt,
+		}
+	}
+
+	return lists, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error) {
+	stmt := SELECT(ShopLists.AllColumns).
+		FROM(ShopLists).
+		WHERE(ShopLists.ID.EQ(String(listID)))
+
+	var list model.ShopLists
+	err := stmt.Query(repo.Db, &list)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("shop list not found")
+		}
+		return nil, fmt.Errorf("failed to get shop list: %w", err)
+	}
+
+	return &list, nil
+}
+
+func (repo *ShopsRepositoryImpl) UpdateShopList(user *bootstrap.User, list model.ShopLists) error {
+	stmt := ShopLists.UPDATE(
+		ShopLists.Description,
+		ShopLists.UpdatedAt,
+	).MODEL(list).
+		WHERE(ShopLists.ID.EQ(String(list.ID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to update shop list: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("shop list not found")
+	}
+
+	return nil
+}
+
+func (repo *ShopsRepositoryImpl) DeleteShopList(user *bootstrap.User, listID string) error {
+	stmt := ShopLists.DELETE().
+		WHERE(ShopLists.ID.EQ(String(listID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to delete shop list: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("shop list not found")
+	}
+
+	return nil
+}
+
+// Shop List Item Operations
+func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error) {
+	stmt := ShopListItems.INSERT(
+		ShopListItems.ID,
+		ShopListItems.ListID,
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.AddedBy,
+		ShopListItems.CreatedAt,
+		ShopListItems.UpdatedAt,
+	).MODEL(item).RETURNING(ShopListItems.AllColumns)
+
+	var createdItem model.ShopListItems
+	err := stmt.Query(repo.Db, &createdItem)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add list item: %w", err)
+	}
+
+	return &createdItem, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error) {
+	stmt := SELECT(
+		ShopListItems.ID,
+		ShopListItems.ListID,
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.AddedBy,
+		ShopListItems.CreatedAt,
+		ShopListItems.UpdatedAt,
+		Users.Username.AS("added_by_username"),
+	).FROM(
+		ShopListItems.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopListItems.AddedBy)),
+	).WHERE(
+		ShopListItems.ListID.EQ(String(listID)),
+	).ORDER_BY(ShopListItems.CreatedAt.ASC())
+
+	var results []struct {
+		model.ShopListItems
+		AddedByUsername *string `sql:"added_by_username"`
+	}
+
+	err := stmt.Query(repo.Db, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get list items with usernames: %w", err)
+	}
+
+	// Convert to response type
+	items := make([]response.ShopListItemWithUsername, len(results))
+	for i, r := range results {
+		items[i] = response.ShopListItemWithUsername{
+			ID:              r.ID,
+			ListID:          r.ListID,
+			Niin:            r.Niin,
+			Nomenclature:    r.Nomenclature,
+			Quantity:        r.Quantity,
+			AddedBy:         r.AddedBy,
+			AddedByUsername: r.AddedByUsername,
+			CreatedAt:       &r.CreatedAt,
+			UpdatedAt:       &r.UpdatedAt,
+		}
+	}
+
+	return items, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetListItemByID(user *bootstrap.User, itemID string) (*model.ShopListItems, error) {
+	stmt := SELECT(ShopListItems.AllColumns).
+		FROM(ShopListItems).
+		WHERE(ShopListItems.ID.EQ(String(itemID)))
+
+	var item model.ShopListItems
+	err := stmt.Query(repo.Db, &item)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("list item not found")
+		}
+		return nil, fmt.Errorf("failed to get list item: %w", err)
+	}
+
+	return &item, nil
+}
+
+func (repo *ShopsRepositoryImpl) UpdateListItem(user *bootstrap.User, item model.ShopListItems) error {
+	stmt := ShopListItems.UPDATE(
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.UpdatedAt,
+	).MODEL(item).
+		WHERE(ShopListItems.ID.EQ(String(item.ID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to update list item: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("list item not found")
+	}
+
+	return nil
+}
+
+func (repo *ShopsRepositoryImpl) RemoveListItem(user *bootstrap.User, itemID string) error {
+	stmt := ShopListItems.DELETE().
+		WHERE(ShopListItems.ID.EQ(String(itemID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to remove list item: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("list item not found")
+	}
+
+	return nil
+}
+
+func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error) {
+	if len(items) == 0 {
+		return []model.ShopListItems{}, nil
+	}
+
+	stmt := ShopListItems.INSERT(
+		ShopListItems.ID,
+		ShopListItems.ListID,
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.AddedBy,
+		ShopListItems.CreatedAt,
+		ShopListItems.UpdatedAt,
+	).MODELS(items).RETURNING(ShopListItems.AllColumns)
+
+	var createdItems []model.ShopListItems
+	err := stmt.Query(repo.Db, &createdItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add list items: %w", err)
+	}
+
+	return createdItems, nil
+}
+
+func (repo *ShopsRepositoryImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error {
+	if len(itemIDs) == 0 {
+		return nil
+	}
+
+	// Convert string slice to expressions for the IN clause
+	var expressions []Expression
+	for _, id := range itemIDs {
+		expressions = append(expressions, String(id))
+	}
+
+	stmt := ShopListItems.DELETE().
+		WHERE(ShopListItems.ID.IN(expressions...))
+
+	_, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to remove list items: %w", err)
+	}
+
+	return nil
+}
+
+// Helper method for permissions
+func (repo *ShopsRepositoryImpl) GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error) {
+	stmt := SELECT(ShopMembers.Role).
+		FROM(ShopMembers).
+		WHERE(
+			ShopMembers.ShopID.EQ(String(shopID)).
+				AND(ShopMembers.UserID.EQ(String(user.UserID))),
+		)
+
+	var role string
+	err := stmt.Query(repo.Db, &role)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", errors.New("user is not a member of this shop")
+		}
+		return "", fmt.Errorf("failed to get user role: %w", err)
+	}
+
+	return role, nil
+}
