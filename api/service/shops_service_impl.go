@@ -1119,7 +1119,7 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 }
 
 // Shop List Operations
-func (service *ShopsServiceImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error) {
+func (service *ShopsServiceImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -1176,7 +1176,7 @@ func (service *ShopsServiceImpl) GetShopLists(user *bootstrap.User, shopID strin
 	return lists, nil
 }
 
-func (service *ShopsServiceImpl) GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error) {
+func (service *ShopsServiceImpl) GetShopListByID(user *bootstrap.User, listID string) (*response.ShopListWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -1210,8 +1210,15 @@ func (service *ShopsServiceImpl) UpdateShopList(user *bootstrap.User, list model
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
+	// Convert to model for helper function
+	modelList := &model.ShopLists{
+		ID:        currentList.ID,
+		ShopID:    currentList.ShopID,
+		CreatedBy: currentList.CreatedBy,
+	}
+	
 	// Check if user can modify this list (either they created it or they're an admin)
-	canModify, err := service.canUserModifyList(user, currentList)
+	canModify, err := service.canUserModifyList(user, modelList)
 	if err != nil {
 		return fmt.Errorf("failed to verify permissions: %w", err)
 	}
@@ -1242,8 +1249,15 @@ func (service *ShopsServiceImpl) DeleteShopList(user *bootstrap.User, listID str
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
+	// Convert to model for helper function
+	modelList := &model.ShopLists{
+		ID:        list.ID,
+		ShopID:    list.ShopID,
+		CreatedBy: list.CreatedBy,
+	}
+	
 	// Check if user can delete this list (either they created it or they're an admin)
-	canDelete, err := service.canUserModifyList(user, list)
+	canDelete, err := service.canUserModifyList(user, modelList)
 	if err != nil {
 		return fmt.Errorf("failed to verify permissions: %w", err)
 	}
@@ -1262,7 +1276,7 @@ func (service *ShopsServiceImpl) DeleteShopList(user *bootstrap.User, listID str
 }
 
 // Shop List Item Operations
-func (service *ShopsServiceImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error) {
+func (service *ShopsServiceImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -1405,13 +1419,13 @@ func (service *ShopsServiceImpl) RemoveListItem(user *bootstrap.User, itemID str
 	return nil
 }
 
-func (service *ShopsServiceImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error) {
+func (service *ShopsServiceImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
 	if len(items) == 0 {
-		return nil, errors.New("no items to add")
+		return []response.ShopListItemWithUsername{}, errors.New("no items to add")
 	}
 
 	// Get the list to verify access (use first item's list ID)

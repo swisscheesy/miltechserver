@@ -11,6 +11,7 @@ import (
 	"miltechserver/bootstrap"
 	"time"
 
+	"github.com/go-jet/jet/v2/postgres"
 	. "github.com/go-jet/jet/v2/postgres"
 )
 
@@ -988,7 +989,7 @@ func (repo *ShopsRepositoryImpl) DeleteNotificationItemList(user *bootstrap.User
 }
 
 // Shop List Operations
-func (repo *ShopsRepositoryImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error) {
+func (repo *ShopsRepositoryImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error) {
 	stmt := ShopLists.INSERT(
 		ShopLists.ID,
 		ShopLists.ShopID,
@@ -996,15 +997,51 @@ func (repo *ShopsRepositoryImpl) CreateShopList(user *bootstrap.User, list model
 		ShopLists.Description,
 		ShopLists.CreatedAt,
 		ShopLists.UpdatedAt,
-	).MODEL(list).RETURNING(ShopLists.AllColumns)
+	).MODEL(list)
 
-	var createdList model.ShopLists
-	err := stmt.Query(repo.Db, &createdList)
+	_, err := stmt.Exec(repo.Db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop list: %w", err)
 	}
 
-	return &createdList, nil
+	// Get the created list with username
+	selectStmt := SELECT(
+		ShopLists.ID,
+		ShopLists.ShopID,
+		ShopLists.CreatedBy,
+		ShopLists.Description,
+		ShopLists.CreatedAt,
+		ShopLists.UpdatedAt,
+		Users.Username.AS("created_by_username"),
+	).FROM(
+		ShopLists.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopLists.CreatedBy)),
+	).WHERE(
+		ShopLists.ID.EQ(String(list.ID)),
+	)
+
+	var result struct {
+		model.ShopLists
+		CreatedByUsername *string `sql:"created_by_username"`
+	}
+
+	err = selectStmt.Query(repo.Db, &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get created shop list with username: %w", err)
+	}
+
+	// Convert to response type
+	createdListWithUsername := &response.ShopListWithUsername{
+		ID:                result.ID,
+		ShopID:            result.ShopID,
+		CreatedBy:         result.CreatedBy,
+		CreatedByUsername: result.CreatedByUsername,
+		Description:       result.Description,
+		CreatedAt:         &result.CreatedAt,
+		UpdatedAt:         &result.UpdatedAt,
+	}
+
+	return createdListWithUsername, nil
 }
 
 func (repo *ShopsRepositoryImpl) GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error) {
@@ -1050,13 +1087,28 @@ func (repo *ShopsRepositoryImpl) GetShopLists(user *bootstrap.User, shopID strin
 	return lists, nil
 }
 
-func (repo *ShopsRepositoryImpl) GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error) {
-	stmt := SELECT(ShopLists.AllColumns).
-		FROM(ShopLists).
-		WHERE(ShopLists.ID.EQ(String(listID)))
+func (repo *ShopsRepositoryImpl) GetShopListByID(user *bootstrap.User, listID string) (*response.ShopListWithUsername, error) {
+	stmt := SELECT(
+		ShopLists.ID,
+		ShopLists.ShopID,
+		ShopLists.CreatedBy,
+		ShopLists.Description,
+		ShopLists.CreatedAt,
+		ShopLists.UpdatedAt,
+		Users.Username.AS("created_by_username"),
+	).FROM(
+		ShopLists.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopLists.CreatedBy)),
+	).WHERE(
+		ShopLists.ID.EQ(String(listID)),
+	)
 
-	var list model.ShopLists
-	err := stmt.Query(repo.Db, &list)
+	var result struct {
+		model.ShopLists
+		CreatedByUsername *string `sql:"created_by_username"`
+	}
+
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("shop list not found")
@@ -1064,7 +1116,18 @@ func (repo *ShopsRepositoryImpl) GetShopListByID(user *bootstrap.User, listID st
 		return nil, fmt.Errorf("failed to get shop list: %w", err)
 	}
 
-	return &list, nil
+	// Convert to response type
+	listWithUsername := &response.ShopListWithUsername{
+		ID:                result.ID,
+		ShopID:            result.ShopID,
+		CreatedBy:         result.CreatedBy,
+		CreatedByUsername: result.CreatedByUsername,
+		Description:       result.Description,
+		CreatedAt:         &result.CreatedAt,
+		UpdatedAt:         &result.UpdatedAt,
+	}
+
+	return listWithUsername, nil
 }
 
 func (repo *ShopsRepositoryImpl) UpdateShopList(user *bootstrap.User, list model.ShopLists) error {
@@ -1113,7 +1176,7 @@ func (repo *ShopsRepositoryImpl) DeleteShopList(user *bootstrap.User, listID str
 }
 
 // Shop List Item Operations
-func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error) {
+func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
 	stmt := ShopListItems.INSERT(
 		ShopListItems.ID,
 		ShopListItems.ListID,
@@ -1123,15 +1186,55 @@ func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.Sh
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
-	).MODEL(item).RETURNING(ShopListItems.AllColumns)
+	).MODEL(item)
 
-	var createdItem model.ShopListItems
-	err := stmt.Query(repo.Db, &createdItem)
+	_, err := stmt.Exec(repo.Db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add list item: %w", err)
 	}
 
-	return &createdItem, nil
+	// Get the created item with username
+	selectStmt := SELECT(
+		ShopListItems.ID,
+		ShopListItems.ListID,
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.AddedBy,
+		ShopListItems.CreatedAt,
+		ShopListItems.UpdatedAt,
+		Users.Username.AS("added_by_username"),
+	).FROM(
+		ShopListItems.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopListItems.AddedBy)),
+	).WHERE(
+		ShopListItems.ID.EQ(String(item.ID)),
+	)
+
+	var result struct {
+		model.ShopListItems
+		AddedByUsername *string `sql:"added_by_username"`
+	}
+
+	err = selectStmt.Query(repo.Db, &result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get created list item with username: %w", err)
+	}
+
+	// Convert to response type
+	createdItemWithUsername := &response.ShopListItemWithUsername{
+		ID:              result.ID,
+		ListID:          result.ListID,
+		Niin:            result.Niin,
+		Nomenclature:    result.Nomenclature,
+		Quantity:        result.Quantity,
+		AddedBy:         result.AddedBy,
+		AddedByUsername: result.AddedByUsername,
+		CreatedAt:       &result.CreatedAt,
+		UpdatedAt:       &result.UpdatedAt,
+	}
+
+	return createdItemWithUsername, nil
 }
 
 func (repo *ShopsRepositoryImpl) GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error) {
@@ -1245,9 +1348,9 @@ func (repo *ShopsRepositoryImpl) RemoveListItem(user *bootstrap.User, itemID str
 	return nil
 }
 
-func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error) {
+func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error) {
 	if len(items) == 0 {
-		return []model.ShopListItems{}, nil
+		return []response.ShopListItemWithUsername{}, nil
 	}
 
 	stmt := ShopListItems.INSERT(
@@ -1259,15 +1362,63 @@ func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
-	).MODELS(items).RETURNING(ShopListItems.AllColumns)
+	).MODELS(items)
 
-	var createdItems []model.ShopListItems
-	err := stmt.Query(repo.Db, &createdItems)
+	_, err := stmt.Exec(repo.Db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add list items: %w", err)
 	}
 
-	return createdItems, nil
+	// Get the created items with usernames
+	itemIDs := make([]postgres.Expression, len(items))
+	for i, item := range items {
+		itemIDs[i] = String(item.ID)
+	}
+
+	selectStmt := SELECT(
+		ShopListItems.ID,
+		ShopListItems.ListID,
+		ShopListItems.Niin,
+		ShopListItems.Nomenclature,
+		ShopListItems.Quantity,
+		ShopListItems.AddedBy,
+		ShopListItems.CreatedAt,
+		ShopListItems.UpdatedAt,
+		Users.Username.AS("added_by_username"),
+	).FROM(
+		ShopListItems.
+			LEFT_JOIN(Users, Users.UID.EQ(ShopListItems.AddedBy)),
+	).WHERE(
+		ShopListItems.ID.IN(itemIDs...),
+	).ORDER_BY(ShopListItems.CreatedAt.ASC())
+
+	var results []struct {
+		model.ShopListItems
+		AddedByUsername *string `sql:"added_by_username"`
+	}
+
+	err = selectStmt.Query(repo.Db, &results)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get created list items with usernames: %w", err)
+	}
+
+	// Convert to response type
+	createdItemsWithUsername := make([]response.ShopListItemWithUsername, len(results))
+	for i, r := range results {
+		createdItemsWithUsername[i] = response.ShopListItemWithUsername{
+			ID:              r.ID,
+			ListID:          r.ListID,
+			Niin:            r.Niin,
+			Nomenclature:    r.Nomenclature,
+			Quantity:        r.Quantity,
+			AddedBy:         r.AddedBy,
+			AddedByUsername: r.AddedByUsername,
+			CreatedAt:       &r.CreatedAt,
+			UpdatedAt:       &r.UpdatedAt,
+		}
+	}
+
+	return createdItemsWithUsername, nil
 }
 
 func (repo *ShopsRepositoryImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error {

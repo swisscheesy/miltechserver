@@ -65,19 +65,19 @@ type ShopsRepository interface {
 	DeleteNotificationItemList(user *bootstrap.User, itemIDs []string) error
 
 	// Shop List Operations
-	CreateShopList(user *bootstrap.User, list model.ShopLists) (*model.ShopLists, error)
+	CreateShopList(user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error)
 	GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error)
-	GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error)
+	GetShopListByID(user *bootstrap.User, listID string) (*response.ShopListWithUsername, error)
 	UpdateShopList(user *bootstrap.User, list model.ShopLists) error
 	DeleteShopList(user *bootstrap.User, listID string) error
 
 	// Shop List Item Operations
-	AddListItem(user *bootstrap.User, item model.ShopListItems) (*model.ShopListItems, error)
+	AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error)
 	GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error)
 	GetListItemByID(user *bootstrap.User, itemID string) (*model.ShopListItems, error)
 	UpdateListItem(user *bootstrap.User, item model.ShopListItems) error
 	RemoveListItem(user *bootstrap.User, itemID string) error
-	AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]model.ShopListItems, error)
+	AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error)
 	RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error
 
 	// Helper method for permissions
