@@ -30,6 +30,7 @@ type ShopsService interface {
 	// Shop Message Operations
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error)
+	GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(user *bootstrap.User, messageID string) error
 

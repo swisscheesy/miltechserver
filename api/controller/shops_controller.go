@@ -499,6 +499,51 @@ func (controller *ShopsController) GetShopMessages(c *gin.Context) {
 	})
 }
 
+// GetShopMessagesPaginated returns paginated messages for a shop
+func (controller *ShopsController) GetShopMessagesPaginated(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	var req request.GetShopMessagesPaginatedRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		slog.Info("invalid query parameters", "error", err)
+		c.JSON(400, gin.H{"message": "invalid query parameters"})
+		return
+	}
+
+	// Set defaults if not provided
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.Limit == 0 {
+		req.Limit = 20
+	}
+
+	paginatedMessages, err := controller.ShopsService.GetShopMessagesPaginated(user, shopID, req.Page, req.Limit)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "",
+		Data:    *paginatedMessages,
+	})
+}
+
 // UpdateShopMessage updates an existing shop message
 func (controller *ShopsController) UpdateShopMessage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")

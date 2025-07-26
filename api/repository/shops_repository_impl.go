@@ -538,6 +538,39 @@ func (repo *ShopsRepositoryImpl) GetShopMessages(user *bootstrap.User, shopID st
 	return messages, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, offset int, limit int) ([]model.ShopMessages, error) {
+	stmt := SELECT(ShopMessages.AllColumns).
+		FROM(ShopMessages).
+		WHERE(ShopMessages.ShopID.EQ(String(shopID))).
+		ORDER_BY(ShopMessages.CreatedAt.DESC()).
+		LIMIT(int64(limit)).
+		OFFSET(int64(offset))
+
+	var messages []model.ShopMessages
+	err := stmt.Query(repo.Db, &messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
+	}
+
+	return messages, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetShopMessagesCount(user *bootstrap.User, shopID string) (int64, error) {
+	stmt := SELECT(COUNT(ShopMessages.ID)).
+		FROM(ShopMessages).
+		WHERE(ShopMessages.ShopID.EQ(String(shopID)))
+
+	var result struct {
+		Count int64 `sql:"primary_key"`
+	}
+	err := stmt.Query(repo.Db, &result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get shop messages count: %w", err)
+	}
+
+	return result.Count, nil
+}
+
 func (repo *ShopsRepositoryImpl) UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error {
 	stmt := ShopMessages.UPDATE(
 		ShopMessages.Message,

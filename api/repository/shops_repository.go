@@ -37,6 +37,8 @@ type ShopsRepository interface {
 	// Shop Message Operations
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error)
+	GetShopMessagesPaginated(user *bootstrap.User, shopID string, offset int, limit int) ([]model.ShopMessages, error)
+	GetShopMessagesCount(user *bootstrap.User, shopID string) (int64, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(user *bootstrap.User, messageID string) error
 

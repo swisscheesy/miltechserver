@@ -40,6 +40,7 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	// Shop Message Operations
 	group.POST("/shops/messages", pc.CreateShopMessage)
 	group.GET("/shops/:shop_id/messages", pc.GetShopMessages)
+	group.GET("/shops/:shop_id/messages/paginated", pc.GetShopMessagesPaginated)
 	group.PUT("/shops/messages", pc.UpdateShopMessage)
 	group.DELETE("/shops/messages/:message_id", pc.DeleteShopMessage)
 

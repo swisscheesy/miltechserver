@@ -48,3 +48,16 @@ type ShopListItemWithUsername struct {
 	CreatedAt       *time.Time `json:"created_at"`
 	UpdatedAt       *time.Time `json:"updated_at"`
 }
+
+type PaginationMetadata struct {
+	Page       int  `json:"page"`
+	Limit      int  `json:"limit"`
+	TotalPages int  `json:"total_pages"`
+	HasNext    bool `json:"has_next"`
+	HasPrev    bool `json:"has_prev"`
+}
+
+type PaginatedShopMessagesResponse struct {
+	Messages   []model.ShopMessages `json:"messages"`
+	Pagination PaginationMetadata   `json:"pagination"`
+}

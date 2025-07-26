@@ -483,6 +483,70 @@ func (service *ShopsServiceImpl) GetShopMessages(user *bootstrap.User, shopID st
 	return messages, nil
 }
 
+func (service *ShopsServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Validate page and limit parameters
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Calculate offset
+	offset := (page - 1) * limit
+
+	// Get paginated messages
+	messages, err := service.ShopsRepository.GetShopMessagesPaginated(user, shopID, offset, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
+	}
+
+	// Get total count for pagination metadata
+	totalCount, err := service.ShopsRepository.GetShopMessagesCount(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop messages count: %w", err)
+	}
+
+	// Calculate pagination metadata
+	totalPages := int((totalCount + int64(limit) - 1) / int64(limit)) // Ceiling division
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	paginationMetadata := response.PaginationMetadata{
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+		HasNext:    page < totalPages,
+		HasPrev:    page > 1,
+	}
+
+	if messages == nil {
+		messages = []model.ShopMessages{}
+	}
+
+	paginatedResponse := &response.PaginatedShopMessagesResponse{
+		Messages:   messages,
+		Pagination: paginationMetadata,
+	}
+
+	return paginatedResponse, nil
+}
+
 func (service *ShopsServiceImpl) UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error {
 	if user == nil {
 		return errors.New("unauthorized user")
