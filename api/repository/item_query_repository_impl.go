@@ -3,10 +3,12 @@ package repository
 import (
 	"database/sql"
 	"errors"
-	. "github.com/go-jet/jet/v2/postgres"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/.gen/miltech_ng/public/view"
+	"strings"
+
+	. "github.com/go-jet/jet/v2/postgres"
 )
 
 type ItemQueryRepositoryImpl struct {
@@ -48,8 +50,8 @@ func (repo *ItemQueryRepositoryImpl) ShortItemSearchPart(part string) ([]model.N
 		view.NiinLookup.AllColumns,
 	).FROM(
 		view.NiinLookup.
-			INNER_JOIN(PartNumber, view.NiinLookup.Niin.EQ(PartNumber.Niin))).
-		WHERE(PartNumber.PartNumber.EQ(String(part)))
+										INNER_JOIN(PartNumber, view.NiinLookup.Niin.EQ(PartNumber.Niin))).
+		WHERE(PartNumber.PartNumber.EQ(String(strings.ToUpper(part)))) // Ensure part number is uppercase
 
 	err := stmt.Query(repo.Db, &items)
 

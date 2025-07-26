@@ -73,3 +73,22 @@ func (controller *UserGeneralController) DeleteUser(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "user deleted successfully"})
 	slog.Info("User deleted successfully", "uid", deleteRequest.UID)
 }
+
+func (controller *UserGeneralController) UpdateUserDisplayName(c *gin.Context) {
+	var displayNameRequest request.UserDisplayNameChangeRequest
+	if err := c.ShouldBindJSON(&displayNameRequest); err != nil {
+		c.JSON(404, gin.H{"message": "invalid request"})
+		slog.Info("Invalid request body", "error", err)
+		return
+	}
+
+	err := controller.UserGeneralService.UpdateUserDisplayName(displayNameRequest.UID, displayNameRequest.DisplayName)
+	if err != nil {
+		c.JSON(404, gin.H{"message": "failed to update display name"})
+		slog.Info("Failed to update display name", "uid", displayNameRequest.UID, "error", err)
+		return
+	}
+
+	c.Status(200)
+	slog.Info("Display name updated successfully", "uid", displayNameRequest.UID, "display_name", displayNameRequest.DisplayName)
+}

@@ -22,3 +22,7 @@ func (service *UserGeneralServiceImpl) UpsertUser(user *bootstrap.User, userDto 
 func (service *UserGeneralServiceImpl) DeleteUser(uid string) error {
 	return service.UserGeneralRepository.DeleteUser(uid)
 }
+
+func (service *UserGeneralServiceImpl) UpdateUserDisplayName(uid string, displayName string) error {
+	return service.UserGeneralRepository.UpdateUserDisplayName(uid, displayName)
+}

@@ -62,3 +62,26 @@ func (repo *UserGeneralRepositoryImpl) DeleteUser(uid string) error {
 	slog.Info("user DELETED", "user_id", uid)
 	return nil
 }
+
+func (repo *UserGeneralRepositoryImpl) UpdateUserDisplayName(uid string, displayName string) error {
+	stmt := Users.UPDATE(Users.Username).
+		SET(String(displayName)).
+		WHERE(Users.UID.EQ(String(uid)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("error updating user display name: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("user not found")
+	}
+
+	slog.Info("user display name UPDATED", "user_id", uid, "display_name", displayName)
+	return nil
+}
