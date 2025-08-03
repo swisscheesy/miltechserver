@@ -295,6 +295,41 @@ func (service *ShopsServiceImpl) GetShopMembers(user *bootstrap.User, shopID str
 	return members, nil
 }
 
+func (service *ShopsServiceImpl) PromoteMemberToAdmin(user *bootstrap.User, shopID string, targetUserID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Check if user is admin of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return errors.New("only shop administrators can promote members")
+	}
+
+	// Check if target user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(&bootstrap.User{UserID: targetUserID}, shopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify target user membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("target user is not a member of this shop")
+	}
+
+	// Update member role to admin
+	err = service.ShopsRepository.UpdateMemberRole(user, shopID, targetUserID, "admin")
+	if err != nil {
+		return fmt.Errorf("failed to promote member to admin: %w", err)
+	}
+
+	slog.Info("Member promoted to admin", "admin_user_id", user.UserID, "promoted_user_id", targetUserID, "shop_id", shopID)
+	return nil
+}
+
 // Shop Invite Code Operations
 func (service *ShopsServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error) {
 	if user == nil {

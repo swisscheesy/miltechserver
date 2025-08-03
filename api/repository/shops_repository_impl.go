@@ -305,6 +305,34 @@ func (repo *ShopsRepositoryImpl) RemoveMemberFromShop(user *bootstrap.User, shop
 	return nil
 }
 
+func (repo *ShopsRepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string, targetUserID string, newRole string) error {
+	stmt := ShopMembers.UPDATE(
+		ShopMembers.Role,
+	).SET(
+		newRole,
+	).WHERE(
+		ShopMembers.ShopID.EQ(String(shopID)).
+			AND(ShopMembers.UserID.EQ(String(targetUserID))),
+	)
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to update member role: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("member not found in shop")
+	}
+
+	slog.Info("Member role updated", "shop_id", shopID, "target_user_id", targetUserID, "new_role", newRole, "updated_by", user.UserID)
+	return nil
+}
+
 func (repo *ShopsRepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
 	rawSQL := `
 		SELECT 

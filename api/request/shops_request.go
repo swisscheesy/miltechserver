@@ -21,6 +21,11 @@ type RemoveMemberRequest struct {
 	TargetUserID string `json:"target_user_id" binding:"required"`
 }
 
+type PromoteMemberRequest struct {
+	ShopID       string `json:"shop_id" binding:"required"`
+	TargetUserID string `json:"target_user_id" binding:"required"`
+}
+
 type CreateShopMessageRequest struct {
 	ShopID  string `json:"shop_id" binding:"required"`
 	Message string `json:"message" binding:"required"`

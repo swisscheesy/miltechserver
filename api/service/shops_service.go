@@ -20,6 +20,7 @@ type ShopsService interface {
 	LeaveShop(user *bootstrap.User, shopID string) error
 	RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error
 	GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error)
+	PromoteMemberToAdmin(user *bootstrap.User, shopID string, targetUserID string) error
 
 	// Shop Invite Code Operations
 	GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error)

@@ -188,7 +188,25 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 10. Get Shop Members
+#### 10. Promote Member to Admin
+- **Endpoint**: `PUT /shops/members/promote`
+- **Description**: Allows shop admins to promote another member to admin role
+- **Request Body**:
+  ```json
+  {
+    "shop_id": "string (required)",
+    "target_user_id": "string (required)"
+  }
+  ```
+- **Response**: 200 OK
+  ```json
+  {
+    "message": "Member promoted to admin successfully"
+  }
+  ```
+- **Authorization**: Requesting user must be an admin of the specified shop
+
+#### 11. Get Shop Members
 - **Endpoint**: `GET /shops/{shop_id}/members`
 - **Description**: Returns all members of a shop
 - **Path Parameters**: `shop_id` (string, required)
@@ -212,7 +230,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop Invite Code Operations
 
-#### 11. Generate Invite Code
+#### 12. Generate Invite Code
 - **Endpoint**: `POST /shops/invite-codes`
 - **Description**: Creates a new invite code for a shop
 - **Request Body**:
@@ -239,7 +257,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 12. Get Invite Codes by Shop
+#### 13. Get Invite Codes by Shop
 - **Endpoint**: `GET /shops/{shop_id}/invite-codes`
 - **Description**: Returns all invite codes for a shop
 - **Path Parameters**: `shop_id` (string, required)
@@ -261,7 +279,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 13. Deactivate Invite Code
+#### 14. Deactivate Invite Code
 - **Endpoint**: `DELETE /shops/invite-codes/{code_id}`
 - **Description**: Deactivates an invite code
 - **Path Parameters**: `code_id` (string, required)
@@ -272,7 +290,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 14. Delete Invite Code
+#### 15. Delete Invite Code
 - **Endpoint**: `DELETE /shops/invite-codes/{code_id}/delete`
 - **Description**: Permanently deletes an invite code
 - **Path Parameters**: `code_id` (string, required)
@@ -285,7 +303,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop Message Operations
 
-#### 15. Create Shop Message
+#### 16. Create Shop Message
 - **Endpoint**: `POST /shops/messages`
 - **Description**: Creates a new message in the shop chat
 - **Request Body**:
@@ -304,7 +322,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 16. Get Shop Messages
+#### 17. Get Shop Messages
 - **Endpoint**: `GET /shops/{shop_id}/messages`
 - **Description**: Returns all messages for a shop (oldest first)
 - **Path Parameters**: `shop_id` (string, required)
@@ -317,7 +335,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 17. Get Shop Messages (Paginated)
+#### 18. Get Shop Messages (Paginated)
 - **Endpoint**: `GET /shops/{shop_id}/messages/paginated`
 - **Description**: Returns paginated messages for a shop (newest first)
 - **Path Parameters**: `shop_id` (string, required)
@@ -342,7 +360,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 18. Update Shop Message
+#### 19. Update Shop Message
 - **Endpoint**: `PUT /shops/messages`
 - **Description**: Updates an existing shop message
 - **Request Body**:
@@ -359,7 +377,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 19. Delete Shop Message
+#### 20. Delete Shop Message
 - **Endpoint**: `DELETE /shops/messages/{message_id}`
 - **Description**: Deletes a shop message
 - **Path Parameters**: `message_id` (string, required)
@@ -372,7 +390,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop Vehicle Operations
 
-#### 20. Create Shop Vehicle
+#### 21. Create Shop Vehicle
 - **Endpoint**: `POST /shops/vehicles`
 - **Description**: Creates a new vehicle for a shop
 - **Request Body**:
@@ -412,7 +430,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 21. Get Shop Vehicles
+#### 22. Get Shop Vehicles
 - **Endpoint**: `GET /shops/{shop_id}/vehicles`
 - **Description**: Returns all vehicles for a shop
 - **Path Parameters**: `shop_id` (string, required)
@@ -425,7 +443,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 22. Get Shop Vehicle by ID
+#### 23. Get Shop Vehicle by ID
 - **Endpoint**: `GET /shops/vehicles/{vehicle_id}`
 - **Description**: Returns a specific vehicle by ID
 - **Path Parameters**: `vehicle_id` (string, required)
@@ -438,7 +456,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 23. Update Shop Vehicle
+#### 24. Update Shop Vehicle
 - **Endpoint**: `PUT /shops/vehicles`
 - **Description**: Updates an existing shop vehicle
 - **Request Body**:
@@ -462,7 +480,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 24. Delete Shop Vehicle
+#### 25. Delete Shop Vehicle
 - **Endpoint**: `DELETE /shops/vehicles/{vehicle_id}`
 - **Description**: Deletes a shop vehicle
 - **Path Parameters**: `vehicle_id` (string, required)
@@ -475,7 +493,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop Vehicle Notification Operations
 
-#### 25. Create Vehicle Notification
+#### 26. Create Vehicle Notification
 - **Endpoint**: `POST /shops/vehicles/notifications`
 - **Description**: Creates a new notification for a vehicle
 - **Request Body**:
@@ -507,7 +525,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 26. Get Vehicle Notifications
+#### 27. Get Vehicle Notifications
 - **Endpoint**: `GET /shops/vehicles/{vehicle_id}/notifications`
 - **Description**: Returns all notifications for a vehicle
 - **Path Parameters**: `vehicle_id` (string, required)
@@ -520,7 +538,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 27. Get Vehicle Notifications with Items
+#### 28. Get Vehicle Notifications with Items
 - **Endpoint**: `GET /shops/vehicles/{vehicle_id}/notifications-with-items`
 - **Description**: Returns all notifications for a vehicle with their items
 - **Path Parameters**: `vehicle_id` (string, required)
@@ -538,7 +556,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 28. Get Shop Notifications
+#### 29. Get Shop Notifications
 - **Endpoint**: `GET /shops/{shop_id}/notifications`
 - **Description**: Returns all notifications for a shop
 - **Path Parameters**: `shop_id` (string, required)
@@ -551,7 +569,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 29. Get Vehicle Notification by ID
+#### 30. Get Vehicle Notification by ID
 - **Endpoint**: `GET /shops/vehicles/notifications/{notification_id}`
 - **Description**: Returns a specific notification by ID
 - **Path Parameters**: `notification_id` (string, required)
@@ -564,7 +582,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 30. Update Vehicle Notification
+#### 31. Update Vehicle Notification
 - **Endpoint**: `PUT /shops/vehicles/notifications`
 - **Description**: Updates an existing vehicle notification
 - **Request Body**:
@@ -584,7 +602,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 31. Delete Vehicle Notification
+#### 32. Delete Vehicle Notification
 - **Endpoint**: `DELETE /shops/vehicles/notifications/{notification_id}`
 - **Description**: Deletes a vehicle notification
 - **Path Parameters**: `notification_id` (string, required)
@@ -597,7 +615,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop Notification Item Operations
 
-#### 32. Add Notification Item
+#### 33. Add Notification Item
 - **Endpoint**: `POST /shops/notifications/items`
 - **Description**: Adds an item to a vehicle notification
 - **Request Body**:
@@ -618,7 +636,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 33. Get Notification Items
+#### 34. Get Notification Items
 - **Endpoint**: `GET /shops/notifications/{notification_id}/items`
 - **Description**: Returns all items for a notification
 - **Path Parameters**: `notification_id` (string, required)
@@ -631,7 +649,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 34. Get Shop Notification Items
+#### 35. Get Shop Notification Items
 - **Endpoint**: `GET /shops/{shop_id}/notification-items`
 - **Description**: Returns all notification items for a shop
 - **Path Parameters**: `shop_id` (string, required)
@@ -644,7 +662,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 35. Add Notification Item List (Bulk)
+#### 36. Add Notification Item List (Bulk)
 - **Endpoint**: `POST /shops/notifications/items/bulk`
 - **Description**: Adds multiple items to a vehicle notification
 - **Request Body**:
@@ -670,7 +688,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 36. Remove Notification Item
+#### 37. Remove Notification Item
 - **Endpoint**: `DELETE /shops/notifications/items/{item_id}`
 - **Description**: Removes an item from a vehicle notification
 - **Path Parameters**: `item_id` (string, required)
@@ -681,7 +699,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 37. Remove Notification Item List (Bulk)
+#### 38. Remove Notification Item List (Bulk)
 - **Endpoint**: `DELETE /shops/notifications/items/bulk`
 - **Description**: Removes multiple items from vehicle notifications
 - **Request Body**:
@@ -700,7 +718,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop List Operations
 
-#### 38. Create Shop List
+#### 39. Create Shop List
 - **Endpoint**: `POST /shops/lists`
 - **Description**: Creates a new list for a shop
 - **Request Body**:
@@ -719,7 +737,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 39. Get Shop Lists
+#### 40. Get Shop Lists
 - **Endpoint**: `GET /shops/{shop_id}/lists`
 - **Description**: Returns all lists for a shop with creator usernames
 - **Path Parameters**: `shop_id` (string, required)
@@ -742,7 +760,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 40. Get Shop List by ID
+#### 41. Get Shop List by ID
 - **Endpoint**: `GET /shops/lists/{list_id}`
 - **Description**: Returns a specific list by ID
 - **Path Parameters**: `list_id` (string, required)
@@ -755,7 +773,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 41. Update Shop List
+#### 42. Update Shop List
 - **Endpoint**: `PUT /shops/lists`
 - **Description**: Updates an existing shop list
 - **Request Body**:
@@ -772,7 +790,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 42. Delete Shop List
+#### 43. Delete Shop List
 - **Endpoint**: `DELETE /shops/lists`
 - **Description**: Deletes a shop list
 - **Request Body**:
@@ -790,7 +808,7 @@ Authorization: Bearer <firebase-jwt-token>
 
 ### Shop List Item Operations
 
-#### 43. Add List Item
+#### 44. Add List Item
 - **Endpoint**: `POST /shops/lists/items`
 - **Description**: Adds an item to a shop list
 - **Request Body**:
@@ -811,7 +829,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 44. Get List Items
+#### 45. Get List Items
 - **Endpoint**: `GET /shops/lists/{list_id}/items`
 - **Description**: Returns all items for a list with added by usernames
 - **Path Parameters**: `list_id` (string, required)
@@ -836,7 +854,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 45. Update List Item
+#### 46. Update List Item
 - **Endpoint**: `PUT /shops/lists/items`
 - **Description**: Updates an existing list item
 - **Request Body**:
@@ -855,7 +873,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 46. Remove List Item
+#### 47. Remove List Item
 - **Endpoint**: `DELETE /shops/lists/items`
 - **Description**: Removes an item from a list
 - **Request Body**:
@@ -871,7 +889,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 47. Add List Item Batch
+#### 48. Add List Item Batch
 - **Endpoint**: `POST /shops/lists/items/bulk`
 - **Description**: Adds multiple items to a list
 - **Request Body**:
@@ -897,7 +915,7 @@ Authorization: Bearer <firebase-jwt-token>
   }
   ```
 
-#### 48. Remove List Item Batch
+#### 49. Remove List Item Batch
 - **Endpoint**: `DELETE /shops/lists/items/bulk`
 - **Description**: Removes multiple items from lists
 - **Request Body**:

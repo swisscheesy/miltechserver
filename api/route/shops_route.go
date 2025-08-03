@@ -29,6 +29,7 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	group.POST("/shops/join", pc.JoinShopViaInviteCode)
 	group.DELETE("/shops/:shop_id/leave", pc.LeaveShop)
 	group.DELETE("/shops/members/remove", pc.RemoveMemberFromShop)
+	group.PUT("/shops/members/promote", pc.PromoteMemberToAdmin)
 	group.GET("/shops/:shop_id/members", pc.GetShopMembers)
 
 	// Shop Invite Code Operations

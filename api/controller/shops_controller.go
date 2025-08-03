@@ -286,6 +286,33 @@ func (controller *ShopsController) RemoveMemberFromShop(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Member removed successfully"})
 }
 
+// PromoteMemberToAdmin allows admins to promote members to admin role
+func (controller *ShopsController) PromoteMemberToAdmin(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	var req request.PromoteMemberRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.ShopsService.PromoteMemberToAdmin(user, req.ShopID, req.TargetUserID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, gin.H{"message": "Member promoted to admin successfully"})
+}
+
 // GetShopMembers returns all members of a shop
 func (controller *ShopsController) GetShopMembers(c *gin.Context) {
 	ctxUser, ok := c.Get("user")

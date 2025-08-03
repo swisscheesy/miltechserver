@@ -22,6 +22,7 @@ type ShopsRepository interface {
 	GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error)
 	GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error)
 	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
+	UpdateMemberRole(user *bootstrap.User, shopID string, targetUserID string, newRole string) error
 
 	// Shop Vehicle Operations
 	GetShopVehicleCount(user *bootstrap.User, shopID string) (int64, error)
