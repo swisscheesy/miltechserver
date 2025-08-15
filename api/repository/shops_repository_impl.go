@@ -19,16 +19,6 @@ type ShopsRepositoryImpl struct {
 	Db *sql.DB
 }
 
-// shopMemberWithUsernameDB is used for Jet ORM mapping of JOIN query results
-type shopMemberWithUsernameDB struct {
-	ID       string     `sql:"shop_members.id"`
-	ShopID   string     `sql:"shop_members.shop_id"`
-	UserID   string     `sql:"shop_members.user_id"`
-	Role     string     `sql:"shop_members.role"`
-	JoinedAt *time.Time `sql:"shop_members.joined_at"`
-	Username *string    `sql:"users.username"`
-}
-
 func NewShopsRepositoryImpl(db *sql.DB) *ShopsRepositoryImpl {
 	return &ShopsRepositoryImpl{Db: db}
 }

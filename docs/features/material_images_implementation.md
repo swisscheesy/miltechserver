@@ -76,22 +76,16 @@ CREATE TABLE material_images_flags (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     image_id UUID NOT NULL,
     user_id TEXT NOT NULL,
-    reason VARCHAR(50) NOT NULL CHECK (reason IN ('incorrect_item', 'inappropriate', 'poor_quality', 'duplicate', 'copyright', 'other')),
+    reason VARCHAR(50) NOT NULL CHECK (reason IN ('incorrect_item', 'inappropriate', 'poor_quality', 'duplicate', 'other')),
     description TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    resolved BOOLEAN NOT NULL DEFAULT false,
-    resolved_by TEXT,
-    resolved_at TIMESTAMP,
-    resolution_action VARCHAR(50) CHECK (resolution_action IN ('removed', 'kept', 'warning_issued')),
     CONSTRAINT fk_image FOREIGN KEY (image_id) REFERENCES material_images(id) ON DELETE CASCADE,
     CONSTRAINT fk_user FOREIGN KEY (user_id) REFERENCES users(uid) ON DELETE CASCADE,
-    CONSTRAINT fk_resolver FOREIGN KEY (resolved_by) REFERENCES users(uid),
     CONSTRAINT unique_user_image_flag UNIQUE (image_id, user_id)
 );
 
 -- Indexes for flag management
 CREATE INDEX idx_material_images_flags_image ON material_images_flags(image_id);
-CREATE INDEX idx_material_images_flags_unresolved ON material_images_flags(resolved) WHERE resolved = false;
 CREATE INDEX idx_material_images_flags_user ON material_images_flags(user_id);
 ```
 
@@ -116,11 +110,6 @@ CREATE INDEX idx_upload_limits_time ON material_images_upload_limits(last_upload
 
 ### Phase 1: Database Setup and Model Generation
 
-#### Task 1.1: Create Database Migration Scripts
-**Files to create:**
-- `migrations/001_create_material_images_tables.up.sql`
-- `migrations/001_create_material_images_tables.down.sql`
-
 **Actions:**
 1. Create the four tables defined above
 2. Add necessary indexes
@@ -129,7 +118,7 @@ CREATE INDEX idx_upload_limits_time ON material_images_upload_limits(last_upload
 #### Task 1.2: Generate Jet Models
 **Command to run:**
 ```bash
-jet -dsn="postgresql://username:password@host:port/dbname?sslmode=disable" -schema=public -path=./.gen
+jet -dsn="postgresql://postgres:potato123@192.168.20.70:5432/miltech_ng?sslmode=disable" -schema=public -path=./.gen
 ```
 
 **Generated files (automatic):**
@@ -174,8 +163,6 @@ type MaterialImagesRepository interface {
     // Flag operations
     CreateFlag(flag model.MaterialImagesFlags) error
     GetFlagsByImage(imageID string) ([]model.MaterialImagesFlags, error)
-    GetUnresolvedFlags() ([]model.MaterialImagesFlags, error)
-    ResolveFlag(flagID string, resolvedBy string, action string) error
     
     // Rate limiting
     CheckUploadLimit(userID string, niin string) (bool, *time.Time, error)
@@ -218,9 +205,6 @@ type MaterialImagesService interface {
     FlagImage(user *bootstrap.User, imageID string, reason string, description string) error
     GetImageFlags(imageID string) ([]model.MaterialImagesFlags, error)
     
-    // Admin operations
-    GetFlaggedImages(page int, pageSize int) ([]model.MaterialImages, int64, error)
-    ResolveImageFlag(adminUser *bootstrap.User, flagID string, action string) error
 }
 ```
 
@@ -261,8 +245,6 @@ type MaterialImagesController struct {
 // - VoteOnImage(c *gin.Context)
 // - RemoveVote(c *gin.Context)
 // - FlagImage(c *gin.Context)
-// - GetFlaggedImages(c *gin.Context) // Admin only
-// - ResolveFlag(c *gin.Context) // Admin only
 ```
 
 ### Phase 5: Request/Response DTOs
@@ -286,9 +268,6 @@ type FlagImageRequest struct {
     Description string `json:"description" binding:"max=500"`
 }
 
-type ResolveFlagRequest struct {
-    Action string `json:"action" binding:"required,oneof=removed kept warning_issued"`
-}
 ```
 
 #### Task 5.2: Create Response DTOs
@@ -371,13 +350,6 @@ func NewMaterialImagesRouter(db *sql.DB, blobClient *azblob.Client, env *bootstr
         // Flagging
         protected.POST("/material-images/:image_id/flag", ctrl.FlagImage)
         
-        // Admin routes (need additional role check)
-        admin := protected.Group("")
-        admin.Use(AdminRoleMiddleware()) // Need to implement if not exists
-        {
-            admin.GET("/material-images/flagged", ctrl.GetFlaggedImages)
-            admin.POST("/material-images/flags/:flag_id/resolve", ctrl.ResolveFlag)
-        }
     }
 }
 ```
@@ -456,28 +428,11 @@ Test scenarios:
 1. Upload image successfully
 2. Rate limiting enforcement
 3. Vote counting accuracy
-4. Flag threshold auto-flagging
-5. Delete authorization
-6. Pagination
+4. Delete authorization
+5. Pagination
 
 ### Phase 10: Background Jobs (Optional Enhancement)
 
-#### Task 10.1: Image Processing Job
-**File to create:** `jobs/image_processor.go`
-
-Features:
-1. Generate thumbnails
-2. Compress large images
-3. Extract EXIF data
-4. Virus scanning (if required)
-
-#### Task 10.2: Cleanup Job
-**File to create:** `jobs/material_images_cleanup.go`
-
-Features:
-1. Remove old rate limit records (>24 hours)
-2. Clean orphaned blobs
-3. Archive flagged images
 
 ## API Endpoints Summary
 
@@ -492,9 +447,6 @@ Features:
 - `DELETE /api/material-images/:image_id/vote` - Remove vote
 - `POST /api/material-images/:image_id/flag` - Flag image
 
-### Admin Endpoints
-- `GET /api/material-images/flagged` - View flagged images
-- `POST /api/material-images/flags/:flag_id/resolve` - Resolve flag
 
 ## Configuration Requirements
 

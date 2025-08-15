@@ -35,6 +35,9 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewUserVehicleRouter(db, authRoutes)
 	NewShopsRouter(db, env, authRoutes)
 
+	// Mixed Routes
+	NewMaterialImagesRouter(db, blobClient, env, authClient, v1Route, authRoutes)
+
 	// Serve static assets (CSS, JS, images, etc.)
 	router.Static("/_app", "./static/_app")
 	router.Static("/assets", "./static/assets")

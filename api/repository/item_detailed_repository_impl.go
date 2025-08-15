@@ -383,12 +383,12 @@ func (repo *ItemDetailedRepositoryImpl) getReference(niin string) (details.Refer
 	// Ensure none are nil or empty
 	var cageCodes string
 	for _, ref := range reference.ReferenceAndPartNumber {
-		if ref.CageCode != nil {
-			if cageCodes != "" {
-				cageCodes += ","
-			}
-			cageCodes += *ref.CageCode
+
+		if cageCodes != "" {
+			cageCodes += ","
 		}
+		cageCodes += ref.CageCode
+
 	}
 
 	// Only proceed with cage code queries if we have valid cage codes
