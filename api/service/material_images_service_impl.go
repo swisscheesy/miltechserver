@@ -21,9 +21,9 @@ const (
 )
 
 type MaterialImagesServiceImpl struct {
-	repo repository.MaterialImagesRepository
+	repo       repository.MaterialImagesRepository
 	blobClient *azblob.Client
-	env *bootstrap.Env
+	env        *bootstrap.Env
 }
 
 func NewMaterialImagesServiceImpl(
@@ -32,10 +32,21 @@ func NewMaterialImagesServiceImpl(
 	env *bootstrap.Env,
 ) MaterialImagesService {
 	return &MaterialImagesServiceImpl{
-		repo: repo,
+		repo:       repo,
 		blobClient: blobClient,
-		env: env,
+		env:        env,
 	}
+}
+
+// Helper function to determine if current user can delete an image
+func (s *MaterialImagesServiceImpl) canUserDeleteImage(imageUserID string, currentUser *bootstrap.User) bool {
+	// If no current user is logged in, can't delete
+	if currentUser == nil {
+		return false
+	}
+	
+	// If user IDs match, user can delete their own image
+	return imageUserID == currentUser.UserID
 }
 
 // Image operations
@@ -89,19 +100,19 @@ func (s *MaterialImagesServiceImpl) UploadImage(user *bootstrap.User, niin strin
 	// Create database record
 	image := model.MaterialImages{
 		ID:               imageID,
-		Niin:            niin,
-		UserID:          user.UserID,
-		BlobName:        blobName,
-		BlobURL:         blobURL,
+		Niin:             niin,
+		UserID:           user.UserID,
+		BlobName:         blobName,
+		BlobURL:          blobURL,
 		OriginalFilename: filename,
-		FileSizeBytes:   int64(len(imageData)),
-		MimeType:        contentType,
-		UploadDate:      time.Now(),
-		IsActive:        true,
-		IsFlagged:       false,
-		FlagCount:       0,
-		DownvoteCount:   0,
-		UpvoteCount:     0,
+		FileSizeBytes:    int64(len(imageData)),
+		MimeType:         contentType,
+		UploadDate:       time.Now(),
+		IsActive:         true,
+		IsFlagged:        false,
+		FlagCount:        0,
+		DownvoteCount:    0,
+		UpvoteCount:      0,
 	}
 
 	createdImage, err := s.repo.CreateImage(user, image)
@@ -112,17 +123,23 @@ func (s *MaterialImagesServiceImpl) UploadImage(user *bootstrap.User, niin strin
 		return nil, fmt.Errorf("failed to save image record: %w", err)
 	}
 
-	// Update rate limit
+	// Update rate limit - this is critical for rate limiting to work
 	err = s.repo.UpdateUploadLimit(user.UserID, niin)
 	if err != nil {
-		// Log the error but don't fail the upload
-		fmt.Printf("Warning: failed to update upload limit: %v\n", err)
+		// Log the error and fail the upload since rate limiting won't work properly
+		fmt.Printf("ERROR: failed to update upload limit: %v\n", err)
+		// Try to clean up the created image record since we can't track rate limits
+		_ = s.repo.DeleteImage(createdImage.ID.String())
+		// Also try to clean up blob
+		ctx := context.Background()
+		_, _ = s.blobClient.DeleteBlob(ctx, ContainerName, blobName, nil)
+		return nil, fmt.Errorf("failed to update upload rate limit: %w", err)
 	}
 
 	return createdImage, nil
 }
 
-func (s *MaterialImagesServiceImpl) GetImagesByNIIN(niin string, page int, pageSize int) ([]response.MaterialImageResponse, int64, error) {
+func (s *MaterialImagesServiceImpl) GetImagesByNIIN(niin string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -151,26 +168,26 @@ func (s *MaterialImagesServiceImpl) GetImagesByNIIN(niin string, page int, pageS
 
 		responseImages[i] = response.MaterialImageResponse{
 			ID:               imgWithUser.ID.String(),
-			NIIN:            imgWithUser.Niin,
-			UserID:          imgWithUser.UserID,
-			Username:        username,
-			ImageData:       imageData,
+			NIIN:             imgWithUser.Niin,
+			UserID:           imgWithUser.UserID,
+			Username:         username,
+			ImageData:        imageData,
 			OriginalFilename: imgWithUser.OriginalFilename,
-			FileSizeBytes:   imgWithUser.FileSizeBytes,
-			MimeType:        imgWithUser.MimeType,
-			UploadDate:      imgWithUser.UploadDate,
-			UpvoteCount:     int(imgWithUser.UpvoteCount),
-			DownvoteCount:   int(imgWithUser.DownvoteCount),
-			NetVotes:        int(*imgWithUser.NetVotes),
-			IsFlagged:       imgWithUser.IsFlagged,
-			CanDelete:       false, // Will be set based on current user
+			FileSizeBytes:    imgWithUser.FileSizeBytes,
+			MimeType:         imgWithUser.MimeType,
+			UploadDate:       imgWithUser.UploadDate,
+			UpvoteCount:      int(imgWithUser.UpvoteCount),
+			DownvoteCount:    int(imgWithUser.DownvoteCount),
+			NetVotes:         int(*imgWithUser.NetVotes),
+			IsFlagged:        imgWithUser.IsFlagged,
+			CanDelete:        s.canUserDeleteImage(imgWithUser.UserID, currentUser),
 		}
 	}
 
 	return responseImages, totalCount, nil
 }
 
-func (s *MaterialImagesServiceImpl) GetImagesByUser(userID string, page int, pageSize int) ([]response.MaterialImageResponse, int64, error) {
+func (s *MaterialImagesServiceImpl) GetImagesByUser(userID string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
 	// Calculate offset
 	offset := (page - 1) * pageSize
 
@@ -199,26 +216,26 @@ func (s *MaterialImagesServiceImpl) GetImagesByUser(userID string, page int, pag
 
 		responseImages[i] = response.MaterialImageResponse{
 			ID:               imgWithUser.ID.String(),
-			NIIN:            imgWithUser.Niin,
-			UserID:          imgWithUser.UserID,
-			Username:        username,
-			ImageData:       imageData,
+			NIIN:             imgWithUser.Niin,
+			UserID:           imgWithUser.UserID,
+			Username:         username,
+			ImageData:        imageData,
 			OriginalFilename: imgWithUser.OriginalFilename,
-			FileSizeBytes:   imgWithUser.FileSizeBytes,
-			MimeType:        imgWithUser.MimeType,
-			UploadDate:      imgWithUser.UploadDate,
-			UpvoteCount:     int(imgWithUser.UpvoteCount),
-			DownvoteCount:   int(imgWithUser.DownvoteCount),
-			NetVotes:        int(*imgWithUser.NetVotes),
-			IsFlagged:       imgWithUser.IsFlagged,
-			CanDelete:       true, // User can delete their own images
+			FileSizeBytes:    imgWithUser.FileSizeBytes,
+			MimeType:         imgWithUser.MimeType,
+			UploadDate:       imgWithUser.UploadDate,
+			UpvoteCount:      int(imgWithUser.UpvoteCount),
+			DownvoteCount:    int(imgWithUser.DownvoteCount),
+			NetVotes:         int(*imgWithUser.NetVotes),
+			IsFlagged:        imgWithUser.IsFlagged,
+			CanDelete:        s.canUserDeleteImage(imgWithUser.UserID, currentUser),
 		}
 	}
 
 	return responseImages, totalCount, nil
 }
 
-func (s *MaterialImagesServiceImpl) GetImageByID(imageID string) (*response.MaterialImageResponse, error) {
+func (s *MaterialImagesServiceImpl) GetImageByID(imageID string, currentUser *bootstrap.User) (*response.MaterialImageResponse, error) {
 	// Get image from repository
 	image, err := s.repo.GetImageByID(imageID)
 	if err != nil {
@@ -246,19 +263,19 @@ func (s *MaterialImagesServiceImpl) GetImageByID(imageID string) (*response.Mate
 	// Convert to response format
 	responseImage := &response.MaterialImageResponse{
 		ID:               image.ID.String(),
-		NIIN:            image.Niin,
-		UserID:          image.UserID,
-		Username:        username,
-		ImageData:       imageData,
+		NIIN:             image.Niin,
+		UserID:           image.UserID,
+		Username:         username,
+		ImageData:        imageData,
 		OriginalFilename: image.OriginalFilename,
-		FileSizeBytes:   image.FileSizeBytes,
-		MimeType:        image.MimeType,
-		UploadDate:      image.UploadDate,
-		UpvoteCount:     int(image.UpvoteCount),
-		DownvoteCount:   int(image.DownvoteCount),
-		NetVotes:        int(*image.NetVotes),
-		IsFlagged:       image.IsFlagged,
-		CanDelete:       false,
+		FileSizeBytes:    image.FileSizeBytes,
+		MimeType:         image.MimeType,
+		UploadDate:       image.UploadDate,
+		UpvoteCount:      int(image.UpvoteCount),
+		DownvoteCount:    int(image.DownvoteCount),
+		NetVotes:         int(*image.NetVotes),
+		IsFlagged:        image.IsFlagged,
+		CanDelete:        s.canUserDeleteImage(image.UserID, currentUser),
 	}
 
 	return responseImage, nil
@@ -286,12 +303,14 @@ func (s *MaterialImagesServiceImpl) DeleteImage(user *bootstrap.User, imageID st
 		return fmt.Errorf("failed to delete image: %w", err)
 	}
 
-	// Optionally delete from blob storage (consider keeping for audit)
-	// ctx := context.Background()
-	// _, err = s.blobClient.DeleteBlob(ctx, ContainerName, image.BlobName, nil)
-	// if err != nil {
-	//     fmt.Printf("Warning: failed to delete blob: %v\n", err)
-	// }
+	// Delete from Azure blob storage to free up space
+	ctx := context.Background()
+	_, err = s.blobClient.DeleteBlob(ctx, ContainerName, image.BlobName, nil)
+	if err != nil {
+		// Log error but don't fail the entire operation since the database record is already marked as deleted
+		fmt.Printf("Warning: failed to delete blob %s from Azure storage: %v\n", image.BlobName, err)
+		// The database deletion still succeeded, so the image won't be visible to users
+	}
 
 	return nil
 }
@@ -362,11 +381,10 @@ func (s *MaterialImagesServiceImpl) RemoveVote(user *bootstrap.User, imageID str
 func (s *MaterialImagesServiceImpl) FlagImage(user *bootstrap.User, imageID string, reason string, description string) error {
 	// Validate reason
 	validReasons := map[string]bool{
-		"incorrect_item": true,
-		"inappropriate":  true,
-		"poor_quality":   true,
-		"duplicate":      true,
-		"other":         true,
+		"Incorrect Item": true,
+		"Inappropriate":  true,
+		"Poor Quality":   true,
+		"Other":          true,
 	}
 
 	if !validReasons[reason] {
@@ -427,7 +445,7 @@ func (s *MaterialImagesServiceImpl) GetImageFlags(imageID string) ([]model.Mater
 // downloadImageData downloads image data from blob storage
 func (s *MaterialImagesServiceImpl) downloadImageData(blobName string) ([]byte, error) {
 	ctx := context.Background()
-	
+
 	// Download the blob
 	response, err := s.blobClient.DownloadStream(ctx, ContainerName, blobName, nil)
 	if err != nil {

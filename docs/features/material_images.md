@@ -3,7 +3,7 @@ You will be creating a task list to implement a new feature.  This feature is to
 1.  Logged-in users will be allowed to upload images for a specific NIIN.
     1. The user must be logged in to upload an image.
     2. Only the user that uploaded the image is allowed to delete it from the container/database.
-    3. Users are only able to upload 1 image in a 24 hour period for a single niin, but they can upload images to multiple niins in a 24 hour period.
+    3. Users are only able to upload 1 image in a 1 hour period for a single niin, but they can upload images to multiple niins in a 1 hour period.
 
 2. All users are allowed to view the item images.
 

@@ -9,9 +9,9 @@ import (
 type MaterialImagesService interface {
 	// Image operations
 	UploadImage(user *bootstrap.User, niin string, imageData []byte, filename string) (*model.MaterialImages, error)
-	GetImagesByNIIN(niin string, page int, pageSize int) ([]response.MaterialImageResponse, int64, error)
-	GetImagesByUser(userID string, page int, pageSize int) ([]response.MaterialImageResponse, int64, error)
-	GetImageByID(imageID string) (*response.MaterialImageResponse, error)
+	GetImagesByNIIN(niin string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error)
+	GetImagesByUser(userID string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error)
+	GetImageByID(imageID string, currentUser *bootstrap.User) (*response.MaterialImageResponse, error)
 	DeleteImage(user *bootstrap.User, imageID string) error
 	
 	// Vote operations

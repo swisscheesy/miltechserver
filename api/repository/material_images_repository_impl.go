@@ -114,7 +114,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByNIIN(niin string, limit int, o
 	for rows.Next() {
 		var img MaterialImageWithUser
 		var username string
-		
+
 		err := rows.Scan(
 			&img.ID,
 			&img.Niin,
@@ -138,7 +138,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByNIIN(niin string, limit int, o
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan image row: %w", err)
 		}
-		
+
 		img.Username = &username
 		imagesWithUsers = append(imagesWithUsers, img)
 	}
@@ -153,7 +153,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByNIIN(niin string, limit int, o
 		FROM material_images mi 
 		WHERE mi.niin = $1 AND mi.is_active = true
 	`
-	
+
 	var count int64
 	err = r.db.QueryRow(countSQL, niin).Scan(&count)
 	if err != nil {
@@ -162,7 +162,6 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByNIIN(niin string, limit int, o
 
 	return imagesWithUsers, count, nil
 }
-
 
 func (r *MaterialImagesRepositoryImpl) GetImagesByUser(userID string, limit int, offset int) ([]MaterialImageWithUser, int64, error) {
 	// Use raw SQL query similar to GetShopMembers to ensure proper JOIN handling
@@ -203,7 +202,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByUser(userID string, limit int,
 	for rows.Next() {
 		var img MaterialImageWithUser
 		var username string
-		
+
 		err := rows.Scan(
 			&img.ID,
 			&img.Niin,
@@ -227,7 +226,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByUser(userID string, limit int,
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to scan image row: %w", err)
 		}
-		
+
 		img.Username = &username
 		imagesWithUsers = append(imagesWithUsers, img)
 	}
@@ -242,7 +241,7 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByUser(userID string, limit int,
 		FROM material_images mi 
 		WHERE mi.user_id = $1 AND mi.is_active = true
 	`
-	
+
 	var count int64
 	err = r.db.QueryRow(countSQL, userID).Scan(&count)
 	if err != nil {
@@ -251,7 +250,6 @@ func (r *MaterialImagesRepositoryImpl) GetImagesByUser(userID string, limit int,
 
 	return imagesWithUsers, count, nil
 }
-
 
 func (r *MaterialImagesRepositoryImpl) UpdateImageFlags(imageID string, flagCount int, isFlagged bool) error {
 	stmt := MaterialImages.UPDATE(
@@ -453,8 +451,8 @@ func (r *MaterialImagesRepositoryImpl) CreateFlag(flag model.MaterialImagesFlags
 		return fmt.Errorf("failed to get flag count: %w", err)
 	}
 
-	// Auto-flag if threshold exceeded (5 flags)
-	isFlagged := count.Count >= 5
+	// Flag image immediately when any flag is created
+	isFlagged := count.Count >= 1
 
 	err = r.UpdateImageFlags(flag.ImageID.String(), int(count.Count), isFlagged)
 	if err != nil {
@@ -506,9 +504,11 @@ func (r *MaterialImagesRepositoryImpl) CheckUploadLimit(userID string, niin stri
 		return false, nil, fmt.Errorf("failed to check upload limit: %w", err)
 	}
 
-	// Check if 24 hours have passed
-	nextAllowedTime := limit.LastUploadTime.Add(24 * time.Hour)
-	if time.Now().After(nextAllowedTime) {
+	// Check if 1 hour has passed - ensure we use UTC for consistent comparison
+	nextAllowedTime := limit.LastUploadTime.Add(1 * time.Hour)
+	now := time.Now().UTC()  // Convert to UTC for consistent comparison
+	
+	if now.After(nextAllowedTime) {
 		return true, nil, nil
 	}
 
@@ -516,6 +516,8 @@ func (r *MaterialImagesRepositoryImpl) CheckUploadLimit(userID string, niin stri
 }
 
 func (r *MaterialImagesRepositoryImpl) UpdateUploadLimit(userID string, niin string) error {
+	now := time.Now().UTC()  // Use UTC consistently
+	
 	stmt := MaterialImagesUploadLimits.INSERT(
 		MaterialImagesUploadLimits.UserID,
 		MaterialImagesUploadLimits.Niin,
@@ -524,14 +526,14 @@ func (r *MaterialImagesRepositoryImpl) UpdateUploadLimit(userID string, niin str
 	).VALUES(
 		userID,
 		niin,
-		TimestampT(time.Now()),
+		TimestampT(now),
 		1,
 	).ON_CONFLICT(
 		MaterialImagesUploadLimits.UserID,
 		MaterialImagesUploadLimits.Niin,
 	).DO_UPDATE(
 		SET(
-			MaterialImagesUploadLimits.LastUploadTime.SET(TimestampT(time.Now())),
+			MaterialImagesUploadLimits.LastUploadTime.SET(TimestampT(now)),
 			MaterialImagesUploadLimits.UploadCount.SET(
 				MaterialImagesUploadLimits.UploadCount.ADD(Int(1)),
 			),

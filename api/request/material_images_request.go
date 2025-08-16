@@ -9,7 +9,8 @@ type VoteImageRequest struct {
 }
 
 type FlagImageRequest struct {
-	Reason      string `json:"reason" binding:"required,oneof=incorrect_item inappropriate poor_quality duplicate other"`
+	//Reason      string `json:"reason" binding:"required,oneof=incorrect_item inappropriate poor_quality duplicate other"`
+	Reason      string `json:"reason" binding:"required"`
 	Description string `json:"description" binding:"max=500"`
 }
 

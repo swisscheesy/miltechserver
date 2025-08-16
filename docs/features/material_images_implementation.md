@@ -4,7 +4,7 @@
 This document provides a comprehensive implementation plan for the Material Images feature, allowing logged-in users to upload, view, and manage images for specific NIINs (National Item Identification Numbers). The images will be stored in Azure Blob Storage container 'material-images' with metadata tracked in PostgreSQL.
 
 ## Feature Requirements Summary
-1. **Upload**: Logged-in users can upload images for specific NIINs (rate-limited to 1 image per NIIN per 24 hours)
+1. **Upload**: Logged-in users can upload images for specific NIINs (rate-limited to 1 image per NIIN per 1 hour)
 2. **View**: All users can view material images
 3. **Delete**: Only the uploader can delete their own images
 4. **Vote/Flag**: Logged-in users can downvote/flag images for review
@@ -216,7 +216,7 @@ Key implementation details:
 2. Limit file size (e.g., 10MB max)
 3. Generate unique blob names using UUID + original extension
 4. Handle Azure Blob upload with proper error handling
-5. Implement rate limiting logic (24-hour window per NIIN per user)
+5. Implement rate limiting logic (1-hour window per NIIN per user)
 6. Update vote counts atomically
 7. Auto-flag images with high flag counts (e.g., >5 flags)
 
@@ -403,7 +403,7 @@ type BlobStorageServiceImpl struct {
    - Should exist in the NSN table (optional check)
 
 3. **Rate limiting:**
-   - 1 upload per NIIN per user per 24 hours
+   - 1 upload per NIIN per user per 1 hour
    - Consider global rate limits per user
 
 #### Task 8.2: Security Measures
@@ -455,7 +455,7 @@ Add to `.env`:
 ```
 BLOB_CONTAINER_MATERIAL_IMAGES=material-images
 MAX_IMAGE_SIZE_MB=10
-IMAGE_UPLOAD_RATE_LIMIT_HOURS=24
+IMAGE_UPLOAD_RATE_LIMIT_HOURS=1
 AUTO_FLAG_THRESHOLD=5
 ```
 

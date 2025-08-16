@@ -104,7 +104,7 @@ GET /api/v1/material-images/550e8400-e29b-41d4-a716-446655440000
 ### 3. Upload Image
 **POST** `/material-images/upload`
 
-Uploads a new image for a specific NIIN. Rate limited to 1 upload per NIIN per user per 24 hours.
+Uploads a new image for a specific NIIN. Rate limited to 1 upload per NIIN per user per 1 hour.
 
 **Content-Type:** `multipart/form-data`
 
@@ -334,7 +334,7 @@ curl -X GET /api/v1/material-images/550e8400-e29b-41d4-a716-446655440000/flags \
 ### Upload Limits
 - **File Size**: Maximum 10MB per image
 - **File Types**: JPEG, PNG, WebP only
-- **Rate Limiting**: 1 upload per NIIN per user per 24 hours
+- **Rate Limiting**: 1 upload per NIIN per user per 1 hour
 - **Storage**: Images stored in Azure Blob Storage container `material-images`
 
 ### Voting System

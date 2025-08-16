@@ -105,8 +105,14 @@ func (controller *MaterialImagesController) GetImagesByNIIN(c *gin.Context) {
 		return
 	}
 
+	// Get current user from context (may be nil if not authenticated)
+	var currentUser *bootstrap.User
+	if user := c.ShouldBindJSON(&currentUser); user == nil {
+		// User not logged in
+	}
+
 	// Get images
-	images, totalCount, err := controller.MaterialImagesService.GetImagesByNIIN(niin, req.Page, req.PageSize)
+	images, totalCount, err := controller.MaterialImagesService.GetImagesByNIIN(niin, req.Page, req.PageSize, currentUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve images"})
 		return
@@ -135,8 +141,14 @@ func (controller *MaterialImagesController) GetImagesByUser(c *gin.Context) {
 		return
 	}
 
+	// Get current user from context (may be nil if not authenticated)
+	var currentUser *bootstrap.User
+	if user, exists := c.Get("user"); exists {
+		currentUser = user.(*bootstrap.User)
+	}
+
 	// Get images
-	images, totalCount, err := controller.MaterialImagesService.GetImagesByUser(userID, req.Page, req.PageSize)
+	images, totalCount, err := controller.MaterialImagesService.GetImagesByUser(userID, req.Page, req.PageSize, currentUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve images"})
 		return
@@ -158,8 +170,14 @@ func (controller *MaterialImagesController) GetImagesByUser(c *gin.Context) {
 func (controller *MaterialImagesController) GetImageByID(c *gin.Context) {
 	imageID := c.Param("image_id")
 
+	// Get current user from context (may be nil if not authenticated)
+	var currentUser *bootstrap.User
+	if user, exists := c.Get("user"); exists {
+		currentUser = user.(*bootstrap.User)
+	}
+
 	// Get image
-	image, err := controller.MaterialImagesService.GetImageByID(imageID)
+	image, err := controller.MaterialImagesService.GetImageByID(imageID, currentUser)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
 		return
@@ -221,7 +239,7 @@ func (controller *MaterialImagesController) VoteOnImage(c *gin.Context) {
 	}
 
 	// Get updated image to return current vote counts
-	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID)
+	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID, currentUser)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Vote recorded successfully"})
 		return
@@ -256,7 +274,7 @@ func (controller *MaterialImagesController) RemoveVote(c *gin.Context) {
 	}
 
 	// Get updated image to return current vote counts
-	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID)
+	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID, currentUser)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Vote removed successfully"})
 		return
@@ -302,7 +320,7 @@ func (controller *MaterialImagesController) FlagImage(c *gin.Context) {
 	}
 
 	// Get updated image to return current flag status
-	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID)
+	updatedImage, err := controller.MaterialImagesService.GetImageByID(imageID, currentUser)
 	var flagCount int
 	var isFlagged bool
 	if err == nil {
