@@ -20,6 +20,19 @@ type EquipmentServicesRepositoryImpl struct {
 	Db *sql.DB
 }
 
+// Result structs for single-column queries
+type ShopIDResult struct {
+	ShopID string `alias:"shop_vehicle.shop_id"`
+}
+
+type ListShopIDResult struct {
+	ShopID string `alias:"shop_lists.shop_id"`
+}
+
+type UsernameResult struct {
+	Username string `alias:"users.username"`
+}
+
 func NewEquipmentServicesRepositoryImpl(db *sql.DB) *EquipmentServicesRepositoryImpl {
 	return &EquipmentServicesRepositoryImpl{Db: db}
 }
@@ -31,20 +44,22 @@ func (repo *EquipmentServicesRepositoryImpl) CreateEquipmentService(user *bootst
 	if err != nil {
 		return nil, fmt.Errorf("equipment access validation failed: %w", err)
 	}
-	
-	// Validate list belongs to same shop
-	listShopID, err := repo.ValidateListAccess(user, service.ListID)  
-	if err != nil {
-		return nil, fmt.Errorf("list access validation failed: %w", err)
+
+	// Validate list belongs to same shop (only if ListID is provided)
+	if service.ListID != "" {
+		listShopID, err := repo.ValidateListAccess(user, service.ListID)
+		if err != nil {
+			return nil, fmt.Errorf("list access validation failed: %w", err)
+		}
+
+		if shopID != listShopID {
+			return nil, errors.New("equipment and list must belong to the same shop")
+		}
 	}
-	
-	if shopID != listShopID {
-		return nil, errors.New("equipment and list must belong to the same shop")
-	}
-	
+
 	// Set the shop ID
 	service.ShopID = shopID
-	
+
 	// Use go-jet for type-safe insert
 	stmt := EquipmentServices.INSERT(
 		EquipmentServices.ID,
@@ -61,13 +76,13 @@ func (repo *EquipmentServicesRepositoryImpl) CreateEquipmentService(user *bootst
 		EquipmentServices.ServiceHours,
 		EquipmentServices.CompletionDate,
 	).MODEL(service).RETURNING(EquipmentServices.AllColumns)
-	
+
 	var createdService model.EquipmentServices
 	err = stmt.Query(repo.Db, &createdService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create equipment service: %w", err)
 	}
-	
+
 	slog.Info("Equipment service created", "service_id", service.ID, "created_by", user.UserID)
 	return &createdService, nil
 }
@@ -76,18 +91,18 @@ func (repo *EquipmentServicesRepositoryImpl) CreateEquipmentService(user *bootst
 func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServiceByID(user *bootstrap.User, serviceID string) (*model.EquipmentServices, error) {
 	stmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(
 		EquipmentServices.ID.EQ(String(serviceID)).
-		AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			AND(ShopMembers.UserID.EQ(String(user.UserID))),
 	)
-	
+
 	var service model.EquipmentServices
 	err := stmt.Query(repo.Db, &service)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get equipment service: %w", err)
 	}
-	
+
 	return &service, nil
 }
 
@@ -107,9 +122,9 @@ func (repo *EquipmentServicesRepositoryImpl) UpdateEquipmentService(user *bootst
 		EquipmentServices.UpdatedAt,
 	).MODEL(service).WHERE(
 		EquipmentServices.ID.EQ(String(service.ID)).
-		AND(EquipmentServices.ShopID.IN(
-			SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
-		)),
+			AND(EquipmentServices.ShopID.IN(
+				SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
+			)),
 	).RETURNING(EquipmentServices.AllColumns)
 
 	var updatedService model.EquipmentServices
@@ -126,9 +141,9 @@ func (repo *EquipmentServicesRepositoryImpl) UpdateEquipmentService(user *bootst
 func (repo *EquipmentServicesRepositoryImpl) DeleteEquipmentService(user *bootstrap.User, serviceID string) error {
 	stmt := EquipmentServices.DELETE().WHERE(
 		EquipmentServices.ID.EQ(String(serviceID)).
-		AND(EquipmentServices.ShopID.IN(
-			SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
-		)),
+			AND(EquipmentServices.ShopID.IN(
+				SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
+			)),
 	)
 
 	result, err := stmt.Exec(repo.Db)
@@ -157,11 +172,11 @@ func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServices(user *bootstra
 	if filters.EquipmentID != nil {
 		conditions = append(conditions, EquipmentServices.EquipmentID.EQ(String(*filters.EquipmentID)))
 	}
-	
+
 	if filters.ServiceType != nil {
 		conditions = append(conditions, EquipmentServices.ServiceType.LIKE(String("%"+*filters.ServiceType+"%")))
 	}
-	
+
 	if filters.IsCompleted != nil {
 		conditions = append(conditions, EquipmentServices.IsCompleted.EQ(Bool(*filters.IsCompleted)))
 	}
@@ -185,30 +200,30 @@ func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServices(user *bootstra
 	// Count query for pagination
 	countStmt := SELECT(COUNT(STAR)).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...))
-	
+
 	var totalCount int64
 	err := countStmt.Query(repo.Db, &totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count services: %w", err)
 	}
-	
+
 	// Data query with pagination
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...)).
-	ORDER_BY(EquipmentServices.CreatedAt.DESC()).
-	LIMIT(int64(filters.Limit)).
-	OFFSET(int64(filters.Offset))
-	
+		ORDER_BY(EquipmentServices.CreatedAt.DESC()).
+		LIMIT(int64(filters.Limit)).
+		OFFSET(int64(filters.Offset))
+
 	var services []model.EquipmentServices
 	err = dataStmt.Query(repo.Db, &services)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get services: %w", err)
 	}
-	
+
 	return services, totalCount, nil
 }
 
@@ -229,9 +244,9 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesByEquipment(user *bootst
 	// Count query
 	countStmt := SELECT(COUNT(STAR)).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...))
-	
+
 	var totalCount int64
 	err := countStmt.Query(repo.Db, &totalCount)
 	if err != nil {
@@ -241,12 +256,12 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesByEquipment(user *bootst
 	// Data query
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...)).
-	ORDER_BY(EquipmentServices.ServiceDate.DESC()).
-	LIMIT(int64(limit)).
-	OFFSET(int64(offset))
-	
+		ORDER_BY(EquipmentServices.ServiceDate.DESC()).
+		LIMIT(int64(limit)).
+		OFFSET(int64(offset))
+
 	var services []model.EquipmentServices
 	err = dataStmt.Query(repo.Db, &services)
 	if err != nil {
@@ -272,9 +287,9 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesInDateRange(user *bootst
 
 	stmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...)).
-	ORDER_BY(EquipmentServices.ServiceDate.ASC())
+		ORDER_BY(EquipmentServices.ServiceDate.ASC())
 
 	var services []model.EquipmentServices
 	err := stmt.Query(repo.Db, &services)
@@ -294,31 +309,31 @@ func (repo *EquipmentServicesRepositoryImpl) GetOverdueServices(user *bootstrap.
 		EquipmentServices.IsCompleted.EQ(Bool(false)),
 		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
-	
+
 	if equipmentID != nil {
 		conditions = append(conditions, EquipmentServices.EquipmentID.EQ(String(*equipmentID)))
 	}
-	
+
 	stmt := SELECT(
 		EquipmentServices.AllColumns,
 		Raw("EXTRACT(DAY FROM NOW() - service_date)").AS("days_overdue"),
 	).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...)).
-	ORDER_BY(EquipmentServices.ServiceDate.ASC()).
-	LIMIT(int64(limit))
-	
+		ORDER_BY(EquipmentServices.ServiceDate.ASC()).
+		LIMIT(int64(limit))
+
 	var results []struct {
 		model.EquipmentServices
 		DaysOverdue int `sql:"days_overdue"`
 	}
-	
+
 	err := stmt.Query(repo.Db, &results)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get overdue services: %w", err)
 	}
-	
+
 	overdueServices := make([]response.OverdueServiceResponse, len(results))
 	for i, result := range results {
 		// Get current username dynamically for each service
@@ -326,7 +341,7 @@ func (repo *EquipmentServicesRepositoryImpl) GetOverdueServices(user *bootstrap.
 		if err != nil {
 			username = "Unknown User"
 		}
-		
+
 		overdueServices[i] = response.OverdueServiceResponse{
 			EquipmentServiceResponse: response.EquipmentServiceResponse{
 				ID:                result.ID,
@@ -347,14 +362,14 @@ func (repo *EquipmentServicesRepositoryImpl) GetOverdueServices(user *bootstrap.
 			DaysOverdue: result.DaysOverdue,
 		}
 	}
-	
+
 	return overdueServices, nil
 }
 
 // GetServicesDueSoon retrieves services that are due soon
 func (repo *EquipmentServicesRepositoryImpl) GetServicesDueSoon(user *bootstrap.User, shopID string, daysAhead int, equipmentID *string, limit int) ([]response.DueSoonServiceResponse, error) {
 	futureDate := time.Now().AddDate(0, 0, daysAhead)
-	
+
 	conditions := []postgres.BoolExpression{
 		EquipmentServices.ShopID.EQ(String(shopID)),
 		EquipmentServices.ServiceDate.IS_NOT_NULL(),
@@ -363,31 +378,31 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesDueSoon(user *bootstrap.
 		EquipmentServices.IsCompleted.EQ(Bool(false)),
 		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
-	
+
 	if equipmentID != nil {
 		conditions = append(conditions, EquipmentServices.EquipmentID.EQ(String(*equipmentID)))
 	}
-	
+
 	stmt := SELECT(
 		EquipmentServices.AllColumns,
 		Raw("EXTRACT(DAY FROM service_date - NOW())").AS("days_until_due"),
 	).FROM(
 		EquipmentServices.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...)).
-	ORDER_BY(EquipmentServices.ServiceDate.ASC()).
-	LIMIT(int64(limit))
-	
+		ORDER_BY(EquipmentServices.ServiceDate.ASC()).
+		LIMIT(int64(limit))
+
 	var results []struct {
 		model.EquipmentServices
 		DaysUntilDue int `sql:"days_until_due"`
 	}
-	
+
 	err := stmt.Query(repo.Db, &results)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get due soon services: %w", err)
 	}
-	
+
 	dueSoonServices := make([]response.DueSoonServiceResponse, len(results))
 	for i, result := range results {
 		// Get current username dynamically for each service
@@ -395,7 +410,7 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesDueSoon(user *bootstrap.
 		if err != nil {
 			username = "Unknown User"
 		}
-		
+
 		dueSoonServices[i] = response.DueSoonServiceResponse{
 			EquipmentServiceResponse: response.EquipmentServiceResponse{
 				ID:                result.ID,
@@ -416,19 +431,19 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesDueSoon(user *bootstrap.
 			DaysUntilDue: result.DaysUntilDue,
 		}
 	}
-	
+
 	return dueSoonServices, nil
 }
 
 // CompleteEquipmentService marks a service as completed with optional completion date
 func (repo *EquipmentServicesRepositoryImpl) CompleteEquipmentService(user *bootstrap.User, serviceID string, completionDate *time.Time) (*model.EquipmentServices, error) {
 	now := time.Now()
-	
+
 	// Use current time if no completion date provided
 	if completionDate == nil {
 		completionDate = &now
 	}
-	
+
 	stmt := EquipmentServices.UPDATE(
 		EquipmentServices.IsCompleted,
 		EquipmentServices.CompletionDate,
@@ -439,9 +454,9 @@ func (repo *EquipmentServicesRepositoryImpl) CompleteEquipmentService(user *boot
 		EquipmentServices.UpdatedAt.SET(TimestampzT(now)),
 	).WHERE(
 		EquipmentServices.ID.EQ(String(serviceID)).
-		AND(EquipmentServices.ShopID.IN(
-			SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
-		)),
+			AND(EquipmentServices.ShopID.IN(
+				SELECT(ShopMembers.ShopID).FROM(ShopMembers).WHERE(ShopMembers.UserID.EQ(String(user.UserID))),
+			)),
 	).RETURNING(EquipmentServices.AllColumns)
 
 	var completedService model.EquipmentServices
@@ -458,15 +473,15 @@ func (repo *EquipmentServicesRepositoryImpl) CompleteEquipmentService(user *boot
 func (repo *EquipmentServicesRepositoryImpl) ValidateServiceOwnership(user *bootstrap.User, serviceID string) (bool, error) {
 	stmt := SELECT(COUNT(STAR)).FROM(EquipmentServices).WHERE(
 		EquipmentServices.ID.EQ(String(serviceID)).
-		AND(EquipmentServices.CreatedBy.EQ(String(user.UserID))),
+			AND(EquipmentServices.CreatedBy.EQ(String(user.UserID))),
 	)
-	
+
 	var count int64
 	err := stmt.Query(repo.Db, &count)
 	if err != nil {
 		return false, fmt.Errorf("failed to validate service ownership: %w", err)
 	}
-	
+
 	return count > 0, nil
 }
 
@@ -474,54 +489,54 @@ func (repo *EquipmentServicesRepositoryImpl) ValidateServiceOwnership(user *boot
 func (repo *EquipmentServicesRepositoryImpl) ValidateEquipmentAccess(user *bootstrap.User, equipmentID string) (string, error) {
 	stmt := SELECT(ShopVehicle.ShopID).FROM(
 		ShopVehicle.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)),
 	).WHERE(
 		ShopVehicle.ID.EQ(String(equipmentID)).
-		AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			AND(ShopMembers.UserID.EQ(String(user.UserID))),
 	)
-	
-	var shopID string
-	err := stmt.Query(repo.Db, &shopID)
+
+	var result ShopIDResult
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		return "", fmt.Errorf("equipment not found or access denied: %w", err)
 	}
-	
-	return shopID, nil
+
+	return result.ShopID, nil
 }
 
 // ValidateListAccess checks if the user has access to the list and returns shopID
 func (repo *EquipmentServicesRepositoryImpl) ValidateListAccess(user *bootstrap.User, listID string) (string, error) {
 	stmt := SELECT(ShopLists.ShopID).FROM(
 		ShopLists.
-		INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopLists.ShopID)),
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopLists.ShopID)),
 	).WHERE(
 		ShopLists.ID.EQ(String(listID)).
-		AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			AND(ShopMembers.UserID.EQ(String(user.UserID))),
 	)
-	
-	var shopID string
-	err := stmt.Query(repo.Db, &shopID)
+
+	var result ListShopIDResult
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		return "", fmt.Errorf("list not found or access denied: %w", err)
 	}
-	
-	return shopID, nil
+
+	return result.ShopID, nil
 }
 
 // GetUsernameByUserID dynamically fetches username from users table
 func (repo *EquipmentServicesRepositoryImpl) GetUsernameByUserID(userID string) (string, error) {
 	stmt := SELECT(Users.Username).FROM(Users).WHERE(Users.UID.EQ(String(userID)))
-	
-	var username string
-	err := stmt.Query(repo.Db, &username)
+
+	var result UsernameResult
+	err := stmt.Query(repo.Db, &result)
 	if err != nil {
 		slog.Warn("Failed to get username for user", "user_id", userID, "error", err)
 		return "Unknown User", nil // Return fallback instead of error
 	}
-	
-	if username == "" {
+
+	if result.Username == "" {
 		return "Unknown User", nil
 	}
-	
-	return username, nil
+
+	return result.Username, nil
 }
