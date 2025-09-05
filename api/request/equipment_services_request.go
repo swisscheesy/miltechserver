@@ -20,6 +20,7 @@ type UpdateEquipmentServiceRequest struct {
 	ServiceID      string     `json:"service_id" binding:"required"`
 	Description    string     `json:"description" binding:"required,min=1,max=500"`
 	ServiceType    string     `json:"service_type" binding:"required"`
+	ListID         string     `json:"list_id"`
 	IsCompleted    bool       `json:"is_completed"`
 	ServiceDate    *time.Time `json:"service_date"`
 	ServiceHours   *int32     `json:"service_hours" binding:"omitempty,min=0"`

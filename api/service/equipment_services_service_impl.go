@@ -107,15 +107,7 @@ func (service *EquipmentServicesServiceImpl) GetEquipmentServiceByID(user *boots
 		return nil, errors.New("unauthorized user")
 	}
 
-	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify shop membership: %w", err)
-	}
-	if !isMember {
-		return nil, errors.New("access denied: user is not a member of this shop")
-	}
-
+	// Repository layer now handles shop membership validation
 	equipmentService, err := service.EquipmentServicesRepository.GetEquipmentServiceByID(user, serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get equipment service: %w", err)
@@ -173,9 +165,11 @@ func (service *EquipmentServicesServiceImpl) UpdateEquipmentService(user *bootst
 		ID:           request.ServiceID,
 		Description:  request.Description,
 		ServiceType:  request.ServiceType,
+		ListID:       request.ListID,
 		IsCompleted:  request.IsCompleted,
 		ServiceDate:  request.ServiceDate,
 		ServiceHours: request.ServiceHours,
+		UpdatedAt:    now,
 	}
 
 	// Handle completion_date logic: auto-set when is_completed is true, clear when false
@@ -218,7 +212,6 @@ func (service *EquipmentServicesServiceImpl) UpdateEquipmentService(user *bootst
 		CompletionDate:    updatedService.CompletionDate,
 	}
 
-	slog.Info("Equipment service updated successfully", "service_id", request.ServiceID, "user_id", user.UserID)
 	return response, nil
 }
 
@@ -228,16 +221,7 @@ func (service *EquipmentServicesServiceImpl) DeleteEquipmentService(user *bootst
 		return errors.New("unauthorized user")
 	}
 
-	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
-	if err != nil {
-		return fmt.Errorf("failed to verify shop membership: %w", err)
-	}
-	if !isMember {
-		return errors.New("access denied: user is not a member of this shop")
-	}
-
-	// Check ownership or admin permissions
+	// Check ownership or admin permissions (business logic layer)
 	canDelete, err := service.canUserDeleteService(user, shopID, serviceID)
 	if err != nil {
 		return fmt.Errorf("failed to verify delete permissions: %w", err)
@@ -246,6 +230,7 @@ func (service *EquipmentServicesServiceImpl) DeleteEquipmentService(user *bootst
 		return errors.New("access denied: only service creators or shop admins can delete services")
 	}
 
+	// Repository layer handles shop membership validation
 	err = service.EquipmentServicesRepository.DeleteEquipmentService(user, serviceID)
 	if err != nil {
 		slog.Error("Failed to delete equipment service", "error", err, "service_id", serviceID, "user_id", user.UserID)

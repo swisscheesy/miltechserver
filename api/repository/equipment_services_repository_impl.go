@@ -33,6 +33,10 @@ type UsernameResult struct {
 	Username string `alias:"users.username"`
 }
 
+type CountResult struct {
+	Count int64 `alias:"count"`
+}
+
 func NewEquipmentServicesRepositoryImpl(db *sql.DB) *EquipmentServicesRepositoryImpl {
 	return &EquipmentServicesRepositoryImpl{Db: db}
 }
@@ -89,16 +93,30 @@ func (repo *EquipmentServicesRepositoryImpl) CreateEquipmentService(user *bootst
 
 // GetEquipmentServiceByID retrieves a specific equipment service by ID
 func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServiceByID(user *bootstrap.User, serviceID string) (*model.EquipmentServices, error) {
-	stmt := SELECT(EquipmentServices.AllColumns).FROM(
-		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
-	).WHERE(
-		EquipmentServices.ID.EQ(String(serviceID)).
-			AND(ShopMembers.UserID.EQ(String(user.UserID))),
+	// First validate that the service exists and get its shop ID
+	shopStmt := SELECT(EquipmentServices.ShopID).FROM(EquipmentServices).WHERE(
+		EquipmentServices.ID.EQ(String(serviceID)),
+	)
+
+	var shopResult ShopIDResult
+	err := shopStmt.Query(repo.Db, &shopResult)
+	if err != nil {
+		return nil, fmt.Errorf("service not found: %w", err)
+	}
+
+	// Validate user has access to this shop
+	_, err = repo.ValidateServiceAccess(user, shopResult.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("access denied: %w", err)
+	}
+
+	// Now fetch the full service details
+	stmt := SELECT(EquipmentServices.AllColumns).FROM(EquipmentServices).WHERE(
+		EquipmentServices.ID.EQ(String(serviceID)),
 	)
 
 	var service model.EquipmentServices
-	err := stmt.Query(repo.Db, &service)
+	err = stmt.Query(repo.Db, &service)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get equipment service: %w", err)
 	}
@@ -115,6 +133,7 @@ func (repo *EquipmentServicesRepositoryImpl) UpdateEquipmentService(user *bootst
 	stmt := EquipmentServices.UPDATE(
 		EquipmentServices.Description,
 		EquipmentServices.ServiceType,
+		EquipmentServices.ListID,
 		EquipmentServices.IsCompleted,
 		EquipmentServices.ServiceDate,
 		EquipmentServices.ServiceHours,
@@ -165,7 +184,6 @@ func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServices(user *bootstra
 	// Build conditions based on filters
 	conditions := []postgres.BoolExpression{
 		EquipmentServices.ShopID.EQ(String(shopID)),
-		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
 
 	// Add optional filters
@@ -203,11 +221,12 @@ func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServices(user *bootstra
 			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...))
 
-	var totalCount int64
-	err := countStmt.Query(repo.Db, &totalCount)
+	var countResult CountResult
+	err := countStmt.Query(repo.Db, &countResult)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count services: %w", err)
 	}
+	totalCount := countResult.Count
 
 	// Data query with pagination
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
@@ -231,7 +250,6 @@ func (repo *EquipmentServicesRepositoryImpl) GetEquipmentServices(user *bootstra
 func (repo *EquipmentServicesRepositoryImpl) GetServicesByEquipment(user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) ([]model.EquipmentServices, int64, error) {
 	conditions := []postgres.BoolExpression{
 		EquipmentServices.EquipmentID.EQ(String(equipmentID)),
-		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
 
 	if startDate != nil {
@@ -247,11 +265,12 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesByEquipment(user *bootst
 			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
 	).WHERE(postgres.AND(conditions...))
 
-	var totalCount int64
-	err := countStmt.Query(repo.Db, &totalCount)
+	var countResult CountResult
+	err := countStmt.Query(repo.Db, &countResult)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count services: %w", err)
 	}
+	totalCount := countResult.Count
 
 	// Data query
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
@@ -278,7 +297,6 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesInDateRange(user *bootst
 		EquipmentServices.ServiceDate.IS_NOT_NULL(),
 		EquipmentServices.ServiceDate.GT_EQ(TimestampzT(startDate)),
 		EquipmentServices.ServiceDate.LT_EQ(TimestampzT(endDate)),
-		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
 
 	if equipmentID != nil {
@@ -307,7 +325,6 @@ func (repo *EquipmentServicesRepositoryImpl) GetOverdueServices(user *bootstrap.
 		EquipmentServices.ServiceDate.IS_NOT_NULL(),
 		postgres.RawBool("service_date < NOW()"),
 		EquipmentServices.IsCompleted.EQ(Bool(false)),
-		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
 
 	if equipmentID != nil {
@@ -376,7 +393,6 @@ func (repo *EquipmentServicesRepositoryImpl) GetServicesDueSoon(user *bootstrap.
 		postgres.RawBool("service_date > NOW()"),
 		EquipmentServices.ServiceDate.LT_EQ(TimestampzT(futureDate)),
 		EquipmentServices.IsCompleted.EQ(Bool(false)),
-		ShopMembers.UserID.EQ(String(user.UserID)),
 	}
 
 	if equipmentID != nil {
@@ -476,13 +492,13 @@ func (repo *EquipmentServicesRepositoryImpl) ValidateServiceOwnership(user *boot
 			AND(EquipmentServices.CreatedBy.EQ(String(user.UserID))),
 	)
 
-	var count int64
-	err := stmt.Query(repo.Db, &count)
+	var countResult CountResult
+	err := stmt.Query(repo.Db, &countResult)
 	if err != nil {
 		return false, fmt.Errorf("failed to validate service ownership: %w", err)
 	}
 
-	return count > 0, nil
+	return countResult.Count > 0, nil
 }
 
 // ValidateEquipmentAccess checks if the user has access to the equipment and returns shopID
@@ -521,6 +537,22 @@ func (repo *EquipmentServicesRepositoryImpl) ValidateListAccess(user *bootstrap.
 	}
 
 	return result.ShopID, nil
+}
+
+// ValidateServiceAccess checks if user has access to a shop (shop membership validation)
+func (repo *EquipmentServicesRepositoryImpl) ValidateServiceAccess(user *bootstrap.User, shopID string) (bool, error) {
+	stmt := SELECT(COUNT(STAR)).FROM(ShopMembers).WHERE(
+		ShopMembers.ShopID.EQ(String(shopID)).
+			AND(ShopMembers.UserID.EQ(String(user.UserID))),
+	)
+
+	var countResult CountResult
+	err := stmt.Query(repo.Db, &countResult)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate shop access: %w", err)
+	}
+
+	return countResult.Count > 0, nil
 }
 
 // GetUsernameByUserID dynamically fetches username from users table

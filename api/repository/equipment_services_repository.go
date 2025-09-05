@@ -25,6 +25,7 @@ type EquipmentServicesRepository interface {
 	
 	// Validation Helpers
 	ValidateServiceOwnership(user *bootstrap.User, serviceID string) (bool, error)
+	ValidateServiceAccess(user *bootstrap.User, shopID string) (bool, error)         // Validates shop membership
 	ValidateEquipmentAccess(user *bootstrap.User, equipmentID string) (string, error) // Returns shopID
 	ValidateListAccess(user *bootstrap.User, listID string) (string, error)          // Returns shopID
 	
