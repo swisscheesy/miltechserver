@@ -49,15 +49,17 @@ type CreateShopVehicleRequest struct {
 }
 
 type UpdateShopVehicleRequest struct {
-	VehicleID string `json:"vehicle_id" binding:"required"`
-	Admin     string `json:"admin" binding:"required"`
-	Niin      string `json:"niin"`
-	Model     string `json:"model"`
-	Serial    string `json:"serial"`
-	Uoc       string `json:"uoc"`
-	Mileage   int32  `json:"mileage"`
-	Hours     int32  `json:"hours"`
-	Comment   string `json:"comment"`
+	VehicleID      string `json:"vehicle_id" binding:"required"`
+	Admin          string `json:"admin" binding:"required"`
+	Niin           string `json:"niin"`
+	Model          string `json:"model"`
+	Serial         string `json:"serial"`
+	Uoc            string `json:"uoc"`
+	Mileage        int32  `json:"mileage"`
+	Hours          int32  `json:"hours"`
+	Comment        string `json:"comment"`
+	TrackedMileage *int32 `json:"tracked_mileage"`
+	TrackedHours   *int32 `json:"tracked_hours"`
 }
 
 type CreateVehicleNotificationRequest struct {
@@ -112,17 +114,21 @@ type UpdateShopListRequest struct {
 // Shop List Item Operations
 
 type AddListItemRequest struct {
-	ListID       string `json:"list_id" binding:"required"`
-	Niin         string `json:"niin" binding:"required"`
-	Nomenclature string `json:"nomenclature" binding:"required"`
-	Quantity     int32  `json:"quantity" binding:"required"`
+	ListID        string  `json:"list_id" binding:"required"`
+	Niin          string  `json:"niin" binding:"required"`
+	Nomenclature  string  `json:"nomenclature" binding:"required"`
+	Quantity      int32   `json:"quantity" binding:"required"`
+	Nickname      *string `json:"nickname"`
+	UnitOfMeasure *string `json:"unit_of_measure"`
 }
 
 type UpdateListItemRequest struct {
-	ItemID       string `json:"item_id" binding:"required"`
-	Niin         string `json:"niin" binding:"required"`
-	Nomenclature string `json:"nomenclature" binding:"required"`
-	Quantity     int32  `json:"quantity" binding:"required"`
+	ItemID        string  `json:"item_id" binding:"required"`
+	Niin          string  `json:"niin" binding:"required"`
+	Nomenclature  string  `json:"nomenclature" binding:"required"`
+	Quantity      int32   `json:"quantity" binding:"required"`
+	Nickname      *string `json:"nickname"`
+	UnitOfMeasure *string `json:"unit_of_measure"`
 }
 
 type DeleteShopListRequest struct {

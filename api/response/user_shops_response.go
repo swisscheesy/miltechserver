@@ -47,6 +47,8 @@ type ShopListItemWithUsername struct {
 	AddedByUsername *string    `json:"added_by_username"`
 	CreatedAt       *time.Time `json:"created_at"`
 	UpdatedAt       *time.Time `json:"updated_at"`
+	Nickname        *string    `json:"nickname"`
+	UnitOfMeasure   *string    `json:"unit_of_measure"`
 }
 
 type PaginationMetadata struct {

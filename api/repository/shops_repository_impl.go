@@ -713,16 +713,8 @@ func (repo *ShopsRepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicl
 }
 
 func (repo *ShopsRepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) error {
-	stmt := ShopVehicle.UPDATE(
-		ShopVehicle.Model,
-		ShopVehicle.Serial,
-		ShopVehicle.Niin,
-		ShopVehicle.Uoc,
-		ShopVehicle.Mileage,
-		ShopVehicle.Hours,
-		ShopVehicle.Comment,
-		ShopVehicle.LastUpdated,
-	).SET(
+	// Build base SET clauses for non-nullable fields
+	setClauses := []postgres.ColumnAssigment{
 		ShopVehicle.Model.SET(String(vehicle.Model)),
 		ShopVehicle.Serial.SET(String(vehicle.Serial)),
 		ShopVehicle.Niin.SET(String(vehicle.Niin)),
@@ -731,7 +723,24 @@ func (repo *ShopsRepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle
 		ShopVehicle.Hours.SET(Int32(vehicle.Hours)),
 		ShopVehicle.Comment.SET(String(vehicle.Comment)),
 		ShopVehicle.LastUpdated.SET(TimestampzT(vehicle.LastUpdated)),
-	).WHERE(ShopVehicle.ID.EQ(String(vehicle.ID)))
+	}
+
+	// Add nullable fields conditionally
+	if vehicle.TrackedMileage != nil {
+		setClauses = append(setClauses, ShopVehicle.TrackedMileage.SET(Int32(*vehicle.TrackedMileage)))
+	}
+	
+	if vehicle.TrackedHours != nil {
+		setClauses = append(setClauses, ShopVehicle.TrackedHours.SET(Int32(*vehicle.TrackedHours)))
+	}
+
+	// Convert to interface{} slice for variadic function
+	setArgs := make([]interface{}, len(setClauses))
+	for i, clause := range setClauses {
+		setArgs[i] = clause
+	}
+
+	stmt := ShopVehicle.UPDATE().SET(setArgs[0], setArgs[1:]...).WHERE(ShopVehicle.ID.EQ(String(vehicle.ID)))
 
 	result, err := stmt.Exec(repo.Db)
 	if err != nil {
@@ -1237,6 +1246,8 @@ func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.Sh
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 	).MODEL(item)
 
 	_, err := stmt.Exec(repo.Db)
@@ -1254,6 +1265,8 @@ func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.Sh
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 		Users.Username.AS("added_by_username"),
 	).FROM(
 		ShopListItems.
@@ -1283,6 +1296,8 @@ func (repo *ShopsRepositoryImpl) AddListItem(user *bootstrap.User, item model.Sh
 		AddedByUsername: result.AddedByUsername,
 		CreatedAt:       &result.CreatedAt,
 		UpdatedAt:       &result.UpdatedAt,
+		Nickname:        result.Nickname,
+		UnitOfMeasure:   result.UnitOfMeasure,
 	}
 
 	return createdItemWithUsername, nil
@@ -1298,6 +1313,8 @@ func (repo *ShopsRepositoryImpl) GetListItems(user *bootstrap.User, listID strin
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 		Users.Username.AS("added_by_username"),
 	).FROM(
 		ShopListItems.
@@ -1329,6 +1346,8 @@ func (repo *ShopsRepositoryImpl) GetListItems(user *bootstrap.User, listID strin
 			AddedByUsername: r.AddedByUsername,
 			CreatedAt:       &r.CreatedAt,
 			UpdatedAt:       &r.UpdatedAt,
+			Nickname:        r.Nickname,
+			UnitOfMeasure:   r.UnitOfMeasure,
 		}
 	}
 
@@ -1358,6 +1377,8 @@ func (repo *ShopsRepositoryImpl) UpdateListItem(user *bootstrap.User, item model
 		ShopListItems.Nomenclature,
 		ShopListItems.Quantity,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 	).MODEL(item).
 		WHERE(ShopListItems.ID.EQ(String(item.ID)))
 
@@ -1413,6 +1434,8 @@ func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 	).MODELS(items)
 
 	_, err := stmt.Exec(repo.Db)
@@ -1435,6 +1458,8 @@ func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []
 		ShopListItems.AddedBy,
 		ShopListItems.CreatedAt,
 		ShopListItems.UpdatedAt,
+		ShopListItems.Nickname,
+		ShopListItems.UnitOfMeasure,
 		Users.Username.AS("added_by_username"),
 	).FROM(
 		ShopListItems.
@@ -1466,6 +1491,8 @@ func (repo *ShopsRepositoryImpl) AddListItemBatch(user *bootstrap.User, items []
 			AddedByUsername: r.AddedByUsername,
 			CreatedAt:       &r.CreatedAt,
 			UpdatedAt:       &r.UpdatedAt,
+			Nickname:        r.Nickname,
+			UnitOfMeasure:   r.UnitOfMeasure,
 		}
 	}
 

@@ -753,15 +753,17 @@ func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
 	}
 
 	vehicle := model.ShopVehicle{
-		ID:      req.VehicleID,
-		Admin:   req.Admin,
-		Niin:    req.Niin,
-		Model:   req.Model,
-		Serial:  req.Serial,
-		Uoc:     req.Uoc,
-		Mileage: req.Mileage,
-		Hours:   req.Hours,
-		Comment: req.Comment,
+		ID:             req.VehicleID,
+		Admin:          req.Admin,
+		Niin:           req.Niin,
+		Model:          req.Model,
+		Serial:         req.Serial,
+		Uoc:            req.Uoc,
+		Mileage:        req.Mileage,
+		Hours:          req.Hours,
+		Comment:        req.Comment,
+		TrackedMileage: req.TrackedMileage,
+		TrackedHours:   req.TrackedHours,
 	}
 
 	err := controller.ShopsService.UpdateShopVehicle(user, vehicle)
@@ -1395,10 +1397,12 @@ func (controller *ShopsController) AddListItem(c *gin.Context) {
 	}
 
 	item := model.ShopListItems{
-		ListID:       req.ListID,
-		Niin:         req.Niin,
-		Nomenclature: req.Nomenclature,
-		Quantity:     req.Quantity,
+		ListID:        req.ListID,
+		Niin:          req.Niin,
+		Nomenclature:  req.Nomenclature,
+		Quantity:      req.Quantity,
+		Nickname:      req.Nickname,
+		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
 	createdItem, err := controller.ShopsService.AddListItem(user, item)
@@ -1463,10 +1467,12 @@ func (controller *ShopsController) UpdateListItem(c *gin.Context) {
 	}
 
 	item := model.ShopListItems{
-		ID:           req.ItemID,
-		Niin:         req.Niin,
-		Nomenclature: req.Nomenclature,
-		Quantity:     req.Quantity,
+		ID:            req.ItemID,
+		Niin:          req.Niin,
+		Nomenclature:  req.Nomenclature,
+		Quantity:      req.Quantity,
+		Nickname:      req.Nickname,
+		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
 	err := controller.ShopsService.UpdateListItem(user, item)
@@ -1526,10 +1532,12 @@ func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
 	var items []model.ShopListItems
 	for _, reqItem := range req.Items {
 		item := model.ShopListItems{
-			ListID:       reqItem.ListID,
-			Niin:         reqItem.Niin,
-			Nomenclature: reqItem.Nomenclature,
-			Quantity:     reqItem.Quantity,
+			ListID:        reqItem.ListID,
+			Niin:          reqItem.Niin,
+			Nomenclature:  reqItem.Nomenclature,
+			Quantity:      reqItem.Quantity,
+			Nickname:      reqItem.Nickname,
+			UnitOfMeasure: reqItem.UnitOfMeasure,
 		}
 		items = append(items, item)
 	}

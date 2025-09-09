@@ -35,7 +35,7 @@ type GetEquipmentServicesRequest struct {
 	ServiceType *string `form:"service_type"` // Free-form service type filter
 	IsCompleted *bool   `form:"is_completed"` // Filter by completion status
 	Status      *string `form:"status"`       // overdue, due_soon, scheduled, completed
-	Limit       int     `form:"limit,default=100" binding:"omitempty,min=1,max=500"`
+	Limit       int     `form:"limit,default=1000" binding:"omitempty,min=1,max=1000"`
 	Offset      int     `form:"offset,default=0" binding:"omitempty,min=0"`
 }
 
