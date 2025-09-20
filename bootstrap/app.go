@@ -16,7 +16,7 @@ type Application struct {
 }
 
 func App(ctx context.Context, env *Env) Application {
-	slog.Info("Starting application")
+	slog.Info("Starting application, or not, we'll see.")
 	app := &Application{}
 	app.Db = NewSqlClient(env)
 	app.FireAuth = NewFireAuth(ctx)
