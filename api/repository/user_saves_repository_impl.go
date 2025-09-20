@@ -47,14 +47,15 @@ func (repo *UserSavesRepositoryImpl) GetQuickSaveItemsByUserId(user *bootstrap.U
 
 func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error {
 	stmt := UserItemsQuick.INSERT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ItemName,
-		UserItemsQuick.Image, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID).
+		UserItemsQuick.Image, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID, UserItemsQuick.Nickname).
 		MODEL(quick).
 		ON_CONFLICT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ID).
 		DO_UPDATE(
 			SET(
 				UserItemsQuick.LastUpdated.SET(TimestampT(*quick.LastUpdated)),
 				UserItemsQuick.Image.SET(String(*quick.Image)),
-				UserItemsQuick.ItemComment.SET(String(*quick.ItemComment))).
+				UserItemsQuick.ItemComment.SET(String(*quick.ItemComment)),
+				UserItemsQuick.Nickname.SET(String(*quick.Nickname))).
 				WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
 					AND(UserItemsQuick.ID.EQ(String(quick.ID))).
 					AND(UserItemsQuick.UserID.EQ(String(user.UserID))).
@@ -101,14 +102,15 @@ func (repo *UserSavesRepositoryImpl) UpsertQuickSaveItemListByUser(user *bootstr
 	var failedNiins []string
 	for _, val := range quickItems {
 		stmt := UserItemsQuick.INSERT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ItemName,
-			UserItemsQuick.Image, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID).
+			UserItemsQuick.Image, UserItemsQuick.ItemComment, UserItemsQuick.SaveTime, UserItemsQuick.LastUpdated, UserItemsQuick.ID, UserItemsQuick.Nickname).
 			MODEL(val).
 			ON_CONFLICT(UserItemsQuick.UserID, UserItemsQuick.Niin, UserItemsQuick.ID).
 			DO_UPDATE(
 				SET(
 					UserItemsQuick.LastUpdated.SET(TimestampT(*val.LastUpdated)),
 					UserItemsQuick.Image.SET(String(*val.Image)),
-					UserItemsQuick.ItemComment.SET(String(*val.ItemComment))).
+					UserItemsQuick.ItemComment.SET(String(*val.ItemComment)),
+					UserItemsQuick.Nickname.SET(String(*val.Nickname))).
 					WHERE(UserItemsQuick.UserID.EQ(String(user.UserID)).
 						AND(UserItemsQuick.ID.EQ(String(val.ID))).
 						AND(UserItemsQuick.Niin.EQ(String(val.Niin))))).
@@ -292,7 +294,7 @@ func (repo *UserSavesRepositoryImpl) GetSerializedItemsByUserId(user *bootstrap.
 func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error {
 	stmt := UserItemsSerialized.INSERT(UserItemsSerialized.ID, UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.ItemName,
 		UserItemsSerialized.Serial,
-		UserItemsSerialized.Image, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment, UserItemsSerialized.LastUpdated).
+		UserItemsSerialized.Image, UserItemsSerialized.SaveTime, UserItemsSerialized.ItemComment, UserItemsSerialized.LastUpdated, UserItemsSerialized.Nickname).
 		MODEL(serializedItem).
 		ON_CONFLICT(UserItemsSerialized.ID, UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.Serial).
 		DO_UPDATE(
@@ -301,7 +303,9 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemByUser(user *bootst
 				UserItemsSerialized.ItemComment.
 					SET(String(*serializedItem.ItemComment)),
 				UserItemsSerialized.LastUpdated.
-					SET(TimestampT(*serializedItem.LastUpdated))).
+					SET(TimestampT(*serializedItem.LastUpdated)),
+				UserItemsSerialized.Nickname.
+					SET(String(*serializedItem.Nickname))).
 				WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
 					AND(UserItemsSerialized.ID.EQ(String(serializedItem.ID))).
 					AND(UserItemsSerialized.Serial.EQ(String(serializedItem.Serial))).
@@ -362,7 +366,7 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemListByUser(user *bo
 	for _, val := range serializedItems {
 		stmt := UserItemsSerialized.INSERT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.ItemName,
 			UserItemsSerialized.Serial, UserItemsSerialized.SaveTime,
-			UserItemsSerialized.Image, UserItemsSerialized.ItemComment, UserItemsSerialized.ID, UserItemsSerialized.LastUpdated).
+			UserItemsSerialized.Image, UserItemsSerialized.ItemComment, UserItemsSerialized.ID, UserItemsSerialized.LastUpdated, UserItemsSerialized.Nickname).
 			MODEL(val).
 			ON_CONFLICT(UserItemsSerialized.UserID, UserItemsSerialized.Niin, UserItemsSerialized.Serial).
 			DO_UPDATE(
@@ -371,7 +375,9 @@ func (repo *UserSavesRepositoryImpl) UpsertSerializedSaveItemListByUser(user *bo
 					UserItemsSerialized.ItemComment.
 						SET(String(*val.ItemComment)),
 					UserItemsSerialized.LastUpdated.
-						SET(TimestampT(*val.LastUpdated))).
+						SET(TimestampT(*val.LastUpdated)),
+					UserItemsSerialized.Nickname.
+						SET(String(*val.Nickname))).
 					WHERE(UserItemsSerialized.UserID.EQ(String(user.UserID)).
 						AND(UserItemsSerialized.ID.EQ(String(val.ID))).
 						AND(UserItemsSerialized.Niin.EQ(String(val.Niin)).
@@ -644,6 +650,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorized(user *bootstrap.
 			UserItemsCategorized.Image,
 			UserItemsCategorized.LastUpdated,
 			UserItemsCategorized.ID,
+			UserItemsCategorized.Nickname,
 		).
 		MODEL(categorizedItem).
 		ON_CONFLICT(
@@ -660,6 +667,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorized(user *bootstrap.
 				UserItemsCategorized.SaveTime.SET(TimestampT(*categorizedItem.SaveTime)),
 				UserItemsCategorized.Image.SET(String(*categorizedItem.Image)),
 				UserItemsCategorized.LastUpdated.SET(TimestampT(*categorizedItem.LastUpdated)),
+				UserItemsCategorized.Nickname.SET(String(*categorizedItem.Nickname)),
 			).
 				WHERE(
 					UserItemsCategorized.UserID.EQ(String(user.UserID)).
@@ -687,7 +695,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorizedList(user *bootst
 			INSERT(UserItemsCategorized.UserID, UserItemsCategorized.Niin, UserItemsCategorized.ItemName,
 				UserItemsCategorized.Quantity, UserItemsCategorized.EquipModel, UserItemsCategorized.Uoc,
 				UserItemsCategorized.CategoryID, UserItemsCategorized.SaveTime, UserItemsCategorized.Image,
-				UserItemsCategorized.LastUpdated, UserItemsCategorized.ID).
+				UserItemsCategorized.LastUpdated, UserItemsCategorized.ID, UserItemsCategorized.Nickname).
 			MODEL(val).
 			ON_CONFLICT(UserItemsCategorized.UserID, UserItemsCategorized.Niin, UserItemsCategorized.CategoryID, UserItemsCategorized.ID).
 			DO_UPDATE(
@@ -699,6 +707,7 @@ func (repo *UserSavesRepositoryImpl) UpsertUserItemsCategorizedList(user *bootst
 					UserItemsCategorized.SaveTime.SET(TimestampT(*val.SaveTime)),
 					UserItemsCategorized.Image.SET(String(*val.Image)),
 					UserItemsCategorized.LastUpdated.SET(TimestampT(*val.LastUpdated)),
+					UserItemsCategorized.Nickname.SET(String(*val.Nickname)),
 				).
 					WHERE(
 						UserItemsCategorized.UserID.EQ(String(user.UserID)).
