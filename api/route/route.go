@@ -26,6 +26,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewItemQueryRouter(db, v1Route)
 	NewItemLookupRouter(db, v1Route)
 	NewItemQuickListsRouter(db, v1Route)
+	NewEICRouter(db, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := router.Group("/api/v1/auth")
