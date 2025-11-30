@@ -7,7 +7,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
 
-func NewAzureBlobClient(env *Env) *azblob.Client {
+func NewAzureBlobClient(env *Env) (*azblob.Client, *azblob.SharedKeyCredential) {
 	slog.Info("Creating Azure Blob Client")
 
 	credential, err := azblob.NewSharedKeyCredential(env.BlobAccountName, env.BlobAccountKey)
@@ -23,5 +23,5 @@ func NewAzureBlobClient(env *Env) *azblob.Client {
 		panic(err)
 	}
 
-	return blobClient
+	return blobClient, credential
 }

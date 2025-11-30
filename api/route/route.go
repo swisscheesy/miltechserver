@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
+func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client, blobCredential *azblob.SharedKeyCredential) {
 	v1Route := router.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -39,7 +39,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 
 	// Mixed Routes (both public and authenticated endpoints)
 	NewMaterialImagesRouter(db, blobClient, env, authClient, v1Route, authRoutes)
-	NewLibraryRouter(db, blobClient, env, authClient, v1Route, authRoutes)
+	NewLibraryRouter(db, blobClient, blobCredential, env, authClient, v1Route, authRoutes)
 
 	// Serve static assets (CSS, JS, images, etc.)
 	router.Static("/_app", "./static/_app")

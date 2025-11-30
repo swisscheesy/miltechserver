@@ -35,7 +35,7 @@ func SetupEngine() *gin.Engine {
 
 	server := gin.Default()
 
-	route.Setup(db, server, app.FireAuth, env, app.BlobClient)
+	route.Setup(db, server, app.FireAuth, env, app.BlobClient, app.BlobCredential)
 
 	// Cleanup server on crash or interrupt
 	c := make(chan os.Signal, 1)

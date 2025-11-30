@@ -16,6 +16,7 @@ import (
 func NewLibraryRouter(
 	db *sql.DB,
 	blobClient *azblob.Client,
+	blobCredential *azblob.SharedKeyCredential,
 	env *bootstrap.Env,
 	authClient *auth.Client,
 	group *gin.RouterGroup,
@@ -25,17 +26,18 @@ func NewLibraryRouter(
 	repo := repository.NewLibraryRepositoryImpl(db)
 	_ = repo // Silence unused variable warning
 
-	// Initialize service (no repository dependency for Phase 1)
-	svc := service.NewLibraryServiceImpl(blobClient, env)
+	// Initialize service with blob client and credential (needed for SAS generation)
+	svc := service.NewLibraryServiceImpl(blobClient, blobCredential, env)
 
 	// Initialize controller
 	ctrl := controller.NewLibraryController(svc)
 
 	// Public routes (no authentication required)
 	group.GET("/library/pmcs/vehicles", ctrl.GetPMCSVehicles)
+	group.GET("/library/pmcs/:vehicle/documents", ctrl.GetPMCSDocuments)
+	group.GET("/library/download", ctrl.GenerateDownloadURL)
 
 	// Future public routes:
-	// group.GET("/library/pmcs/:vehicle/documents", ctrl.GetPMCSDocuments)
 	// group.GET("/library/bii/categories", ctrl.GetBIICategories)
 	// group.GET("/library/bii/:category/documents", ctrl.GetBIIDocuments)
 
