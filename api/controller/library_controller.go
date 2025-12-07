@@ -132,5 +132,5 @@ func (controller *LibraryController) GenerateDownloadURL(c *gin.Context) {
 		"blobPath", blobPath,
 		"expiresAt", downloadURLResp.ExpiresAt)
 
-	c.JSON(http.StatusOK, downloadURLResp)
+	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: downloadURLResp})
 }
