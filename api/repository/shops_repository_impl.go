@@ -1541,3 +1541,239 @@ func (repo *ShopsRepositoryImpl) GetUserRoleInShop(user *bootstrap.User, shopID 
 
 	return role, nil
 }
+
+// Notification Change Tracking (Audit Trail) Operations
+
+// CreateNotificationChange records a change to a vehicle notification
+func (repo *ShopsRepositoryImpl) CreateNotificationChange(
+	user *bootstrap.User,
+	change model.ShopVehicleNotificationChanges,
+) error {
+	rawSQL := `
+		INSERT INTO shop_vehicle_notification_changes (
+			notification_id,
+			shop_id,
+			vehicle_id,
+			changed_by,
+			change_type,
+			field_changes
+		) VALUES ($1, $2, $3, $4, $5, $6)
+	`
+
+	_, err := repo.Db.Exec(
+		rawSQL,
+		change.NotificationID,
+		change.ShopID,
+		change.VehicleID,
+		change.ChangedBy,
+		change.ChangeType,
+		change.FieldChanges,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create notification change record: %w", err)
+	}
+
+	return nil
+}
+
+// GetNotificationChanges retrieves all change history for a specific notification
+func (repo *ShopsRepositoryImpl) GetNotificationChanges(
+	user *bootstrap.User,
+	notificationID string,
+) ([]response.NotificationChangeWithUsername, error) {
+	rawSQL := `
+		SELECT
+			c.id,
+			c.notification_id,
+			c.shop_id,
+			c.vehicle_id,
+			c.changed_by,
+			COALESCE(u.username, 'Unknown User') as changed_by_username,
+			c.changed_at,
+			c.change_type,
+			c.field_changes
+		FROM shop_vehicle_notification_changes c
+		LEFT JOIN users u ON c.changed_by = u.uid
+		WHERE c.notification_id = $1
+		ORDER BY c.changed_at DESC
+	`
+
+	rows, err := repo.Db.Query(rawSQL, notificationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification changes: %w", err)
+	}
+	defer rows.Close()
+
+	var changes []response.NotificationChangeWithUsername
+	for rows.Next() {
+		var change response.NotificationChangeWithUsername
+		var fieldChangesJSON string
+
+		err := rows.Scan(
+			&change.ID,
+			&change.NotificationID,
+			&change.ShopID,
+			&change.VehicleID,
+			&change.ChangedBy,
+			&change.ChangedByUsername,
+			&change.ChangedAt,
+			&change.ChangeType,
+			&fieldChangesJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan change row: %w", err)
+		}
+
+		// Parse JSONB field_changes
+		change.FieldChanges = make(map[string]interface{})
+		if fieldChangesJSON != "" {
+			// Simple JSON parsing - will be handled by the service layer if needed
+			change.FieldChanges["raw"] = fieldChangesJSON
+		}
+
+		changes = append(changes, change)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating change rows: %w", err)
+	}
+
+	return changes, nil
+}
+
+// GetNotificationChangesByShop retrieves recent changes for all notifications in a shop
+func (repo *ShopsRepositoryImpl) GetNotificationChangesByShop(
+	user *bootstrap.User,
+	shopID string,
+	limit int,
+) ([]response.NotificationChangeWithUsername, error) {
+	if limit <= 0 {
+		limit = 100 // Default limit
+	}
+	if limit > 500 {
+		limit = 500 // Maximum limit
+	}
+
+	rawSQL := `
+		SELECT
+			c.id,
+			c.notification_id,
+			c.shop_id,
+			c.vehicle_id,
+			c.changed_by,
+			COALESCE(u.username, 'Unknown User') as changed_by_username,
+			c.changed_at,
+			c.change_type,
+			c.field_changes
+		FROM shop_vehicle_notification_changes c
+		LEFT JOIN users u ON c.changed_by = u.uid
+		WHERE c.shop_id = $1
+		ORDER BY c.changed_at DESC
+		LIMIT $2
+	`
+
+	rows, err := repo.Db.Query(rawSQL, shopID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notification changes: %w", err)
+	}
+	defer rows.Close()
+
+	var changes []response.NotificationChangeWithUsername
+	for rows.Next() {
+		var change response.NotificationChangeWithUsername
+		var fieldChangesJSON string
+
+		err := rows.Scan(
+			&change.ID,
+			&change.NotificationID,
+			&change.ShopID,
+			&change.VehicleID,
+			&change.ChangedBy,
+			&change.ChangedByUsername,
+			&change.ChangedAt,
+			&change.ChangeType,
+			&fieldChangesJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan change row: %w", err)
+		}
+
+		// Parse JSONB field_changes
+		change.FieldChanges = make(map[string]interface{})
+		if fieldChangesJSON != "" {
+			change.FieldChanges["raw"] = fieldChangesJSON
+		}
+
+		changes = append(changes, change)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating change rows: %w", err)
+	}
+
+	return changes, nil
+}
+
+// GetNotificationChangesByVehicle retrieves all changes for notifications on a specific vehicle
+func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
+	user *bootstrap.User,
+	vehicleID string,
+) ([]response.NotificationChangeWithUsername, error) {
+	rawSQL := `
+		SELECT
+			c.id,
+			c.notification_id,
+			c.shop_id,
+			c.vehicle_id,
+			c.changed_by,
+			COALESCE(u.username, 'Unknown User') as changed_by_username,
+			c.changed_at,
+			c.change_type,
+			c.field_changes
+		FROM shop_vehicle_notification_changes c
+		LEFT JOIN users u ON c.changed_by = u.uid
+		WHERE c.vehicle_id = $1
+		ORDER BY c.changed_at DESC
+	`
+
+	rows, err := repo.Db.Query(rawSQL, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle notification changes: %w", err)
+	}
+	defer rows.Close()
+
+	var changes []response.NotificationChangeWithUsername
+	for rows.Next() {
+		var change response.NotificationChangeWithUsername
+		var fieldChangesJSON string
+
+		err := rows.Scan(
+			&change.ID,
+			&change.NotificationID,
+			&change.ShopID,
+			&change.VehicleID,
+			&change.ChangedBy,
+			&change.ChangedByUsername,
+			&change.ChangedAt,
+			&change.ChangeType,
+			&fieldChangesJSON,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan change row: %w", err)
+		}
+
+		// Parse JSONB field_changes
+		change.FieldChanges = make(map[string]interface{})
+		if fieldChangesJSON != "" {
+			change.FieldChanges["raw"] = fieldChangesJSON
+		}
+
+		changes = append(changes, change)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating change rows: %w", err)
+	}
+
+	return changes, nil
+}

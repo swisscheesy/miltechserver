@@ -3,6 +3,7 @@ package service
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -866,6 +867,16 @@ func (service *ShopsServiceImpl) CreateVehicleNotification(user *bootstrap.User,
 		return nil, fmt.Errorf("failed to create vehicle notification: %w", err)
 	}
 
+	// Record the creation as a change (best-effort)
+	service.recordNotificationChange(
+		user,
+		notification.ID,
+		notification.ShopID,
+		notification.VehicleID,
+		"create",
+		`{"fields_changed": ["created"]}`,
+	)
+
 	slog.Info("Vehicle notification created", "user_id", user.UserID, "vehicle_id", notification.VehicleID, "notification_id", notification.ID)
 	return createdNotification, nil
 }
@@ -991,7 +1002,7 @@ func (service *ShopsServiceImpl) UpdateVehicleNotification(user *bootstrap.User,
 		return errors.New("unauthorized user")
 	}
 
-	// Get current notification to check permissions
+	// Get current notification to check permissions and track changes
 	currentNotification, err := service.ShopsRepository.GetVehicleNotificationByID(user, notification.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get current notification: %w", err)
@@ -1009,10 +1020,31 @@ func (service *ShopsServiceImpl) UpdateVehicleNotification(user *bootstrap.User,
 
 	notification.LastUpdated = time.Now()
 
+	// Build field changes for audit trail
+	fieldChanges, err := buildFieldChanges(currentNotification, &notification)
+	if err != nil {
+		slog.Warn("Failed to build field changes", "error", err)
+		fieldChanges = `{"fields_changed": []}`
+	}
+
+	// Determine change type (complete, reopen, or update)
+	changeType := determineChangeType(currentNotification, &notification)
+
+	// Update the notification
 	err = service.ShopsRepository.UpdateVehicleNotification(user, notification)
 	if err != nil {
 		return fmt.Errorf("failed to update vehicle notification: %w", err)
 	}
+
+	// Record the change (best-effort, won't fail the update if audit fails)
+	service.recordNotificationChange(
+		user,
+		notification.ID,
+		currentNotification.ShopID,
+		currentNotification.VehicleID,
+		changeType,
+		fieldChanges,
+	)
 
 	slog.Info("Vehicle notification updated", "user_id", user.UserID, "notification_id", notification.ID)
 	return nil
@@ -1038,6 +1070,16 @@ func (service *ShopsServiceImpl) DeleteVehicleNotification(user *bootstrap.User,
 	if !isMember {
 		return errors.New("access denied: user is not a member of this shop")
 	}
+
+	// Record the deletion as a change BEFORE deleting (since CASCADE will remove change records)
+	service.recordNotificationChange(
+		user,
+		notificationID,
+		notification.ShopID,
+		notification.VehicleID,
+		"delete",
+		`{"fields_changed": ["deleted"]}`,
+	)
 
 	err = service.ShopsRepository.DeleteVehicleNotification(user, notificationID)
 	if err != nil {
@@ -1078,6 +1120,16 @@ func (service *ShopsServiceImpl) AddNotificationItem(user *bootstrap.User, item 
 	if err != nil {
 		return nil, fmt.Errorf("failed to add notification item: %w", err)
 	}
+
+	// Record item addition as a change (best-effort)
+	service.recordNotificationChange(
+		user,
+		item.NotificationID,
+		notification.ShopID,
+		notification.VehicleID,
+		"items_added",
+		`{"fields_changed": ["items"], "item_count": 1}`,
+	)
 
 	slog.Info("Notification item added", "user_id", user.UserID, "notification_id", item.NotificationID, "item_id", item.ID)
 	return createdItem, nil
@@ -1181,6 +1233,18 @@ func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, i
 		return nil, fmt.Errorf("failed to add notification items: %w", err)
 	}
 
+	// Record item additions as a change (best-effort)
+	itemCount := len(createdItems)
+	fieldChangesJSON := fmt.Sprintf(`{"fields_changed": ["items"], "item_count": %d}`, itemCount)
+	service.recordNotificationChange(
+		user,
+		items[0].NotificationID,
+		notification.ShopID,
+		notification.VehicleID,
+		"items_added",
+		fieldChangesJSON,
+	)
+
 	slog.Info("Notification items added", "user_id", user.UserID, "notification_id", items[0].NotificationID, "count", len(createdItems))
 	return createdItems, nil
 }
@@ -1189,6 +1253,11 @@ func (service *ShopsServiceImpl) RemoveNotificationItem(user *bootstrap.User, it
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
+
+	// Note: We cannot get the individual item before deletion since there's no GetNotificationItemByID method.
+	// The change tracking for item removal will be added when we implement a method to fetch individual items.
+	// For now, item removals won't be tracked in the audit log.
+	// TODO: Add GetNotificationItemByID to repository and track item removals
 
 	err := service.ShopsRepository.DeleteNotificationItem(user, itemID)
 	if err != nil {
@@ -1207,6 +1276,11 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 	if len(itemIDs) == 0 {
 		return errors.New("no items to remove")
 	}
+
+	// Note: We cannot get the individual items before deletion since there's no GetNotificationItemByID method.
+	// The change tracking for item removals will be added when we implement a method to fetch individual items.
+	// For now, item removals won't be tracked in the audit log.
+	// TODO: Add GetNotificationItemByID to repository and track item removals
 
 	err := service.ShopsRepository.DeleteNotificationItemList(user, itemIDs)
 	if err != nil {
@@ -1613,4 +1687,174 @@ func (service *ShopsServiceImpl) generateShortCode() (string, error) {
 	}
 
 	return code, nil
+}
+
+// Notification Change Tracking (Audit Trail) Helper Functions
+
+// buildFieldChanges compares old and new notification states and returns JSONB string of changed fields
+func buildFieldChanges(old, new *model.ShopVehicleNotifications) (string, error) {
+	changedFields := []string{}
+	changeData := make(map[string]interface{})
+
+	// Compare each field for changes
+	if old.Title != new.Title {
+		changedFields = append(changedFields, "title")
+	}
+
+	if old.Description != new.Description {
+		changedFields = append(changedFields, "description")
+	}
+
+	if old.Type != new.Type {
+		changedFields = append(changedFields, "type")
+	}
+
+	if old.Completed != new.Completed {
+		changedFields = append(changedFields, "completed")
+	}
+
+	changeData["fields_changed"] = changedFields
+
+	jsonBytes, err := json.Marshal(changeData)
+	if err != nil {
+		return "{}", fmt.Errorf("failed to marshal field changes: %w", err)
+	}
+	return string(jsonBytes), nil
+}
+
+// determineChangeType determines the type of change based on old and new notification states
+func determineChangeType(old, new *model.ShopVehicleNotifications) string {
+	// Check for completed status changes first (higher priority)
+	if !old.Completed && new.Completed {
+		return "complete"
+	}
+	if old.Completed && !new.Completed {
+		return "reopen"
+	}
+	// Default to generic update
+	return "update"
+}
+
+// recordNotificationChange is a helper to record audit trail changes (best-effort)
+func (service *ShopsServiceImpl) recordNotificationChange(
+	user *bootstrap.User,
+	notificationID string,
+	shopID string,
+	vehicleID string,
+	changeType string,
+	fieldChanges string,
+) {
+	change := model.ShopVehicleNotificationChanges{
+		NotificationID: notificationID,
+		ShopID:         shopID,
+		VehicleID:      vehicleID,
+		ChangedBy:      user.UserID,
+		ChangeType:     changeType,
+		FieldChanges:   fieldChanges,
+	}
+
+	err := service.ShopsRepository.CreateNotificationChange(user, change)
+	if err != nil {
+		slog.Warn("Failed to record notification change", "error", err, "notification_id", notificationID, "change_type", changeType)
+		// Don't fail the main operation - audit logging is best-effort
+	}
+}
+
+// Notification Change Tracking (Audit Trail) Service Methods
+
+// GetNotificationChangeHistory retrieves the complete change history for a notification
+func (service *ShopsServiceImpl) GetNotificationChangeHistory(
+	user *bootstrap.User,
+	notificationID string,
+) ([]response.NotificationChangeWithUsername, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Get notification to verify access
+	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, notificationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, notification.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Get change history
+	changes, err := service.ShopsRepository.GetNotificationChanges(user, notificationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification changes: %w", err)
+	}
+
+	return changes, nil
+}
+
+// GetShopNotificationChanges retrieves recent notification changes for a shop
+func (service *ShopsServiceImpl) GetShopNotificationChanges(
+	user *bootstrap.User,
+	shopID string,
+	limit int,
+) ([]response.NotificationChangeWithUsername, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Get changes
+	changes, err := service.ShopsRepository.GetNotificationChangesByShop(user, shopID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop notification changes: %w", err)
+	}
+
+	return changes, nil
+}
+
+// GetVehicleNotificationChanges retrieves all notification changes for a specific vehicle
+func (service *ShopsServiceImpl) GetVehicleNotificationChanges(
+	user *bootstrap.User,
+	vehicleID string,
+) ([]response.NotificationChangeWithUsername, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Get vehicle to verify access
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, vehicle.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Get changes
+	changes, err := service.ShopsRepository.GetNotificationChangesByVehicle(user, vehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle notification changes: %w", err)
+	}
+
+	return changes, nil
 }

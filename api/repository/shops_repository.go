@@ -85,4 +85,10 @@ type ShopsRepository interface {
 
 	// Helper method for permissions
 	GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error)
+
+	// Notification Change Tracking (Audit Trail)
+	CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error
+	GetNotificationChanges(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)
+	GetNotificationChangesByShop(user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error)
+	GetNotificationChangesByVehicle(user *bootstrap.User, vehicleID string) ([]response.NotificationChangeWithUsername, error)
 }

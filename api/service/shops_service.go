@@ -73,4 +73,9 @@ type ShopsService interface {
 	RemoveListItem(user *bootstrap.User, itemID string) error
 	AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error)
 	RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error
+
+	// Notification Change Tracking (Audit Trail) Operations
+	GetNotificationChangeHistory(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)
+	GetShopNotificationChanges(user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error)
+	GetVehicleNotificationChanges(user *bootstrap.User, vehicleID string) ([]response.NotificationChangeWithUsername, error)
 }

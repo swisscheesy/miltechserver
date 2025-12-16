@@ -83,4 +83,9 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	group.DELETE("/shops/lists/items", pc.RemoveListItem)
 	group.POST("/shops/lists/items/bulk", pc.AddListItemBatch)
 	group.DELETE("/shops/lists/items/bulk", pc.RemoveListItemBatch)
+
+	// Notification Change Tracking (Audit Trail) Operations
+	group.GET("/shops/notifications/:notification_id/changes", pc.GetNotificationChangeHistory)
+	group.GET("/shops/:shop_id/notifications/changes", pc.GetShopNotificationChanges)
+	group.GET("/shops/vehicles/:vehicle_id/notifications/changes", pc.GetVehicleNotificationChanges)
 }
