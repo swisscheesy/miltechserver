@@ -7,12 +7,13 @@ import (
 	"miltechserver/api/service"
 	"miltechserver/bootstrap"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
 
-func NewEquipmentServicesRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
+func NewEquipmentServicesRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, group *gin.RouterGroup) {
 	equipmentServicesRepository := repository.NewEquipmentServicesRepositoryImpl(db)
-	shopsRepository := repository.NewShopsRepositoryImpl(db)
+	shopsRepository := repository.NewShopsRepositoryImpl(db, blobClient, env)
 	
 	equipmentServicesController := &controller.EquipmentServicesController{
 		EquipmentServicesService: service.NewEquipmentServicesServiceImpl(equipmentServicesRepository, shopsRepository),

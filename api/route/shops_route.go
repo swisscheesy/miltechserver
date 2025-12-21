@@ -7,11 +7,12 @@ import (
 	"miltechserver/api/service"
 	"miltechserver/bootstrap"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
 
-func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
-	shopsRepository := repository.NewShopsRepositoryImpl(db)
+func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, group *gin.RouterGroup) {
+	shopsRepository := repository.NewShopsRepositoryImpl(db, blobClient, env)
 
 	pc := &controller.ShopsController{
 		ShopsService: service.NewShopsServiceImpl(shopsRepository),
@@ -44,6 +45,8 @@ func NewShopsRouter(db *sql.DB, env *bootstrap.Env, group *gin.RouterGroup) {
 	group.GET("/shops/:shop_id/messages/paginated", pc.GetShopMessagesPaginated)
 	group.PUT("/shops/messages", pc.UpdateShopMessage)
 	group.DELETE("/shops/messages/:message_id", pc.DeleteShopMessage)
+	group.POST("/shops/messages/image/upload", pc.UploadMessageImage)
+	group.DELETE("/shops/messages/image/:message_id", pc.DeleteMessageImage)
 
 	// Shop Vehicle Operations
 	group.POST("/shops/vehicles", pc.CreateShopVehicle)

@@ -42,6 +42,8 @@ type ShopsRepository interface {
 	GetShopMessagesCount(user *bootstrap.User, shopID string) (int64, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(user *bootstrap.User, messageID string) error
+	UploadMessageImage(user *bootstrap.User, messageID string, shopID string, imageData []byte, contentType string) (string, string, error)
+	DeleteMessageImageBlob(user *bootstrap.User, messageID string, shopID string) error
 
 	// Shop Vehicle Operations
 	CreateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) (*model.ShopVehicle, error)

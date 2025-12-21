@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -9,18 +10,32 @@ import (
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
+	"net/http"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/go-jet/jet/v2/postgres"
 	. "github.com/go-jet/jet/v2/postgres"
 )
 
+// Constants for shop message image uploads
+const (
+	ShopMessageImagesContainer = "shop-message-images"
+	MaxImageSize               = 5 * 1024 * 1024 // 5MB in bytes
+)
+
 type ShopsRepositoryImpl struct {
-	Db *sql.DB
+	Db         *sql.DB
+	BlobClient *azblob.Client
+	Env        *bootstrap.Env
 }
 
-func NewShopsRepositoryImpl(db *sql.DB) *ShopsRepositoryImpl {
-	return &ShopsRepositoryImpl{Db: db}
+func NewShopsRepositoryImpl(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *ShopsRepositoryImpl {
+	return &ShopsRepositoryImpl{
+		Db:         db,
+		BlobClient: blobClient,
+		Env:        env,
+	}
 }
 
 // Shop Operations
@@ -651,6 +666,96 @@ func (repo *ShopsRepositoryImpl) DeleteShopMessage(user *bootstrap.User, message
 
 	if rowsAffected == 0 {
 		return errors.New("message not found or user not authorized to delete")
+	}
+
+	return nil
+}
+
+// getFileExtensionFromMIME returns the file extension for a given MIME type
+func getFileExtensionFromMIME(contentType string) string {
+	switch contentType {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	default:
+		return ".jpg" // Default to jpg if unknown
+	}
+}
+
+// UploadMessageImage uploads an image for a shop message to Azure Blob Storage
+// Returns: file extension, blob URL, error
+func (repo *ShopsRepositoryImpl) UploadMessageImage(user *bootstrap.User, messageID string, shopID string, imageData []byte, contentType string) (string, string, error) {
+	ctx := context.Background()
+
+	// Verify user is a member of the shop
+	isMember, err := repo.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to verify membership: %w", err)
+	}
+	if !isMember {
+		return "", "", errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Detect content type if not provided
+	if contentType == "" {
+		contentType = http.DetectContentType(imageData)
+	}
+
+	// Get file extension based on content type
+	fileExtension := getFileExtensionFromMIME(contentType)
+
+	// Construct blob name: shopID/messageID.ext
+	blobName := fmt.Sprintf("%s/%s%s", shopID, messageID, fileExtension)
+
+	// Upload the blob
+	_, err = repo.BlobClient.UploadBuffer(ctx, ShopMessageImagesContainer, blobName, imageData, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to upload image: %w", err)
+	}
+
+	// Construct the blob URL
+	blobURL := fmt.Sprintf("https://%s.blob.core.windows.net/%s/%s",
+		repo.Env.BlobAccountName, ShopMessageImagesContainer, blobName)
+
+	slog.Info("shop message image uploaded successfully", "user_id", user.UserID, "message_id", messageID, "shop_id", shopID, "blob_url", blobURL)
+	return fileExtension, blobURL, nil
+}
+
+// DeleteMessageImageBlob deletes a shop message image from Azure Blob Storage
+// This is a cleanup endpoint for when upload succeeds but message creation fails
+func (repo *ShopsRepositoryImpl) DeleteMessageImageBlob(user *bootstrap.User, messageID string, shopID string) error {
+	ctx := context.Background()
+
+	// Verify user is a member of the shop
+	isMember, err := repo.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Try to delete all possible file extensions (we don't know which one was used)
+	extensions := []string{".jpg", ".png", ".gif", ".webp"}
+	deleted := false
+
+	for _, ext := range extensions {
+		blobName := fmt.Sprintf("%s/%s%s", shopID, messageID, ext)
+		_, err := repo.BlobClient.DeleteBlob(ctx, ShopMessageImagesContainer, blobName, nil)
+		if err == nil {
+			deleted = true
+			slog.Info("shop message image blob deleted successfully", "message_id", messageID, "shop_id", shopID, "extension", ext)
+			break
+		}
+	}
+
+	if !deleted {
+		slog.Warn("Failed to delete any image blob - may not exist", "message_id", messageID, "shop_id", shopID)
 	}
 
 	return nil

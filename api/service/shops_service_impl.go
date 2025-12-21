@@ -17,6 +17,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// Constants for shop message image uploads
+const (
+	MaxImageSize = 5 * 1024 * 1024 // 5MB in bytes
+)
+
 type ShopsServiceImpl struct {
 	ShopsRepository repository.ShopsRepository
 }
@@ -614,6 +619,51 @@ func (service *ShopsServiceImpl) DeleteShopMessage(user *bootstrap.User, message
 	}
 
 	slog.Info("Shop message deleted", "user_id", user.UserID, "message_id", messageID)
+	return nil
+}
+
+// UploadMessageImage uploads an image for a shop message to Azure Blob Storage
+// Returns: messageID, fileExtension, imageURL, error
+func (service *ShopsServiceImpl) UploadMessageImage(user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error) {
+	if user == nil {
+		return "", "", "", errors.New("unauthorized user")
+	}
+
+	// Validate file size
+	if len(imageData) > MaxImageSize {
+		return "", "", "", fmt.Errorf("image size exceeds maximum allowed size of %d bytes", MaxImageSize)
+	}
+
+	if len(imageData) == 0 {
+		return "", "", "", errors.New("image data is empty")
+	}
+
+	// Generate a new message ID for blob naming
+	messageID := uuid.New().String()
+
+	// Upload to Azure Blob Storage
+	fileExtension, imageURL, err := service.ShopsRepository.UploadMessageImage(user, messageID, shopID, imageData, contentType)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to upload message image: %w", err)
+	}
+
+	slog.Info("Shop message image uploaded via service", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
+	return messageID, fileExtension, imageURL, nil
+}
+
+// DeleteMessageImage deletes an orphaned message image from Azure Blob Storage
+// This is called when upload succeeds but message creation fails or is cancelled
+func (service *ShopsServiceImpl) DeleteMessageImage(user *bootstrap.User, shopID string, messageID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	err := service.ShopsRepository.DeleteMessageImageBlob(user, messageID, shopID)
+	if err != nil {
+		return fmt.Errorf("failed to delete message image: %w", err)
+	}
+
+	slog.Info("Shop message image deleted", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
 	return nil
 }
 
