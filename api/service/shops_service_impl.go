@@ -613,9 +613,30 @@ func (service *ShopsServiceImpl) DeleteShopMessage(user *bootstrap.User, message
 		return errors.New("unauthorized user")
 	}
 
-	err := service.ShopsRepository.DeleteShopMessage(user, messageID)
+	// Get the message before deletion to check for images
+	message, err := service.ShopsRepository.GetShopMessageByID(user, messageID)
+	if err != nil {
+		return fmt.Errorf("failed to get shop message: %w", err)
+	}
+
+	// Delete the database record first
+	err = service.ShopsRepository.DeleteShopMessage(user, messageID)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop message: %w", err)
+	}
+
+	// After successful database deletion, attempt to delete any associated blob
+	// This is done after to ensure we don't leave orphaned database records
+	// If blob deletion fails, we log but don't fail the operation (graceful degradation)
+	if message != nil && message.Message != "" {
+		err = service.ShopsRepository.DeleteBlobByURL(message.Message)
+		if err != nil {
+			slog.Warn("Failed to delete blob during message deletion",
+				"message_id", messageID,
+				"user_id", user.UserID,
+				"error", err)
+			// Don't return error - message is already deleted from database
+		}
 	}
 
 	slog.Info("Shop message deleted", "user_id", user.UserID, "message_id", messageID)

@@ -11,6 +11,8 @@ import (
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -687,6 +689,42 @@ func getFileExtensionFromMIME(contentType string) string {
 	}
 }
 
+// extractImageURLFromMessage extracts the image URL from a message text containing [IMAGE:url] tag
+// Returns empty string if no image tag found
+func extractImageURLFromMessage(messageText string) string {
+	// Pattern matches: [IMAGE:https://...]
+	re := regexp.MustCompile(`\[IMAGE:(https://[^\]]+)\]`)
+	matches := re.FindStringSubmatch(messageText)
+	if len(matches) > 1 {
+		return matches[1] // Return the captured URL
+	}
+	return ""
+}
+
+// parseBlobNameFromURL extracts the blob name from an Azure Blob Storage URL
+// URL format: https://{account}.blob.core.windows.net/{container}/{blob_path}
+// Returns the blob_path portion (e.g., "shopID/messageID.jpg")
+func parseBlobNameFromURL(url string, expectedContainer string) (string, error) {
+	if url == "" {
+		return "", errors.New("empty URL")
+	}
+
+	// Find the container name in the URL
+	containerPrefix := fmt.Sprintf("/%s/", expectedContainer)
+	idx := strings.Index(url, containerPrefix)
+	if idx == -1 {
+		return "", fmt.Errorf("container '%s' not found in URL", expectedContainer)
+	}
+
+	// Extract everything after the container name
+	blobName := url[idx+len(containerPrefix):]
+	if blobName == "" {
+		return "", errors.New("blob name is empty")
+	}
+
+	return blobName, nil
+}
+
 // UploadMessageImage uploads an image for a shop message to Azure Blob Storage
 // Returns: file extension, blob URL, error
 func (repo *ShopsRepositoryImpl) UploadMessageImage(user *bootstrap.User, messageID string, shopID string, imageData []byte, contentType string) (string, string, error) {
@@ -758,6 +796,60 @@ func (repo *ShopsRepositoryImpl) DeleteMessageImageBlob(user *bootstrap.User, me
 		slog.Warn("Failed to delete any image blob - may not exist", "message_id", messageID, "shop_id", shopID)
 	}
 
+	return nil
+}
+
+// GetShopMessageByID retrieves a single shop message by its ID
+func (repo *ShopsRepositoryImpl) GetShopMessageByID(user *bootstrap.User, messageID string) (*model.ShopMessages, error) {
+	stmt := SELECT(ShopMessages.AllColumns).
+		FROM(ShopMessages).
+		WHERE(ShopMessages.ID.EQ(String(messageID)))
+
+	var message model.ShopMessages
+	err := stmt.Query(repo.Db, &message)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("message not found")
+		}
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+
+	return &message, nil
+}
+
+// DeleteBlobByURL deletes a blob from Azure Blob Storage given a message text that may contain [IMAGE:url]
+// Extracts the URL from the [IMAGE:url] tag format and deletes the blob
+func (repo *ShopsRepositoryImpl) DeleteBlobByURL(messageText string) error {
+	if messageText == "" {
+		return nil // Nothing to delete
+	}
+
+	// Extract image URL from message text (format: [IMAGE:https://...])
+	imageURL := extractImageURLFromMessage(messageText)
+	if imageURL == "" {
+		// No image URL found in message - this is normal for text-only messages
+		return nil
+	}
+
+	ctx := context.Background()
+
+	// Parse the blob name from the URL
+	// Expected format: https://{account}.blob.core.windows.net/shop-message-images/{shopID}/{messageID}.{ext}
+	blobName, err := parseBlobNameFromURL(imageURL, ShopMessageImagesContainer)
+	if err != nil {
+		slog.Warn("Failed to parse blob name from URL", "url", imageURL, "error", err)
+		return nil // Don't fail deletion if we can't parse the URL
+	}
+
+	// Delete the blob
+	_, err = repo.BlobClient.DeleteBlob(ctx, ShopMessageImagesContainer, blobName, nil)
+	if err != nil {
+		// Log warning but don't fail - blob may already be deleted
+		slog.Warn("Failed to delete blob from Azure", "blob_name", blobName, "error", err)
+		return nil // Graceful failure
+	}
+
+	slog.Info("Blob deleted successfully from Azure", "blob_name", blobName, "image_url", imageURL)
 	return nil
 }
 
