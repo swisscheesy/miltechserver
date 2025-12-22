@@ -99,10 +99,30 @@ func (service *ShopsServiceImpl) DeleteShop(user *bootstrap.User, shopID string)
 		return errors.New("only shop administrators can delete shops")
 	}
 
-	err = service.ShopsRepository.DeleteShop(user, shopID)
+	// Perform shop deletion with blob cleanup
+	return service.deleteShopWithBlobCleanup(user, shopID)
+}
+
+// deleteShopWithBlobCleanup is a private helper that deletes a shop and cleans up associated blobs
+// This is used by both DeleteShop (admin deletion) and LeaveShop (last member deletion)
+func (service *ShopsServiceImpl) deleteShopWithBlobCleanup(user *bootstrap.User, shopID string) error {
+	// Delete shop from database (CASCADE deletes messages, members, vehicles, etc.)
+	err := service.ShopsRepository.DeleteShop(user, shopID)
 	if err != nil {
 		slog.Error("Failed to delete shop", "error", err, "user_id", user.UserID, "shop_id", shopID)
 		return fmt.Errorf("failed to delete shop: %w", err)
+	}
+
+	// After successful database deletion, clean up all shop message image blobs
+	// This is done after DB deletion to ensure we don't leave orphaned database records
+	// Graceful failure - blob cleanup errors are logged but don't fail the operation
+	err = service.ShopsRepository.DeleteShopMessageBlobs(shopID)
+	if err != nil {
+		slog.Warn("Failed to delete shop message blobs during shop deletion",
+			"shop_id", shopID,
+			"user_id", user.UserID,
+			"error", err)
+		// Don't return error - shop is already deleted from database
 	}
 
 	slog.Info("Shop deleted successfully", "user_id", user.UserID, "shop_id", shopID)
@@ -226,9 +246,9 @@ func (service *ShopsServiceImpl) LeaveShop(user *bootstrap.User, shopID string) 
 		return fmt.Errorf("failed to get member count: %w", err)
 	}
 
-	// If this is the only member, delete the entire shop
+	// If this is the only member, delete the entire shop (including blob cleanup)
 	if memberCount == 1 {
-		err = service.ShopsRepository.DeleteShop(user, shopID)
+		err = service.deleteShopWithBlobCleanup(user, shopID)
 		if err != nil {
 			return fmt.Errorf("failed to delete shop: %w", err)
 		}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/go-jet/jet/v2/postgres"
 	. "github.com/go-jet/jet/v2/postgres"
 )
@@ -851,6 +852,59 @@ func (repo *ShopsRepositoryImpl) DeleteBlobByURL(messageText string) error {
 
 	slog.Info("Blob deleted successfully from Azure", "blob_name", blobName, "image_url", imageURL)
 	return nil
+}
+
+// DeleteShopMessageBlobs deletes all message image blobs for a shop
+// Called when shop is deleted to clean up orphaned blobs in Azure Blob Storage
+// Uses graceful failure - logs errors but doesn't fail the operation
+func (repo *ShopsRepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
+	ctx := context.Background()
+
+	// Get container client
+	containerClient := repo.BlobClient.ServiceClient().NewContainerClient(ShopMessageImagesContainer)
+
+	// List all blobs with shopID prefix (e.g., "shop-uuid-123/")
+	prefix := fmt.Sprintf("%s/", shopID)
+	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
+		Prefix: &prefix,
+	})
+
+	deletedCount := 0
+	errorCount := 0
+
+	// Iterate through all pages of results
+	for pager.More() {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			slog.Warn("Failed to list blobs for shop deletion", "shop_id", shopID, "error", err)
+			continue // Try to delete what we can
+		}
+
+		// Delete each blob found
+		for _, blob := range page.Segment.BlobItems {
+			if blob.Name == nil {
+				continue
+			}
+
+			_, err := repo.BlobClient.DeleteBlob(ctx, ShopMessageImagesContainer, *blob.Name, nil)
+			if err != nil {
+				slog.Warn("Failed to delete shop message blob",
+					"shop_id", shopID,
+					"blob_name", *blob.Name,
+					"error", err)
+				errorCount++
+			} else {
+				deletedCount++
+			}
+		}
+	}
+
+	slog.Info("Shop message blobs cleanup completed",
+		"shop_id", shopID,
+		"deleted_count", deletedCount,
+		"error_count", errorCount)
+
+	return nil // Graceful failure - don't fail shop deletion if blob cleanup has issues
 }
 
 // Shop Vehicle Operations

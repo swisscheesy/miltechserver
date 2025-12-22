@@ -46,6 +46,7 @@ type ShopsRepository interface {
 	UploadMessageImage(user *bootstrap.User, messageID string, shopID string, imageData []byte, contentType string) (string, string, error)
 	DeleteMessageImageBlob(user *bootstrap.User, messageID string, shopID string) error
 	DeleteBlobByURL(imageURL string) error
+	DeleteShopMessageBlobs(shopID string) error
 
 	// Shop Vehicle Operations
 	CreateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) (*model.ShopVehicle, error)
