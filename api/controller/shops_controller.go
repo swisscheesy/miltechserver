@@ -45,6 +45,11 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 		Details: req.Details,
 	}
 
+	// Set admin_only_lists if provided, otherwise defaults to false in database
+	if req.AdminOnlyLists != nil {
+		shop.AdminOnlyLists = *req.AdminOnlyLists
+	}
+
 	createdShop, err := controller.ShopsService.CreateShop(user, shop)
 	if err != nil {
 		c.Error(err)
@@ -1781,5 +1786,80 @@ func (controller *ShopsController) GetVehicleNotificationChanges(c *gin.Context)
 		Status:  200,
 		Message: "",
 		Data:    changes,
+	})
+}
+
+// Shop Settings Operations
+
+// GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
+func (controller *ShopsController) GetShopAdminOnlyListsSetting(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	adminOnlyLists, err := controller.ShopsService.GetShopAdminOnlyListsSetting(user, shopID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Shop admin_only_lists setting retrieved successfully",
+		Data: gin.H{
+			"shop_id":         shopID,
+			"admin_only_lists": adminOnlyLists,
+		},
+	})
+}
+
+// UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop (admin only)
+func (controller *ShopsController) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	var req request.UpdateAdminOnlyListsRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	err := controller.ShopsService.UpdateShopAdminOnlyListsSetting(user, shopID, req.AdminOnlyLists)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Shop admin_only_lists setting updated successfully",
+		Data: gin.H{
+			"shop_id":         shopID,
+			"admin_only_lists": req.AdminOnlyLists,
+		},
 	})
 }

@@ -74,6 +74,7 @@ func (repo *ShopsRepositoryImpl) UpdateShop(user *bootstrap.User, shop model.Sho
 	).SET(
 		Shops.Name.SET(String(shop.Name)),
 		Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
+		Shops.AdminOnlyLists.SET(Bool(shop.AdminOnlyLists)),
 	)
 
 	// If details is provided, add it to the update
@@ -86,6 +87,7 @@ func (repo *ShopsRepositoryImpl) UpdateShop(user *bootstrap.User, shop model.Sho
 			Shops.Name.SET(String(shop.Name)),
 			Shops.Details.SET(String(*shop.Details)),
 			Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
+			Shops.AdminOnlyLists.SET(Bool(shop.AdminOnlyLists)),
 		)
 	}
 
@@ -164,13 +166,14 @@ func (repo *ShopsRepositoryImpl) GetShopByID(user *bootstrap.User, shopID string
 
 func (repo *ShopsRepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error) {
 	rawSQL := `
-		SELECT 
+		SELECT
 			s.id,
 			s.name,
 			s.details,
 			s.created_by,
 			s.created_at,
 			s.updated_at,
+			s.admin_only_lists,
 			COALESCE(member_stats.member_count, 0) as member_count,
 			COALESCE(vehicle_stats.vehicle_count, 0) as vehicle_count,
 			CASE WHEN admin_check.user_id IS NOT NULL THEN true ELSE false END as is_admin
@@ -214,6 +217,7 @@ func (repo *ShopsRepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) 
 			&shop.CreatedBy,
 			&shop.CreatedAt,
 			&shop.UpdatedAt,
+			&shop.AdminOnlyLists,
 			&memberCount,
 			&vehicleCount,
 			&isAdmin,
@@ -223,10 +227,11 @@ func (repo *ShopsRepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) 
 		}
 
 		results = append(results, response.ShopWithStats{
-			Shop:         shop,
-			MemberCount:  memberCount,
-			VehicleCount: vehicleCount,
-			IsAdmin:      isAdmin,
+			Shop:             shop,
+			MemberCount:      memberCount,
+			VehicleCount:     vehicleCount,
+			IsAdmin:          isAdmin,
+			IsListsAdminOnly: shop.AdminOnlyLists,
 		})
 	}
 
@@ -980,7 +985,7 @@ func (repo *ShopsRepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle
 	if vehicle.TrackedMileage != nil {
 		setClauses = append(setClauses, ShopVehicle.TrackedMileage.SET(Int32(*vehicle.TrackedMileage)))
 	}
-	
+
 	if vehicle.TrackedHours != nil {
 		setClauses = append(setClauses, ShopVehicle.TrackedHours.SET(Int32(*vehicle.TrackedHours)))
 	}
@@ -2027,4 +2032,56 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
 	}
 
 	return changes, nil
+}
+
+// Shop Settings Operations
+
+// GetShopAdminOnlyListsSetting retrieves the admin_only_lists setting for a shop
+func (repo *ShopsRepositoryImpl) GetShopAdminOnlyListsSetting(shopID string) (bool, error) {
+	stmt := SELECT(Shops.AllColumns).
+		FROM(Shops).
+		WHERE(Shops.ID.EQ(String(shopID)))
+
+	var shop model.Shops
+	err := stmt.Query(repo.Db, &shop)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, errors.New("shop not found")
+		}
+		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
+	}
+
+	return shop.AdminOnlyLists, nil
+}
+
+// UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
+func (repo *ShopsRepositoryImpl) UpdateShopAdminOnlyListsSetting(shopID string, adminOnlyLists bool) error {
+	now := time.Now()
+
+	stmt := Shops.UPDATE(
+		Shops.AdminOnlyLists,
+		Shops.UpdatedAt,
+	).SET(
+		Shops.AdminOnlyLists.SET(Bool(adminOnlyLists)),
+		Shops.UpdatedAt.SET(TimestampzT(now)),
+	).WHERE(
+		Shops.ID.EQ(String(shopID)),
+	)
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("shop not found")
+	}
+
+	slog.Info("Shop admin_only_lists setting updated", "shop_id", shopID, "admin_only_lists", adminOnlyLists)
+	return nil
 }

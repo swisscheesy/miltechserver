@@ -76,6 +76,10 @@ type ShopsService interface {
 	AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error)
 	RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error
 
+	// Shop Settings Operations
+	GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error)
+	UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error
+
 	// Notification Change Tracking (Audit Trail) Operations
 	GetNotificationChangeHistory(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)
 	GetShopNotificationChanges(user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error)

@@ -7,10 +7,11 @@ import (
 )
 
 type ShopWithStats struct {
-	Shop         model.Shops `json:"shop"`
-	MemberCount  int64       `json:"member_count"`
-	VehicleCount int64       `json:"vehicle_count"`
-	IsAdmin      bool        `json:"is_admin"`
+	Shop             model.Shops `json:"shop"`
+	MemberCount      int64       `json:"member_count"`
+	VehicleCount     int64       `json:"vehicle_count"`
+	IsAdmin          bool        `json:"is_admin"`
+	IsListsAdminOnly bool        `json:"is_lists_admin_only"`
 }
 
 type UserShopsResponse struct {
@@ -28,13 +29,13 @@ type ShopMemberWithUsername struct {
 }
 
 type ShopListWithUsername struct {
-	ID              string     `json:"id"`
-	ShopID          string     `json:"shop_id"`
-	CreatedBy       string     `json:"created_by"`
-	CreatedByUsername *string   `json:"created_by_username"`
-	Description     string     `json:"description"`
-	CreatedAt       *time.Time `json:"created_at"`
-	UpdatedAt       *time.Time `json:"updated_at"`
+	ID                string     `json:"id"`
+	ShopID            string     `json:"shop_id"`
+	CreatedBy         string     `json:"created_by"`
+	CreatedByUsername *string    `json:"created_by_username"`
+	Description       string     `json:"description"`
+	CreatedAt         *time.Time `json:"created_at"`
+	UpdatedAt         *time.Time `json:"updated_at"`
 }
 
 type ShopListItemWithUsername struct {

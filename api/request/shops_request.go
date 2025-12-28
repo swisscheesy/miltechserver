@@ -1,9 +1,10 @@
 package request
 
 type CreateShopRequest struct {
-	Name         string  `json:"name" binding:"required"`
-	Details      *string `json:"details"`
-	PasswordHash *string `json:"password_hash"`
+	Name           string  `json:"name" binding:"required"`
+	Details        *string `json:"details"`
+	PasswordHash   *string `json:"password_hash"`
+	AdminOnlyLists *bool   `json:"admin_only_lists"`
 }
 
 type JoinShopRequest struct {
@@ -151,4 +152,8 @@ type RemoveListItemBatchRequest struct {
 type GetShopMessagesPaginatedRequest struct {
 	Page  int `form:"page,default=1" binding:"omitempty,min=1"`
 	Limit int `form:"limit,default=20" binding:"omitempty,min=1,max=100"`
+}
+
+type UpdateAdminOnlyListsRequest struct {
+	AdminOnlyLists bool `json:"admin_only_lists" binding:"required"`
 }

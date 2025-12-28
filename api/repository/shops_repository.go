@@ -91,6 +91,10 @@ type ShopsRepository interface {
 	// Helper method for permissions
 	GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error)
 
+	// Shop Settings Operations
+	GetShopAdminOnlyListsSetting(shopID string) (bool, error)
+	UpdateShopAdminOnlyListsSetting(shopID string, adminOnlyLists bool) error
+
 	// Notification Change Tracking (Audit Trail)
 	CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error
 	GetNotificationChanges(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)

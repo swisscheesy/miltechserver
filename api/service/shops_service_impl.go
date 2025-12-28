@@ -1949,3 +1949,59 @@ func (service *ShopsServiceImpl) GetVehicleNotificationChanges(
 
 	return changes, nil
 }
+
+// Shop Settings Operations
+
+// GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
+// Any shop member can read this setting
+func (service *ShopsServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error) {
+	if user == nil {
+		return false, errors.New("unauthorized user")
+	}
+
+	// Verify user is a member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return false, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Get the setting from repository
+	adminOnlyLists, err := service.ShopsRepository.GetShopAdminOnlyListsSetting(shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
+	}
+
+	slog.Info("Shop admin_only_lists setting retrieved", "user_id", user.UserID, "shop_id", shopID, "admin_only_lists", adminOnlyLists)
+	return adminOnlyLists, nil
+}
+
+// UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
+// Only shop admins can modify this setting
+func (service *ShopsServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+
+	// Check if user is admin of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return errors.New("access denied: only shop administrators can modify this setting")
+	}
+
+	// Update the setting in repository
+	err = service.ShopsRepository.UpdateShopAdminOnlyListsSetting(shopID, adminOnlyLists)
+	if err != nil {
+		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
+	}
+
+	slog.Info("Shop admin_only_lists setting updated by admin", "user_id", user.UserID, "shop_id", shopID, "admin_only_lists", adminOnlyLists)
+	return nil
+}
