@@ -1863,3 +1863,37 @@ func (controller *ShopsController) UpdateShopAdminOnlyListsSetting(c *gin.Contex
 		},
 	})
 }
+
+// CheckUserIsShopAdmin checks if the current user is an admin for the specified shop
+func (controller *ShopsController) CheckUserIsShopAdmin(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	isAdmin, err := controller.ShopsService.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Admin status checked successfully",
+		Data: gin.H{
+			"shop_id":  shopID,
+			"user_id":  user.UserID,
+			"is_admin": isAdmin,
+		},
+	})
+}

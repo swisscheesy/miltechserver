@@ -1398,6 +1398,15 @@ func (service *ShopsServiceImpl) CreateShopList(user *bootstrap.User, list model
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
+	// Check if user can create lists based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return nil, errors.New("access denied: insufficient permissions to create lists")
+	}
+
 	list.ID = uuid.New().String()
 	list.CreatedBy = user.UserID
 	now := time.Now()
@@ -1474,21 +1483,13 @@ func (service *ShopsServiceImpl) UpdateShopList(user *bootstrap.User, list model
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
-	// Convert to model for helper function
-	modelList := &model.ShopLists{
-		ID:        currentList.ID,
-		ShopID:    currentList.ShopID,
-		CreatedBy: currentList.CreatedBy,
-	}
-	
-	// Check if user can modify this list (either they created it or they're an admin)
-	canModify, err := service.canUserModifyList(user, modelList)
+	// Check if user can modify lists based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, currentList.ShopID)
 	if err != nil {
-		return fmt.Errorf("failed to verify permissions: %w", err)
+		return fmt.Errorf("failed to verify list modification permissions: %w", err)
 	}
-
 	if !canModify {
-		return errors.New("access denied: only shop admins or list creator can modify this list")
+		return errors.New("access denied: insufficient permissions to modify lists")
 	}
 
 	list.UpdatedAt = time.Now()
@@ -1513,21 +1514,13 @@ func (service *ShopsServiceImpl) DeleteShopList(user *bootstrap.User, listID str
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
-	// Convert to model for helper function
-	modelList := &model.ShopLists{
-		ID:        list.ID,
-		ShopID:    list.ShopID,
-		CreatedBy: list.CreatedBy,
-	}
-	
-	// Check if user can delete this list (either they created it or they're an admin)
-	canDelete, err := service.canUserModifyList(user, modelList)
+	// Check if user can delete lists based on admin_only_lists setting
+	canDelete, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
 	if err != nil {
-		return fmt.Errorf("failed to verify permissions: %w", err)
+		return fmt.Errorf("failed to verify list modification permissions: %w", err)
 	}
-
 	if !canDelete {
-		return errors.New("access denied: only shop admins or list creator can delete this list")
+		return errors.New("access denied: insufficient permissions to delete lists")
 	}
 
 	err = service.ShopsRepository.DeleteShopList(user, listID)
@@ -1559,6 +1552,15 @@ func (service *ShopsServiceImpl) AddListItem(user *bootstrap.User, item model.Sh
 
 	if !isMember {
 		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Check if user can modify list items based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return nil, errors.New("access denied: insufficient permissions to modify list items")
 	}
 
 	item.ID = uuid.New().String()
@@ -1636,6 +1638,15 @@ func (service *ShopsServiceImpl) UpdateListItem(user *bootstrap.User, item model
 		return errors.New("access denied: user is not a member of this shop")
 	}
 
+	// Check if user can modify list items based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return errors.New("access denied: insufficient permissions to modify list items")
+	}
+
 	item.UpdatedAt = time.Now()
 
 	err = service.ShopsRepository.UpdateListItem(user, item)
@@ -1674,6 +1685,15 @@ func (service *ShopsServiceImpl) RemoveListItem(user *bootstrap.User, itemID str
 		return errors.New("access denied: user is not a member of this shop")
 	}
 
+	// Check if user can modify list items based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return errors.New("access denied: insufficient permissions to modify list items")
+	}
+
 	err = service.ShopsRepository.RemoveListItem(user, itemID)
 	if err != nil {
 		return fmt.Errorf("failed to remove list item: %w", err)
@@ -1708,6 +1728,15 @@ func (service *ShopsServiceImpl) AddListItemBatch(user *bootstrap.User, items []
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
+	// Check if user can modify list items based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return nil, errors.New("access denied: insufficient permissions to modify list items")
+	}
+
 	// Set IDs and metadata for all items
 	now := time.Now()
 	for i := range items {
@@ -1735,7 +1764,38 @@ func (service *ShopsServiceImpl) RemoveListItemBatch(user *bootstrap.User, itemI
 		return errors.New("no items to remove")
 	}
 
-	err := service.ShopsRepository.RemoveListItemBatch(user, itemIDs)
+	// Get the first item to determine the shop and verify permissions
+	firstItem, err := service.ShopsRepository.GetListItemByID(user, itemIDs[0])
+	if err != nil {
+		return fmt.Errorf("failed to get item: %w", err)
+	}
+
+	// Get the list to verify shop membership
+	list, err := service.ShopsRepository.GetShopListByID(user, firstItem.ListID)
+	if err != nil {
+		return fmt.Errorf("failed to get list: %w", err)
+	}
+
+	// Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Check if user can modify list items based on admin_only_lists setting
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify list modification permissions: %w", err)
+	}
+	if !canModify {
+		return errors.New("access denied: insufficient permissions to modify list items")
+	}
+
+	err = service.ShopsRepository.RemoveListItemBatch(user, itemIDs)
 	if err != nil {
 		return fmt.Errorf("failed to remove list items: %w", err)
 	}
@@ -1758,6 +1818,30 @@ func (service *ShopsServiceImpl) canUserModifyList(user *bootstrap.User, list *m
 	}
 
 	return userRole == "admin", nil
+}
+
+// canUserModifyListWithAdminOnlyCheck checks if user can modify lists based on shop's admin_only_lists setting
+// If admin_only_lists is true, only shop admins can modify lists
+// If admin_only_lists is false, all shop members can modify lists
+func (service *ShopsServiceImpl) canUserModifyListWithAdminOnlyCheck(user *bootstrap.User, shopID string) (bool, error) {
+	// Get the shop's admin_only_lists setting
+	adminOnlyLists, err := service.ShopsRepository.GetShopAdminOnlyListsSetting(shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
+	}
+
+	// If admin_only_lists is disabled, all members can interact with lists
+	if !adminOnlyLists {
+		return true, nil
+	}
+
+	// If admin_only_lists is enabled, check if user is a shop admin
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	return isAdmin, nil
 }
 
 // Helper function to generate a short invite code
@@ -2004,4 +2088,29 @@ func (service *ShopsServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap
 
 	slog.Info("Shop admin_only_lists setting updated by admin", "user_id", user.UserID, "shop_id", shopID, "admin_only_lists", adminOnlyLists)
 	return nil
+}
+
+// IsUserShopAdmin checks if the authenticated user is an admin for the specified shop
+func (service *ShopsServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+	if user == nil {
+		return false, errors.New("unauthorized user")
+	}
+
+	// Check if user is a member of the shop first
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify shop membership: %w", err)
+	}
+
+	if !isMember {
+		return false, nil
+	}
+
+	// Check admin status
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	return isAdmin, nil
 }

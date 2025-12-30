@@ -79,6 +79,7 @@ type ShopsService interface {
 	// Shop Settings Operations
 	GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error)
 	UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error
+	IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error)
 
 	// Notification Change Tracking (Audit Trail) Operations
 	GetNotificationChangeHistory(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)

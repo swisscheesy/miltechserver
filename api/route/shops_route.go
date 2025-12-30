@@ -29,6 +29,7 @@ func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, g
 	// Shop Settings Operations
 	group.GET("/shops/:shop_id/settings/admin-only-lists", pc.GetShopAdminOnlyListsSetting)
 	group.PUT("/shops/:shop_id/settings/admin-only-lists", pc.UpdateShopAdminOnlyListsSetting)
+	group.GET("/shops/:shop_id/is-admin", pc.CheckUserIsShopAdmin)
 
 	// Shop Member Operations
 	group.POST("/shops/join", pc.JoinShopViaInviteCode)
