@@ -3,9 +3,9 @@
 ## Overview
 This document details the implementation of the comprehensive change tracking (audit trail) system for shop vehicle notifications, as specified in [shop_vehicle_notification_audit_design.md](shop_vehicle_notification_audit_design.md).
 
-## Implementation Status: ✅ COMPLETE
+## Implementation Status: ✅ COMPLETE (Including Item Removal Tracking)
 
-**Date**: December 6, 2025
+**Date**: December 6, 2025 (Initial), December 30, 2025 (Item Removal + Enhanced Addition Tracking)
 **Implemented By**: Claude (AI Assistant)
 
 ## Summary of Changes
@@ -108,10 +108,11 @@ Added interface methods:
 - Verify user is shop member before returning changes
 - Return standard error responses for unauthorized access
 
-**Known Limitation**:
-- **Item removals NOT tracked** - `RemoveNotificationItem` and `RemoveNotificationItemList` do not record changes
-- Reason: No `GetNotificationItemByID()` method exists to fetch item details before deletion
-- TODO: Add repository method and implement tracking
+**Item Removal Tracking** (Added December 30, 2025):
+- ✅ **Item removals NOW tracked** - `RemoveNotificationItem` and `RemoveNotificationItemList` now record changes
+- ✅ **Security fix implemented** - Both methods now verify shop membership before deletion
+- ✅ **Repository methods added** - `GetNotificationItemByID()` and `GetNotificationItemsByIDs()`
+- ✅ **Detailed audit trail** - Captures NIIN, nomenclature, and quantity for all removed items
 
 ### Phase 5: Controller Layer ✅
 **File**: `api/controller/shops_controller.go` (lines 1585-1684)
@@ -164,7 +165,7 @@ All routes are protected by authentication middleware (inherited from parent rou
 | `reopen` | Reopened after completion | UpdateVehicleNotification (completed: true → false) |
 | `delete` | Notification deleted | DeleteVehicleNotification |
 | `items_added` | Items added (single or bulk) | AddNotificationItem, AddNotificationItemList |
-| `items_removed` | Items removed (NOT IMPLEMENTED) | RemoveNotificationItem, RemoveNotificationItemList |
+| `items_removed` | Items removed | RemoveNotificationItem, RemoveNotificationItemList |
 
 ## Field Changes JSONB Structure
 
@@ -182,11 +183,50 @@ All routes are protected by authentication middleware (inherited from parent rou
 }
 ```
 
-### Item Addition
+### Item Addition (Enhanced Detail)
 ```json
 {
   "fields_changed": ["items"],
-  "item_count": 3
+  "item_count": 3,
+  "items_added": [
+    {
+      "niin": "12345-678-9012",
+      "nomenclature": "BOLT, MACHINE",
+      "quantity": 25
+    },
+    {
+      "niin": "98765-432-1098",
+      "nomenclature": "NUT, HEXAGON",
+      "quantity": 50
+    },
+    {
+      "niin": "11111-222-3333",
+      "nomenclature": "WASHER, FLAT",
+      "quantity": 100
+    }
+  ]
+}
+```
+
+**Note**: Enhanced as of December 30, 2025 to provide consistent detail level with item removals. Captures NIIN (National Item Identification Number), nomenclature, and quantity for each added item.
+
+### Item Removal
+```json
+{
+  "fields_changed": ["items"],
+  "item_count": 2,
+  "items_removed": [
+    {
+      "niin": "12345-678-9012",
+      "nomenclature": "BOLT, MACHINE",
+      "quantity": 25
+    },
+    {
+      "niin": "98765-432-1098",
+      "nomenclature": "NUT, HEXAGON",
+      "quantity": 50
+    }
+  ]
 }
 ```
 
@@ -312,23 +352,35 @@ GET /api/v1/shops/notifications/{notification_id}/changes
 
 ## Known Issues and Limitations
 
-### 1. Item Removal Tracking Not Implemented ⚠️
-**Issue**: RemoveNotificationItem and RemoveNotificationItemList do not track changes
+### 1. Item Removal Tracking ✅ IMPLEMENTED (December 30, 2025)
+**Status**: ✅ **RESOLVED**
 
-**Reason**: No repository method exists to fetch individual items before deletion
+**What was implemented**:
+1. ✅ Added `GetNotificationItemByID()` to [shops_repository.go](../api/repository/shops_repository.go:71)
+2. ✅ Added `GetNotificationItemsByIDs()` to [shops_repository.go](../api/repository/shops_repository.go:72)
+3. ✅ Implemented both methods in [shops_repository_impl.go](../api/repository/shops_repository_impl.go:1240-1278)
+4. ✅ Updated [RemoveNotificationItem](../api/service/shops_service_impl.go:1343-1395) with:
+   - Permission verification (shop membership check)
+   - Item fetching before deletion
+   - Detailed audit trail recording
+5. ✅ Updated [RemoveNotificationItemList](../api/service/shops_service_impl.go:1397-1468) with:
+   - Bulk item fetching with IN clause
+   - Permission verification
+   - Cross-notification security check
+   - Detailed audit trail with all item details
+6. ✅ Added `buildItemRemovalFieldChanges()` helper function at [line 1913](../api/service/shops_service_impl.go:1913-1949)
 
-**Impact**: Item additions are tracked, but removals are not audited
+**Security improvements**:
+- ✅ Both removal methods now verify user is a shop member before deletion
+- ✅ Bulk removal validates all items belong to same notification
+- ✅ Prevents unauthorized item deletion
 
-**Solution**:
-1. Add `GetNotificationItemByID()` to shops_repository.go
-2. Implement in shops_repository_impl.go
-3. Update RemoveNotificationItem to fetch item before deletion
-4. Record change with "items_removed" type
-5. Same for RemoveNotificationItemList
-
-**TODO Location**:
-- `api/service/shops_service_impl.go:1260`
-- `api/service/shops_service_impl.go:1283`
+**Audit trail details captured**:
+- NIIN (National Item Identification Number)
+- Nomenclature (item description)
+- Quantity removed
+- Item count
+- Complete JSON structure for frontend parsing
 
 ### 2. JSON Parsing in Repository Layer
 **Issue**: Repository returns JSONB as raw string in FieldChanges
@@ -363,15 +415,15 @@ All code compiles successfully with no errors or warnings.
 | Track who made changes | ✅ | `changed_by` field with username JOIN |
 | Track when changes made | ✅ | `changed_at` timestamp |
 | Track what changed | ✅ | `field_changes` JSONB |
-| Track change type | ✅ | 7 change types (6 implemented) |
+| Track change type | ✅ | 7 change types (all 7 implemented) |
 | Repository layer | ✅ | All methods implemented |
 | Service layer | ✅ | All methods + modifications |
 | Controller layer | ✅ | All 3 endpoints |
 | Routes | ✅ | All 3 routes registered |
 | Best-effort logging | ✅ | Won't fail main operations |
-| Permission checking | ✅ | Shop membership verified |
+| Permission checking | ✅ | Shop membership verified (including item removals) |
 | Username resolution | ✅ | LEFT JOIN with users |
-| Item tracking | ⚠️ | Additions only, not removals |
+| Item tracking | ✅ | Both additions AND removals fully tracked |
 
 ## Performance Considerations
 
@@ -395,7 +447,7 @@ All code compiles successfully with no errors or warnings.
 
 ## Future Enhancements
 
-1. **Complete item removal tracking** - Add GetNotificationItemByID
+1. ~~**Complete item removal tracking**~~ ✅ **COMPLETED** (December 30, 2025)
 2. **Change notifications** - Email/push when important changes occur
 3. **Restore functionality** - Ability to revert to previous versions
 4. **Audit reports** - Generate compliance reports
@@ -406,17 +458,31 @@ All code compiles successfully with no errors or warnings.
 
 ## Conclusion
 
-The shop vehicle notification audit trail has been successfully implemented following the design document. All core functionality is working:
+The shop vehicle notification audit trail has been **FULLY COMPLETED** with all functionality implemented:
 
-✅ Complete audit trail of all notification changes
-✅ Tracks who, when, and what changed
-✅ Integrated tracking for notification items (additions)
-✅ Efficient querying with proper indexes
-✅ Minimal performance impact
-✅ Follows existing architectural patterns
-✅ Secure with proper access control
-✅ Graceful handling of deleted users
+✅ **Complete audit trail** of all notification changes
+✅ **Tracks who, when, and what changed** with full detail
+✅ **Integrated tracking for notification items** - both additions AND removals
+✅ **Detailed item removal audit** - captures NIIN, nomenclature, and quantities
+✅ **Efficient querying** with proper indexes
+✅ **Minimal performance impact** - optimized with bulk operations
+✅ **Follows existing architectural patterns**
+✅ **Secure with proper access control** - shop membership verified for all operations
+✅ **Security fixes implemented** - prevents unauthorized item deletion
+✅ **Graceful handling of deleted users**
 
-⚠️ **One known limitation**: Item removals not yet tracked (requires additional repository method)
+### Latest Update: December 30, 2025
+✅ **Item removal tracking COMPLETED**
+- Added repository methods: `GetNotificationItemByID()` and `GetNotificationItemsByIDs()`
+- Implemented security checks in `RemoveNotificationItem` and `RemoveNotificationItemList`
+- Full audit trail with detailed item information (NIIN, nomenclature, quantity)
+- Cross-notification security validation for bulk operations
 
-The implementation is production-ready and can be deployed immediately. Item removal tracking can be added as a future enhancement without affecting existing functionality.
+✅ **Item addition tracking ENHANCED**
+- Added `itemAuditInfo` shared struct for consistent item audit data
+- Implemented `buildItemAdditionFieldChanges()` helper function
+- Updated `AddNotificationItem` to capture full item details (NIIN, nomenclature, quantity)
+- Updated `AddNotificationItemList` to capture full details for all items
+- Achieved symmetric audit detail for both additions and removals
+
+The implementation is **100% production-ready** with all 7 change types fully implemented and tracked with complete detail. Item additions and removals now have identical levels of audit information, providing comprehensive inventory tracking for compliance and analytics.

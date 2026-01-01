@@ -13,4 +13,5 @@ type NotificationChangeWithUsername struct {
 	ChangedAt         time.Time              `json:"changed_at"`
 	ChangeType        string                 `json:"change_type"`
 	FieldChanges      map[string]interface{} `json:"field_changes"`
+	NotificationTitle string                 `json:"notification_title"`
 }

@@ -259,7 +259,7 @@ The `change_type` field indicates what kind of change was made:
 | `reopen` | Notification was reopened | When completed notification is reopened |
 | `delete` | Notification was deleted | When notification is deleted |
 | `items_added` | Items were added | When items are added to the notification |
-| `items_removed` | Items were removed | **Not yet implemented** |
+| `items_removed` | Items were removed | When items are removed from the notification |
 
 ---
 
@@ -318,19 +318,69 @@ Parsed:
 Check `change_type` to determine if it was `complete` or `reopen`.
 
 #### 4. Items Added
-Raw: `"{\"fields_changed\": [\"items\"], \"item_count\": 3}"`
+Raw: `"{\"fields_changed\": [\"items\"], \"item_count\": 3, \"items_added\": [{\"niin\": \"12345-678-9012\", \"nomenclature\": \"BOLT, MACHINE\", \"quantity\": 25}, {\"niin\": \"98765-432-1098\", \"nomenclature\": \"NUT, HEXAGON\", \"quantity\": 50}, {\"niin\": \"11111-222-3333\", \"nomenclature\": \"WASHER, FLAT\", \"quantity\": 100}]}"`
 
 Parsed:
 ```json
 {
   "fields_changed": ["items"],
-  "item_count": 3
+  "item_count": 3,
+  "items_added": [
+    {
+      "niin": "12345-678-9012",
+      "nomenclature": "BOLT, MACHINE",
+      "quantity": 25
+    },
+    {
+      "niin": "98765-432-1098",
+      "nomenclature": "NUT, HEXAGON",
+      "quantity": 50
+    },
+    {
+      "niin": "11111-222-3333",
+      "nomenclature": "WASHER, FLAT",
+      "quantity": 100
+    }
+  ]
 }
 ```
 
-The `item_count` field indicates how many items were added.
+The `item_count` field indicates how many items were added. The `items_added` array contains detailed information about each added item including:
+- `niin`: National Item Identification Number
+- `nomenclature`: Official item name/description
+- `quantity`: Number of units that were added
 
-#### 5. Notification Deleted
+**Note**: Enhanced detail added December 30, 2025 to match the level of detail provided for item removals.
+
+#### 5. Items Removed
+Raw: `\"{\\\"fields_changed\\\": [\\\"items\\\"], \\\"item_count\\\": 2, \\\"items_removed\\\": [{\\\"niin\\\": \\\"12345-678-9012\\\", \\\"nomenclature\\\": \\\"BOLT, MACHINE\\\", \\\"quantity\\\": 25}, {\\\"niin\\\": \\\"98765-432-1098\\\", \\\"nomenclature\\\": \\\"NUT, HEXAGON\\\", \\\"quantity\\\": 50}]}\"`
+
+Parsed:
+```json
+{
+  "fields_changed": ["items"],
+  "item_count": 2,
+  "items_removed": [
+    {
+      "niin": "12345-678-9012",
+      "nomenclature": "BOLT, MACHINE",
+      "quantity": 25
+    },
+    {
+      "niin": "98765-432-1098",
+      "nomenclature": "NUT, HEXAGON",
+      "quantity": 50
+    }
+  ]
+}
+```
+
+The `item_count` field indicates how many items were removed. The `items_removed` array contains detailed information about each removed item including:
+- `niin`: National Item Identification Number
+- `nomenclature`: Official item name/description
+- `quantity`: Number of units that were removed
+
+#### 6. Notification Deleted
 Raw: `"{\"fields_changed\": [\"deleted\"]}"`
 
 Parsed:
@@ -472,13 +522,17 @@ This example shows a notification's complete history from creation to completion
 
 ## Known Limitations
 
-### Item Removal Tracking Not Implemented
+### ~~Item Removal Tracking Not Implemented~~ ✅ IMPLEMENTED (December 30, 2025)
 
-The `items_removed` change type is not yet implemented. Only item additions are currently tracked.
+The `items_removed` change type is **NOW FULLY IMPLEMENTED**.
 
-**Impact**: Users won't see audit records when items are removed from notifications.
+**What's included**:
+- ✅ Complete audit trail for item removals
+- ✅ Detailed item information captured (NIIN, nomenclature, quantity)
+- ✅ Security verification (shop membership required)
+- ✅ Both single and bulk item removal tracking
 
-**Timeline**: To be determined.
+**Impact**: Users can now see complete audit records when items are removed from notifications, including what specific items were removed.
 
 ---
 
@@ -487,6 +541,8 @@ The `items_removed` change type is not yet implemented. Only item additions are 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2025-12-06 | Initial API documentation for mobile |
+| 1.1.0 | 2025-12-30 | Added `items_removed` change type with detailed item information |
+| 1.2.0 | 2025-12-30 | Enhanced `items_added` to include detailed item information (NIIN, nomenclature, quantity) |
 
 ---
 

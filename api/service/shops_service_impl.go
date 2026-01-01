@@ -1212,6 +1212,13 @@ func (service *ShopsServiceImpl) AddNotificationItem(user *bootstrap.User, item 
 		return nil, fmt.Errorf("failed to add notification item: %w", err)
 	}
 
+	// Build field changes for audit trail
+	fieldChanges, err := buildItemAdditionFieldChanges([]model.ShopNotificationItems{*createdItem})
+	if err != nil {
+		slog.Warn("Failed to build field changes for item addition", "error", err)
+		fieldChanges = `{"fields_changed": ["items"], "item_count": 1}`
+	}
+
 	// Record item addition as a change (best-effort)
 	service.recordNotificationChange(
 		user,
@@ -1219,7 +1226,7 @@ func (service *ShopsServiceImpl) AddNotificationItem(user *bootstrap.User, item 
 		notification.ShopID,
 		notification.VehicleID,
 		"items_added",
-		`{"fields_changed": ["items"], "item_count": 1}`,
+		fieldChanges,
 	)
 
 	slog.Info("Notification item added", "user_id", user.UserID, "notification_id", item.NotificationID, "item_id", item.ID)
@@ -1324,16 +1331,21 @@ func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, i
 		return nil, fmt.Errorf("failed to add notification items: %w", err)
 	}
 
+	// Build field changes for audit trail
+	fieldChanges, err := buildItemAdditionFieldChanges(createdItems)
+	if err != nil {
+		slog.Warn("Failed to build field changes for item additions", "error", err)
+		fieldChanges = fmt.Sprintf(`{"fields_changed": ["items"], "item_count": %d}`, len(createdItems))
+	}
+
 	// Record item additions as a change (best-effort)
-	itemCount := len(createdItems)
-	fieldChangesJSON := fmt.Sprintf(`{"fields_changed": ["items"], "item_count": %d}`, itemCount)
 	service.recordNotificationChange(
 		user,
 		items[0].NotificationID,
 		notification.ShopID,
 		notification.VehicleID,
 		"items_added",
-		fieldChangesJSON,
+		fieldChanges,
 	)
 
 	slog.Info("Notification items added", "user_id", user.UserID, "notification_id", items[0].NotificationID, "count", len(createdItems))
@@ -1345,17 +1357,52 @@ func (service *ShopsServiceImpl) RemoveNotificationItem(user *bootstrap.User, it
 		return errors.New("unauthorized user")
 	}
 
-	// Note: We cannot get the individual item before deletion since there's no GetNotificationItemByID method.
-	// The change tracking for item removal will be added when we implement a method to fetch individual items.
-	// For now, item removals won't be tracked in the audit log.
-	// TODO: Add GetNotificationItemByID to repository and track item removals
+	// SECURITY FIX: Fetch the item first to verify permissions
+	item, err := service.ShopsRepository.GetNotificationItemByID(user, itemID)
+	if err != nil {
+		return fmt.Errorf("failed to get notification item: %w", err)
+	}
 
-	err := service.ShopsRepository.DeleteNotificationItem(user, itemID)
+	// Get notification to verify access
+	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, item.NotificationID)
+	if err != nil {
+		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// SECURITY FIX: Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, notification.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Delete the item
+	err = service.ShopsRepository.DeleteNotificationItem(user, itemID)
 	if err != nil {
 		return fmt.Errorf("failed to remove notification item: %w", err)
 	}
 
-	slog.Info("Notification item removed", "user_id", user.UserID, "item_id", itemID)
+	// Build field changes for audit trail
+	fieldChanges, err := buildItemRemovalFieldChanges([]model.ShopNotificationItems{*item})
+	if err != nil {
+		slog.Warn("Failed to build field changes for item removal", "error", err)
+		fieldChanges = `{"fields_changed": ["items"], "item_count": 1}`
+	}
+
+	// Record item removal as a change (best-effort)
+	service.recordNotificationChange(
+		user,
+		item.NotificationID,
+		item.ShopID,
+		notification.VehicleID,
+		"items_removed",
+		fieldChanges,
+	)
+
+	slog.Info("Notification item removed", "user_id", user.UserID, "item_id", itemID, "notification_id", item.NotificationID)
 	return nil
 }
 
@@ -1368,17 +1415,67 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 		return errors.New("no items to remove")
 	}
 
-	// Note: We cannot get the individual items before deletion since there's no GetNotificationItemByID method.
-	// The change tracking for item removals will be added when we implement a method to fetch individual items.
-	// For now, item removals won't be tracked in the audit log.
-	// TODO: Add GetNotificationItemByID to repository and track item removals
+	// SECURITY FIX: Fetch the items first to verify permissions
+	items, err := service.ShopsRepository.GetNotificationItemsByIDs(user, itemIDs)
+	if err != nil {
+		return fmt.Errorf("failed to get notification items: %w", err)
+	}
 
-	err := service.ShopsRepository.DeleteNotificationItemList(user, itemIDs)
+	// If no items were found, nothing to delete
+	if len(items) == 0 {
+		slog.Warn("No notification items found for deletion", "user_id", user.UserID, "requested_count", len(itemIDs))
+		return errors.New("no notification items found")
+	}
+
+	// Verify permissions using the first item's notification
+	// All items from the same bulk operation should belong to the same notification
+	firstItem := items[0]
+	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, firstItem.NotificationID)
+	if err != nil {
+		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// SECURITY FIX: Check if user is member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, notification.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Verify all items belong to the same notification (security check)
+	for _, item := range items {
+		if item.NotificationID != firstItem.NotificationID {
+			return errors.New("cannot delete items from multiple notifications in a single operation")
+		}
+	}
+
+	// Delete the items
+	err = service.ShopsRepository.DeleteNotificationItemList(user, itemIDs)
 	if err != nil {
 		return fmt.Errorf("failed to remove notification items: %w", err)
 	}
 
-	slog.Info("Notification items removed", "user_id", user.UserID, "count", len(itemIDs))
+	// Build field changes for audit trail
+	fieldChanges, err := buildItemRemovalFieldChanges(items)
+	if err != nil {
+		slog.Warn("Failed to build field changes for item removals", "error", err)
+		fieldChanges = fmt.Sprintf(`{"fields_changed": ["items"], "item_count": %d}`, len(items))
+	}
+
+	// Record item removals as a change (best-effort)
+	service.recordNotificationChange(
+		user,
+		firstItem.NotificationID,
+		firstItem.ShopID,
+		notification.VehicleID,
+		"items_removed",
+		fieldChanges,
+	)
+
+	slog.Info("Notification items removed", "user_id", user.UserID, "count", len(items), "notification_id", firstItem.NotificationID)
 	return nil
 }
 
@@ -1908,6 +2005,78 @@ func determineChangeType(old, new *model.ShopVehicleNotifications) string {
 	}
 	// Default to generic update
 	return "update"
+}
+
+// itemAuditInfo represents item details captured in audit trail
+// Used for both item additions and removals to ensure consistency
+type itemAuditInfo struct {
+	Niin         string `json:"niin"`
+	Nomenclature string `json:"nomenclature"`
+	Quantity     int32  `json:"quantity"`
+}
+
+// buildItemAdditionFieldChanges creates the field_changes JSON for item addition audit trail
+func buildItemAdditionFieldChanges(items []model.ShopNotificationItems) (string, error) {
+	type FieldChangesData struct {
+		FieldsChanged []string        `json:"fields_changed"`
+		ItemCount     int             `json:"item_count"`
+		ItemsAdded    []itemAuditInfo `json:"items_added"`
+	}
+
+	// Extract relevant item information for audit trail
+	itemsInfo := make([]itemAuditInfo, len(items))
+	for i, item := range items {
+		itemsInfo[i] = itemAuditInfo{
+			Niin:         item.Niin,
+			Nomenclature: item.Nomenclature,
+			Quantity:     item.Quantity,
+		}
+	}
+
+	data := FieldChangesData{
+		FieldsChanged: []string{"items"},
+		ItemCount:     len(items),
+		ItemsAdded:    itemsInfo,
+	}
+
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal field changes: %w", err)
+	}
+
+	return string(jsonBytes), nil
+}
+
+// buildItemRemovalFieldChanges creates the field_changes JSON for item removal audit trail
+func buildItemRemovalFieldChanges(items []model.ShopNotificationItems) (string, error) {
+	type FieldChangesData struct {
+		FieldsChanged []string        `json:"fields_changed"`
+		ItemCount     int             `json:"item_count"`
+		ItemsRemoved  []itemAuditInfo `json:"items_removed"`
+	}
+
+	// Extract relevant item information for audit trail
+	itemsInfo := make([]itemAuditInfo, len(items))
+	for i, item := range items {
+		itemsInfo[i] = itemAuditInfo{
+			Niin:         item.Niin,
+			Nomenclature: item.Nomenclature,
+			Quantity:     item.Quantity,
+		}
+	}
+
+	data := FieldChangesData{
+		FieldsChanged: []string{"items"},
+		ItemCount:     len(items),
+		ItemsRemoved:  itemsInfo,
+	}
+
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal field changes: %w", err)
+	}
+
+	return string(jsonBytes), nil
 }
 
 // recordNotificationChange is a helper to record audit trail changes (best-effort)

@@ -1237,6 +1237,46 @@ func (repo *ShopsRepositoryImpl) GetShopNotificationItems(user *bootstrap.User, 
 	return items, nil
 }
 
+func (repo *ShopsRepositoryImpl) GetNotificationItemByID(user *bootstrap.User, itemID string) (*model.ShopNotificationItems, error) {
+	stmt := SELECT(ShopNotificationItems.AllColumns).
+		FROM(ShopNotificationItems).
+		WHERE(ShopNotificationItems.ID.EQ(String(itemID)))
+
+	var item model.ShopNotificationItems
+	err := stmt.Query(repo.Db, &item)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification item: %w", err)
+	}
+
+	return &item, nil
+}
+
+func (repo *ShopsRepositoryImpl) GetNotificationItemsByIDs(user *bootstrap.User, itemIDs []string) ([]model.ShopNotificationItems, error) {
+	if len(itemIDs) == 0 {
+		return []model.ShopNotificationItems{}, nil
+	}
+
+	// Convert string slice to expressions for the IN clause
+	var expressions []Expression
+	for _, id := range itemIDs {
+		expressions = append(expressions, String(id))
+	}
+
+	stmt := SELECT(ShopNotificationItems.AllColumns).
+		FROM(ShopNotificationItems).
+		WHERE(ShopNotificationItems.ID.IN(expressions...))
+
+	var items []model.ShopNotificationItems
+	err := stmt.Query(repo.Db, &items)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification items: %w", err)
+	}
+
+	// Note: Result may contain fewer items than requested IDs if some don't exist
+	// This is intentional for lenient bulk operations
+	return items, nil
+}
+
 func (repo *ShopsRepositoryImpl) CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
 	if len(items) == 0 {
 		return []model.ShopNotificationItems{}, nil
@@ -1920,9 +1960,11 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByShop(
 			COALESCE(u.username, 'Unknown User') as changed_by_username,
 			c.changed_at,
 			c.change_type,
-			c.field_changes
+			c.field_changes,
+			COALESCE(n.title, 'Deleted Notification') as notification_title
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
+		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 		WHERE c.shop_id = $1
 		ORDER BY c.changed_at DESC
 		LIMIT $2
@@ -1949,6 +1991,7 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByShop(
 			&change.ChangedAt,
 			&change.ChangeType,
 			&fieldChangesJSON,
+			&change.NotificationTitle,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan change row: %w", err)
@@ -1985,9 +2028,11 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
 			COALESCE(u.username, 'Unknown User') as changed_by_username,
 			c.changed_at,
 			c.change_type,
-			c.field_changes
+			c.field_changes,
+			COALESCE(n.title, 'Deleted Notification') as notification_title
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
+		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 		WHERE c.vehicle_id = $1
 		ORDER BY c.changed_at DESC
 	`
@@ -2013,6 +2058,7 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
 			&change.ChangedAt,
 			&change.ChangeType,
 			&fieldChangesJSON,
+			&change.NotificationTitle,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan change row: %w", err)
