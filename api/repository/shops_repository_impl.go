@@ -1852,8 +1852,11 @@ func (repo *ShopsRepositoryImpl) CreateNotificationChange(
 			vehicle_id,
 			changed_by,
 			change_type,
-			field_changes
-		) VALUES ($1, $2, $3, $4, $5, $6)
+			field_changes,
+			notification_title,
+			notification_type,
+			vehicle_admin
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
 	_, err := repo.Db.Exec(
@@ -1864,6 +1867,9 @@ func (repo *ShopsRepositoryImpl) CreateNotificationChange(
 		change.ChangedBy,
 		change.ChangeType,
 		change.FieldChanges,
+		change.NotificationTitle,
+		change.NotificationType,
+		change.VehicleAdmin,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create notification change record: %w", err)
@@ -1887,9 +1893,15 @@ func (repo *ShopsRepositoryImpl) GetNotificationChanges(
 			COALESCE(u.username, 'Unknown User') as changed_by_username,
 			c.changed_at,
 			c.change_type,
-			c.field_changes
+			c.field_changes,
+			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			c.notification_type,
+			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
+		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
+		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.notification_id = $1
 		ORDER BY c.changed_at DESC
 	`
@@ -1915,6 +1927,10 @@ func (repo *ShopsRepositoryImpl) GetNotificationChanges(
 			&change.ChangedAt,
 			&change.ChangeType,
 			&fieldChangesJSON,
+			&change.NotificationTitle,
+			&change.NotificationType,
+			&change.VehicleAdmin,
+			&change.IsDeleted,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan change row: %w", err)
@@ -1961,10 +1977,14 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByShop(
 			c.changed_at,
 			c.change_type,
 			c.field_changes,
-			COALESCE(n.title, 'Deleted Notification') as notification_title
+			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			c.notification_type,
+			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
 		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
+		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.shop_id = $1
 		ORDER BY c.changed_at DESC
 		LIMIT $2
@@ -1992,6 +2012,9 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByShop(
 			&change.ChangeType,
 			&fieldChangesJSON,
 			&change.NotificationTitle,
+			&change.NotificationType,
+			&change.VehicleAdmin,
+			&change.IsDeleted,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan change row: %w", err)
@@ -2029,10 +2052,14 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
 			c.changed_at,
 			c.change_type,
 			c.field_changes,
-			COALESCE(n.title, 'Deleted Notification') as notification_title
+			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			c.notification_type,
+			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
 		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
+		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.vehicle_id = $1
 		ORDER BY c.changed_at DESC
 	`
@@ -2059,6 +2086,9 @@ func (repo *ShopsRepositoryImpl) GetNotificationChangesByVehicle(
 			&change.ChangeType,
 			&fieldChangesJSON,
 			&change.NotificationTitle,
+			&change.NotificationType,
+			&change.VehicleAdmin,
+			&change.IsDeleted,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan change row: %w", err)

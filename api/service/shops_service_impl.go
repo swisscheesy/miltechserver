@@ -886,7 +886,7 @@ func (service *ShopsServiceImpl) DeleteShopVehicle(user *bootstrap.User, vehicle
 		return errors.New("unauthorized user")
 	}
 
-	// Get vehicle to check permissions
+	// Get vehicle to check permissions AND capture audit data
 	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, vehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get vehicle: %w", err)
@@ -903,12 +903,33 @@ func (service *ShopsServiceImpl) DeleteShopVehicle(user *bootstrap.User, vehicle
 		return errors.New("access denied: only vehicle creator or shop admin can delete vehicles")
 	}
 
+	// Record vehicle deletion in audit trail BEFORE deleting
+	// Create a synthetic notification change to record the vehicle deletion
+	vehicleDeletionChange := model.ShopVehicleNotificationChanges{
+		NotificationID:    nil, // NULL - no specific notification
+		ShopID:            vehicle.ShopID,
+		VehicleID:         &vehicleID, // Will be set to NULL after delete by ON DELETE SET NULL
+		ChangedBy:         &user.UserID,
+		ChangeType:        "vehicle_deleted",
+		FieldChanges:      buildVehicleDeletionFieldChanges(vehicle),
+		NotificationTitle: nil, // NULL - not applicable
+		NotificationType:  nil, // NULL - not applicable
+		VehicleAdmin:      &vehicle.Admin,
+	}
+
+	// Best-effort audit recording
+	err = service.ShopsRepository.CreateNotificationChange(user, vehicleDeletionChange)
+	if err != nil {
+		slog.Warn("Failed to record vehicle deletion audit", "error", err, "vehicle_id", vehicleID)
+	}
+
+	// Perform the actual deletion
 	err = service.ShopsRepository.DeleteShopVehicle(user, vehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop vehicle: %w", err)
 	}
 
-	slog.Info("Shop vehicle deleted", "user_id", user.UserID, "vehicle_id", vehicleID)
+	slog.Info("Shop vehicle deleted", "user_id", user.UserID, "vehicle_id", vehicleID, "vehicle_admin", vehicle.Admin)
 	return nil
 }
 
@@ -966,6 +987,9 @@ func (service *ShopsServiceImpl) CreateVehicleNotification(user *bootstrap.User,
 		notification.VehicleID,
 		"create",
 		`{"fields_changed": ["created"]}`,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Vehicle notification created", "user_id", user.UserID, "vehicle_id", notification.VehicleID, "notification_id", notification.ID)
@@ -1099,6 +1123,12 @@ func (service *ShopsServiceImpl) UpdateVehicleNotification(user *bootstrap.User,
 		return fmt.Errorf("failed to get current notification: %w", err)
 	}
 
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, currentNotification.VehicleID)
+	if err != nil {
+		return fmt.Errorf("failed to get vehicle: %w", err)
+	}
+
 	// Check if user is member of the shop
 	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, currentNotification.ShopID)
 	if err != nil {
@@ -1135,6 +1165,9 @@ func (service *ShopsServiceImpl) UpdateVehicleNotification(user *bootstrap.User,
 		currentNotification.VehicleID,
 		changeType,
 		fieldChanges,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Vehicle notification updated", "user_id", user.UserID, "notification_id", notification.ID)
@@ -1150,6 +1183,12 @@ func (service *ShopsServiceImpl) DeleteVehicleNotification(user *bootstrap.User,
 	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, notificationID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, notification.VehicleID)
+	if err != nil {
+		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
 	// Check if user is member of the shop
@@ -1170,6 +1209,9 @@ func (service *ShopsServiceImpl) DeleteVehicleNotification(user *bootstrap.User,
 		notification.VehicleID,
 		"delete",
 		`{"fields_changed": ["deleted"]}`,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	err = service.ShopsRepository.DeleteVehicleNotification(user, notificationID)
@@ -1191,6 +1233,12 @@ func (service *ShopsServiceImpl) AddNotificationItem(user *bootstrap.User, item 
 	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, item.NotificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, notification.VehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
 	// Check if user is member of the shop
@@ -1227,6 +1275,9 @@ func (service *ShopsServiceImpl) AddNotificationItem(user *bootstrap.User, item 
 		notification.VehicleID,
 		"items_added",
 		fieldChanges,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Notification item added", "user_id", user.UserID, "notification_id", item.NotificationID, "item_id", item.ID)
@@ -1308,6 +1359,12 @@ func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, i
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, notification.VehicleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle: %w", err)
+	}
+
 	// Check if user is member of the shop
 	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, notification.ShopID)
 	if err != nil {
@@ -1346,6 +1403,9 @@ func (service *ShopsServiceImpl) AddNotificationItemList(user *bootstrap.User, i
 		notification.VehicleID,
 		"items_added",
 		fieldChanges,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Notification items added", "user_id", user.UserID, "notification_id", items[0].NotificationID, "count", len(createdItems))
@@ -1367,6 +1427,12 @@ func (service *ShopsServiceImpl) RemoveNotificationItem(user *bootstrap.User, it
 	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, item.NotificationID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, notification.VehicleID)
+	if err != nil {
+		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
 	// SECURITY FIX: Check if user is member of the shop
@@ -1400,6 +1466,9 @@ func (service *ShopsServiceImpl) RemoveNotificationItem(user *bootstrap.User, it
 		notification.VehicleID,
 		"items_removed",
 		fieldChanges,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Notification item removed", "user_id", user.UserID, "item_id", itemID, "notification_id", item.NotificationID)
@@ -1433,6 +1502,12 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 	notification, err := service.ShopsRepository.GetVehicleNotificationByID(user, firstItem.NotificationID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification: %w", err)
+	}
+
+	// Get vehicle for denormalized audit data
+	vehicle, err := service.ShopsRepository.GetShopVehicleByID(user, notification.VehicleID)
+	if err != nil {
+		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
 	// SECURITY FIX: Check if user is member of the shop
@@ -1473,6 +1548,9 @@ func (service *ShopsServiceImpl) RemoveNotificationItemList(user *bootstrap.User
 		notification.VehicleID,
 		"items_removed",
 		fieldChanges,
+		notification.Title,
+		notification.Type,
+		vehicle.Admin,
 	)
 
 	slog.Info("Notification items removed", "user_id", user.UserID, "count", len(items), "notification_id", firstItem.NotificationID)
@@ -2079,6 +2157,43 @@ func buildItemRemovalFieldChanges(items []model.ShopNotificationItems) (string, 
 	return string(jsonBytes), nil
 }
 
+// buildVehicleDeletionFieldChanges creates field changes JSON for vehicle deletion
+func buildVehicleDeletionFieldChanges(vehicle *model.ShopVehicle) string {
+	type VehicleData struct {
+		Admin   string `json:"admin"`
+		Niin    string `json:"niin"`
+		Uoc     string `json:"uoc"`
+		Mileage int32  `json:"mileage"`
+		Hours   int32  `json:"hours"`
+		Comment string `json:"comment"`
+	}
+
+	type FieldChangesData struct {
+		Deleted     bool        `json:"deleted"`
+		VehicleData VehicleData `json:"vehicle_data"`
+	}
+
+	data := FieldChangesData{
+		Deleted: true,
+		VehicleData: VehicleData{
+			Admin:   vehicle.Admin,
+			Niin:    vehicle.Niin,
+			Uoc:     vehicle.Uoc,
+			Mileage: vehicle.Mileage,
+			Hours:   vehicle.Hours,
+			Comment: vehicle.Comment,
+		},
+	}
+
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		slog.Warn("Failed to marshal vehicle deletion field changes", "error", err)
+		return `{"deleted": true}`
+	}
+
+	return string(jsonBytes)
+}
+
 // recordNotificationChange is a helper to record audit trail changes (best-effort)
 func (service *ShopsServiceImpl) recordNotificationChange(
 	user *bootstrap.User,
@@ -2087,14 +2202,20 @@ func (service *ShopsServiceImpl) recordNotificationChange(
 	vehicleID string,
 	changeType string,
 	fieldChanges string,
+	notificationTitle string,
+	notificationType string,
+	vehicleAdmin string,
 ) {
 	change := model.ShopVehicleNotificationChanges{
-		NotificationID: notificationID,
-		ShopID:         shopID,
-		VehicleID:      vehicleID,
-		ChangedBy:      user.UserID,
-		ChangeType:     changeType,
-		FieldChanges:   fieldChanges,
+		NotificationID:    &notificationID,
+		ShopID:            shopID,
+		VehicleID:         &vehicleID,
+		ChangedBy:         &user.UserID,
+		ChangeType:        changeType,
+		FieldChanges:      fieldChanges,
+		NotificationTitle: &notificationTitle,
+		NotificationType:  &notificationType,
+		VehicleAdmin:      &vehicleAdmin,
 	}
 
 	err := service.ShopsRepository.CreateNotificationChange(user, change)
