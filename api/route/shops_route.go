@@ -5,17 +5,23 @@ import (
 	"miltechserver/api/controller"
 	"miltechserver/api/repository"
 	"miltechserver/api/service"
+	"miltechserver/api/websocket"
 	"miltechserver/bootstrap"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
 
-func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, group *gin.RouterGroup) {
+func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, hub *websocket.Hub, group *gin.RouterGroup) {
 	shopsRepository := repository.NewShopsRepositoryImpl(db, blobClient, env)
 
+	// Configure WebSocket origin validation
+	if env.WebSocketEnabled {
+		controller.ConfigureWebSocketUpgrader(env.WebSocketAllowedOrigins)
+	}
+
 	pc := &controller.ShopsController{
-		ShopsService: service.NewShopsServiceImpl(shopsRepository),
+		ShopsService: service.NewShopsServiceImpl(shopsRepository, hub),
 	}
 
 	// Shop Operations
@@ -52,6 +58,11 @@ func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, g
 	group.DELETE("/shops/messages/:message_id", pc.DeleteShopMessage)
 	group.POST("/shops/messages/image/upload", pc.UploadMessageImage)
 	group.DELETE("/shops/messages/image/:message_id", pc.DeleteMessageImage)
+
+	// WebSocket Operations (Real-time messaging)
+	if env.WebSocketEnabled {
+		group.GET("/shops/:shop_id/messages/stream", pc.StreamShopMessages)
+	}
 
 	// Shop Vehicle Operations
 	group.POST("/shops/vehicles", pc.CreateShopVehicle)

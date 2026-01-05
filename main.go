@@ -35,7 +35,7 @@ func SetupEngine() *gin.Engine {
 
 	server := gin.Default()
 
-	route.Setup(db, server, app.FireAuth, env, app.BlobClient, app.BlobCredential)
+	route.Setup(db, server, app.FireAuth, env, app.BlobClient, app.BlobCredential, app.Hub)
 
 	// Cleanup server on crash or interrupt
 	c := make(chan os.Signal, 1)
@@ -43,6 +43,14 @@ func SetupEngine() *gin.Engine {
 
 	go func() {
 		<-c
+		log.Println("Shutting down gracefully...")
+
+		// Shutdown WebSocket Hub if it exists
+		if app.Hub != nil {
+			app.Hub.Shutdown()
+			log.Println("WebSocket Hub shut down")
+		}
+
 		if err := db.Close(); err != nil {
 			log.Fatalf("Unable to disconnect from database: %s", err)
 		}

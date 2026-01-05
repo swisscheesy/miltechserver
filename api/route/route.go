@@ -3,6 +3,7 @@ package route
 import (
 	"database/sql"
 	"miltechserver/api/middleware"
+	"miltechserver/api/websocket"
 	"miltechserver/bootstrap"
 	"net/http"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client, blobCredential *azblob.SharedKeyCredential) {
+func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client, blobCredential *azblob.SharedKeyCredential, hub *websocket.Hub) {
 	v1Route := router.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -34,7 +35,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewUserSavesRouter(db, blobClient, env, authRoutes)
 	NewUserGeneralRouter(db, authRoutes)
 	NewUserVehicleRouter(db, authRoutes)
-	NewShopsRouter(db, blobClient, env, authRoutes)
+	NewShopsRouter(db, blobClient, env, hub, authRoutes)
 	NewEquipmentServicesRouter(db, blobClient, env, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)

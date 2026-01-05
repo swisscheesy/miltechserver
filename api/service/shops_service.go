@@ -3,6 +3,7 @@ package service
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
+	"miltechserver/api/websocket"
 	"miltechserver/bootstrap"
 )
 
@@ -85,4 +86,8 @@ type ShopsService interface {
 	GetNotificationChangeHistory(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)
 	GetShopNotificationChanges(user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error)
 	GetVehicleNotificationChanges(user *bootstrap.User, vehicleID string) ([]response.NotificationChangeWithUsername, error)
+
+	// WebSocket Operations
+	GetHub() *websocket.Hub
+	IsUserShopMember(user *bootstrap.User, shopID string) (bool, error)
 }

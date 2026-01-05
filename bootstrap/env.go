@@ -20,6 +20,9 @@ type Env struct {
 	ServerAddress   string
 	SslMode         string
 	ContextTimeout  int
+	// WebSocket Configuration
+	WebSocketEnabled       bool
+	WebSocketAllowedOrigins string
 }
 
 func NewEnv() *Env {
@@ -47,6 +50,9 @@ func NewEnv() *Env {
 	// Blob Storage
 	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
 	env.BlobAccountKey = os.Getenv("BLOB_ACCOUNT_KEY")
+	// WebSocket Configuration
+	env.WebSocketEnabled = os.Getenv("WEBSOCKET_ENABLED") != "false" // Default enabled
+	env.WebSocketAllowedOrigins = os.Getenv("WEBSOCKET_ALLOWED_ORIGINS")
 
 	log.Printf("DB_HOST: %s", env.Host)
 	log.Printf("DB_PORT: %s", env.Port)
@@ -55,6 +61,7 @@ func NewEnv() *Env {
 	log.Printf("DB_DATE: %s", env.DBDate)
 	log.Printf("DB_SCHEMA: %s", env.DBSchema)
 	log.Printf("SSL_MODE: %s", env.SslMode)
+	log.Printf("WEBSOCKET_ENABLED: %t", env.WebSocketEnabled)
 	return &env
 
 }

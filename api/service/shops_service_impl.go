@@ -10,6 +10,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
 	"miltechserver/api/response"
+	"miltechserver/api/websocket"
 	"miltechserver/bootstrap"
 	"strings"
 	"time"
@@ -24,10 +25,14 @@ const (
 
 type ShopsServiceImpl struct {
 	ShopsRepository repository.ShopsRepository
+	Hub             *websocket.Hub
 }
 
-func NewShopsServiceImpl(shopsRepository repository.ShopsRepository) *ShopsServiceImpl {
-	return &ShopsServiceImpl{ShopsRepository: shopsRepository}
+func NewShopsServiceImpl(shopsRepository repository.ShopsRepository, hub *websocket.Hub) *ShopsServiceImpl {
+	return &ShopsServiceImpl{
+		ShopsRepository: shopsRepository,
+		Hub:             hub,
+	}
 }
 
 // Shop Operations
@@ -511,6 +516,19 @@ func (service *ShopsServiceImpl) CreateShopMessage(user *bootstrap.User, message
 	createdMessage, err := service.ShopsRepository.CreateShopMessage(user, message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop message: %w", err)
+	}
+
+	// Broadcast message to WebSocket clients (best-effort, non-blocking)
+	if service.Hub != nil {
+		messageWithUsername := &websocket.ShopMessageWithUsername{
+			ShopMessages: createdMessage,
+			Username:     user.Username,
+		}
+		service.Hub.BroadcastMessage(message.ShopID, messageWithUsername)
+		slog.Debug("Shop message broadcast to WebSocket clients",
+			"shop_id", message.ShopID,
+			"message_id", createdMessage.ID,
+		)
 	}
 
 	slog.Info("Shop message created", "user_id", user.UserID, "shop_id", message.ShopID, "message_id", message.ID)
@@ -2403,4 +2421,20 @@ func (service *ShopsServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID st
 	}
 
 	return isAdmin, nil
+}
+
+// WebSocket Operations
+
+// GetHub returns the WebSocket hub instance
+func (service *ShopsServiceImpl) GetHub() *websocket.Hub {
+	return service.Hub
+}
+
+// IsUserShopMember checks if a user is a member of a shop
+func (service *ShopsServiceImpl) IsUserShopMember(user *bootstrap.User, shopID string) (bool, error) {
+	if user == nil {
+		return false, errors.New("unauthorized user")
+	}
+
+	return service.ShopsRepository.IsUserMemberOfShop(user, shopID)
 }
