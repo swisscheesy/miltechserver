@@ -26,7 +26,11 @@ func NewShopsRouter(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env, g
 	group.PUT("/shops/:shop_id", pc.UpdateShop)
 	group.DELETE("/shops/:shop_id", pc.DeleteShop)
 
-	// Shop Settings Operations
+	// Shop Settings Operations (Unified)
+	group.GET("/shops/:shop_id/settings", pc.GetShopSettings)
+	group.PUT("/shops/:shop_id/settings", pc.UpdateShopSettings)
+
+	// Shop Settings Operations (Legacy - Backward Compatibility)
 	group.GET("/shops/:shop_id/settings/admin-only-lists", pc.GetShopAdminOnlyListsSetting)
 	group.PUT("/shops/:shop_id/settings/admin-only-lists", pc.UpdateShopAdminOnlyListsSetting)
 	group.GET("/shops/:shop_id/is-admin", pc.CheckUserIsShopAdmin)

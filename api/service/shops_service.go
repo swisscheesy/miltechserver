@@ -2,6 +2,7 @@ package service
 
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
@@ -80,6 +81,10 @@ type ShopsService interface {
 	GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error)
 	UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error
 	IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error)
+
+	// Unified Shop Settings Operations
+	GetShopSettings(user *bootstrap.User, shopID string) (*request.ShopSettings, error)
+	UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error)
 
 	// Notification Change Tracking (Audit Trail) Operations
 	GetNotificationChangeHistory(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error)

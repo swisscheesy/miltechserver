@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"net/http"
@@ -2160,4 +2161,93 @@ func (repo *ShopsRepositoryImpl) UpdateShopAdminOnlyListsSetting(shopID string, 
 
 	slog.Info("Shop admin_only_lists setting updated", "shop_id", shopID, "admin_only_lists", adminOnlyLists)
 	return nil
+}
+
+// Unified Shop Settings Operations
+
+// GetShopSettings retrieves all settings for a shop
+func (repo *ShopsRepositoryImpl) GetShopSettings(shopID string) (*request.ShopSettings, error) {
+	stmt := SELECT(Shops.AllColumns).
+		FROM(Shops).
+		WHERE(Shops.ID.EQ(String(shopID)))
+
+	var shop model.Shops
+	err := stmt.Query(repo.Db, &shop)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errors.New("shop not found")
+		}
+		return nil, fmt.Errorf("failed to get shop settings: %w", err)
+	}
+
+	settings := &request.ShopSettings{
+		AdminOnlyLists: shop.AdminOnlyLists,
+		// Future settings will be mapped here
+	}
+
+	return settings, nil
+}
+
+// UpdateShopSettings updates shop settings with support for partial updates
+func (repo *ShopsRepositoryImpl) UpdateShopSettings(shopID string, updates request.UpdateShopSettingsRequest) error {
+	now := time.Now()
+
+	// Ensure at least one setting is being updated
+	if updates.AdminOnlyLists == nil {
+		// Future settings checks will be added here with OR conditions
+		return errors.New("no settings to update")
+	}
+
+	// Build UPDATE statement dynamically based on provided fields
+	// Start with columns and expressions that will always be set
+	updateBuilder := Shops.UPDATE(Shops.UpdatedAt)
+	setClause := updateBuilder.SET(Shops.UpdatedAt.SET(TimestampzT(now)))
+
+	// Add admin_only_lists if provided
+	if updates.AdminOnlyLists != nil {
+		setClause = Shops.UPDATE(Shops.UpdatedAt, Shops.AdminOnlyLists).
+			SET(
+				Shops.UpdatedAt.SET(TimestampzT(now)),
+				Shops.AdminOnlyLists.SET(Bool(*updates.AdminOnlyLists)),
+			)
+	}
+
+	// Future settings will follow the same pattern:
+	// if updates.AllowGuestView != nil {
+	//     setClause = Shops.UPDATE(Shops.UpdatedAt, Shops.AdminOnlyLists, Shops.AllowGuestView).
+	//         SET(
+	//             Shops.UpdatedAt.SET(TimestampzT(now)),
+	//             Shops.AdminOnlyLists.SET(Bool(*updates.AdminOnlyLists)),
+	//             Shops.AllowGuestView.SET(Bool(*updates.AllowGuestView)),
+	//         )
+	// }
+
+	stmt := setClause.WHERE(Shops.ID.EQ(String(shopID)))
+
+	result, err := stmt.Exec(repo.Db)
+	if err != nil {
+		return fmt.Errorf("failed to update shop settings: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("shop not found")
+	}
+
+	slog.Info("Shop settings updated", "shop_id", shopID, "updates", formatSettingsUpdate(updates))
+	return nil
+}
+
+// Helper function to format settings updates for logging
+func formatSettingsUpdate(updates request.UpdateShopSettingsRequest) string {
+	var parts []string
+	if updates.AdminOnlyLists != nil {
+		parts = append(parts, fmt.Sprintf("admin_only_lists=%v", *updates.AdminOnlyLists))
+	}
+	// Future settings will be added here
+	return fmt.Sprintf("{%s}", strings.Join(parts, ", "))
 }

@@ -1897,3 +1897,79 @@ func (controller *ShopsController) CheckUserIsShopAdmin(c *gin.Context) {
 		},
 	})
 }
+
+// Unified Shop Settings Operations
+
+// GetShopSettings returns all settings for a shop
+func (controller *ShopsController) GetShopSettings(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	settings, err := controller.ShopsService.GetShopSettings(user, shopID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Shop settings retrieved successfully",
+		Data:    settings,
+	})
+}
+
+// UpdateShopSettings updates one or more shop settings (admin only)
+func (controller *ShopsController) UpdateShopSettings(c *gin.Context) {
+	ctxUser, ok := c.Get("user")
+	user, _ := ctxUser.(*bootstrap.User)
+
+	if !ok {
+		c.JSON(401, gin.H{"message": "unauthorized"})
+		slog.Info("Unauthorized request")
+		return
+	}
+
+	shopID := c.Param("shop_id")
+	if shopID == "" {
+		c.JSON(400, gin.H{"message": "shop_id is required"})
+		return
+	}
+
+	var req request.UpdateShopSettingsRequest
+	if err := c.BindJSON(&req); err != nil {
+		slog.Info("invalid request", "error", err)
+		c.JSON(400, gin.H{"message": "invalid request"})
+		return
+	}
+
+	// Validate that at least one setting is being updated
+	if req.AdminOnlyLists == nil {
+		// Future settings will be checked here with OR conditions
+		c.JSON(400, gin.H{"message": "at least one setting must be provided"})
+		return
+	}
+
+	updatedSettings, err := controller.ShopsService.UpdateShopSettings(user, shopID, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(200, response.StandardResponse{
+		Status:  200,
+		Message: "Shop settings updated successfully",
+		Data:    updatedSettings,
+	})
+}

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
@@ -96,6 +97,10 @@ type ShopsRepository interface {
 	// Shop Settings Operations
 	GetShopAdminOnlyListsSetting(shopID string) (bool, error)
 	UpdateShopAdminOnlyListsSetting(shopID string, adminOnlyLists bool) error
+
+	// Unified Shop Settings Operations
+	GetShopSettings(shopID string) (*request.ShopSettings, error)
+	UpdateShopSettings(shopID string, updates request.UpdateShopSettingsRequest) error
 
 	// Notification Change Tracking (Audit Trail)
 	CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error

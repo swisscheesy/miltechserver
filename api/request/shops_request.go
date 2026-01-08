@@ -157,3 +157,18 @@ type GetShopMessagesPaginatedRequest struct {
 type UpdateAdminOnlyListsRequest struct {
 	AdminOnlyLists bool `json:"admin_only_lists" binding:"required"`
 }
+
+// Unified Shop Settings
+
+// ShopSettings represents all settings for a shop
+type ShopSettings struct {
+	AdminOnlyLists bool `json:"admin_only_lists"`
+	// Future settings will be added here
+}
+
+// UpdateShopSettingsRequest is used for partial updates to shop settings
+// All fields are optional pointers to support partial updates
+type UpdateShopSettingsRequest struct {
+	AdminOnlyLists *bool `json:"admin_only_lists,omitempty"`
+	// Future settings will be added here as optional pointers
+}

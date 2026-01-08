@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/repository"
+	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"strings"
@@ -2403,4 +2404,66 @@ func (service *ShopsServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID st
 	}
 
 	return isAdmin, nil
+}
+
+// Unified Shop Settings Operations
+
+// GetShopSettings returns all settings for a shop
+// Any shop member can read settings
+func (service *ShopsServiceImpl) GetShopSettings(user *bootstrap.User, shopID string) (*request.ShopSettings, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Verify user is a member of the shop
+	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return nil, errors.New("access denied: user is not a member of this shop")
+	}
+
+	// Get settings from repository
+	settings, err := service.ShopsRepository.GetShopSettings(shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop settings: %w", err)
+	}
+
+	slog.Info("Shop settings retrieved", "user_id", user.UserID, "shop_id", shopID)
+	return settings, nil
+}
+
+// UpdateShopSettings updates one or more shop settings (admin only)
+// Supports partial updates - only provided fields are modified
+func (service *ShopsServiceImpl) UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	// Check if user is admin of the shop
+	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify admin status: %w", err)
+	}
+
+	if !isAdmin {
+		return nil, errors.New("access denied: only shop administrators can modify settings")
+	}
+
+	// Update settings in repository (partial update)
+	err = service.ShopsRepository.UpdateShopSettings(shopID, updates)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update shop settings: %w", err)
+	}
+
+	// Fetch and return updated settings
+	updatedSettings, err := service.ShopsRepository.GetShopSettings(shopID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch updated settings: %w", err)
+	}
+
+	slog.Info("Shop settings updated by admin", "user_id", user.UserID, "shop_id", shopID)
+	return updatedSettings, nil
 }
