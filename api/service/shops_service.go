@@ -13,7 +13,7 @@ type ShopsService interface {
 	UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
 	DeleteShop(user *bootstrap.User, shopID string) error
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
-	GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error)
+	GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error)
 	GetUserDataWithShops(user *bootstrap.User) (*response.UserShopsResponse, error)
 
 	// Shop Member Operations

@@ -151,18 +151,66 @@ func (repo *ShopsRepositoryImpl) GetShopsByUser(user *bootstrap.User) ([]model.S
 	return shops, nil
 }
 
-func (repo *ShopsRepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error) {
-	stmt := SELECT(Shops.AllColumns).
-		FROM(Shops).
-		WHERE(Shops.ID.EQ(String(shopID)))
+func (repo *ShopsRepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
+	rawSQL := `
+		SELECT
+			s.id,
+			s.name,
+			s.details,
+			s.created_by,
+			s.created_at,
+			s.updated_at,
+			s.admin_only_lists,
+			COALESCE(message_stats.message_count, 0) as total_messages,
+			COALESCE(member_stats.member_count, 0) as member_count,
+			COALESCE(vehicle_stats.vehicle_count, 0) as vehicle_count,
+			CASE WHEN admin_check.user_id IS NOT NULL THEN true ELSE false END as is_admin
+		FROM shops s
+		LEFT JOIN (
+			SELECT shop_id, COUNT(*) as message_count
+			FROM shop_messages
+			WHERE shop_id = $1
+			GROUP BY shop_id
+		) message_stats ON s.id = message_stats.shop_id
+		LEFT JOIN (
+			SELECT shop_id, COUNT(*) as member_count
+			FROM shop_members
+			WHERE shop_id = $1
+			GROUP BY shop_id
+		) member_stats ON s.id = member_stats.shop_id
+		LEFT JOIN (
+			SELECT shop_id, COUNT(*) as vehicle_count
+			FROM shop_vehicle
+			WHERE shop_id = $1
+			GROUP BY shop_id
+		) vehicle_stats ON s.id = vehicle_stats.shop_id
+		LEFT JOIN (
+			SELECT shop_id, user_id
+			FROM shop_members
+			WHERE shop_id = $1 AND user_id = $2 AND role = 'admin'
+		) admin_check ON s.id = admin_check.shop_id
+		WHERE s.id = $1
+	`
 
-	var shop model.Shops
-	err := stmt.Query(repo.Db, &shop)
+	var result response.ShopDetailResponse
+	err := repo.Db.QueryRow(rawSQL, shopID, user.UserID).Scan(
+		&result.ID,
+		&result.Name,
+		&result.Details,
+		&result.CreatedBy,
+		&result.CreatedAt,
+		&result.UpdatedAt,
+		&result.AdminOnlyLists,
+		&result.TotalMessages,
+		&result.MemberCount,
+		&result.VehicleCount,
+		&result.IsAdmin,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get shop: %w", err)
+		return nil, fmt.Errorf("failed to get shop with stats: %w", err)
 	}
 
-	return &shop, nil
+	return &result, nil
 }
 
 func (repo *ShopsRepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error) {

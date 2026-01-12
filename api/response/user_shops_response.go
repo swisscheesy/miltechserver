@@ -64,3 +64,13 @@ type PaginatedShopMessagesResponse struct {
 	Messages   []model.ShopMessages `json:"messages"`
 	Pagination PaginationMetadata   `json:"pagination"`
 }
+
+// ShopDetailResponse includes shop data with calculated statistics
+// Used by GetShopByID endpoint to provide comprehensive shop information
+type ShopDetailResponse struct {
+	model.Shops              // Embed base shop model for backwards compatibility
+	TotalMessages int64 `json:"total_messages"` // Total count of messages in shop
+	MemberCount   int64 `json:"member_count"`   // Total count of shop members
+	VehicleCount  int64 `json:"vehicle_count"`  // Total count of shop vehicles
+	IsAdmin       bool  `json:"is_admin"`       // Whether current user is admin
+}

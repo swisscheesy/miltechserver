@@ -13,7 +13,7 @@ type ShopsRepository interface {
 	UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
 	DeleteShop(user *bootstrap.User, shopID string) error
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
-	GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error)
+	GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error)
 	GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error)
 	IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error)
 

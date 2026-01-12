@@ -147,7 +147,7 @@ func (service *ShopsServiceImpl) GetShopsByUser(user *bootstrap.User) ([]model.S
 	return shops, nil
 }
 
-func (service *ShopsServiceImpl) GetShopByID(user *bootstrap.User, shopID string) (*model.Shops, error) {
+func (service *ShopsServiceImpl) GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
