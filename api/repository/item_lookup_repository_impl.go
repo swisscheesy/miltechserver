@@ -126,6 +126,54 @@ func (repo *ItemLookupRepositoryImpl) SearchNIINByLIN(lin string) ([]model.Looku
 	return linData, nil
 }
 
+// SearchSubstituteLINAll searches for all substitute LIN records.
+// \return a slice of ArmySubstituteLin containing the substitute LIN data.
+// \return an error if the operation fails.
+func (repo *ItemLookupRepositoryImpl) SearchSubstituteLINAll() ([]model.ArmySubstituteLin, error) {
+	var substituteData []model.ArmySubstituteLin
+	stmt := SELECT(
+		table.ArmySubstituteLin.AllColumns,
+	).FROM(table.ArmySubstituteLin)
+
+	err := stmt.Query(repo.Db, &substituteData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query substitute LIN data: %w", err)
+	}
+
+	if len(substituteData) == 0 {
+		return nil, errors.New("no items found for substitute LIN")
+	}
+
+	return substituteData, nil
+}
+
+// SearchCAGEByCode searches for CAGE address records by CAGE code.
+// \param cage - the CAGE code to search for.
+// \return a slice of CageAddress containing the CAGE data.
+// \return an error if the operation fails.
+func (repo *ItemLookupRepositoryImpl) SearchCAGEByCode(cage string) ([]model.CageAddress, error) {
+	if cage == "" {
+		return nil, errors.New("cage cannot be empty")
+	}
+
+	var cageData []model.CageAddress
+	stmt := SELECT(
+		table.CageAddress.AllColumns,
+	).FROM(table.CageAddress).
+		WHERE(table.CageAddress.CageCode.EQ(String(cage)))
+
+	err := stmt.Query(repo.Db, &cageData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query CAGE address data: %w", err)
+	}
+
+	if len(cageData) == 0 {
+		return nil, errors.New("no items found for the specified CAGE code")
+	}
+
+	return cageData, nil
+}
+
 // SearchUOCByPage searches for UOC (Unit of Consumption) by page.
 // \param page - the page number to retrieve.
 // \return a UOCPageResponse containing the UOC data, count, page, total pages, and whether it is the last page.

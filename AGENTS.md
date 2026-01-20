@@ -14,7 +14,7 @@ This document contains universal development principles and practices for AI ass
 - **External Data Storage** Azure Blob storage
 - **Authentication** Firebase Auth
 
-Follow current shop architecure as best as possible.  Any code written should implement well with currently functionality, and follow existing project standards.
+Follow current application architecure as best as possible.  Any code written should implement well with currently functionality, and follow existing project standards.
 
 ## Required Tools and Research Methods
 
@@ -24,6 +24,7 @@ BEFORE ANY ACTION, you MUST use these tools. Tool names use double underscores b
 
 #### Documentation Research (ALWAYS FIRST)
 ```bash
+# IGNORE if you are calling MCP tool
 # BEFORE writing ANY code, search ALL relevant docs:
 mcp__Ref__ref_search_documentation "[language/framework] [feature] best practices 2025"
 mcp__Ref__ref_search_documentation "[API name] documentation"

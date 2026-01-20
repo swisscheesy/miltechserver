@@ -8,18 +8,19 @@ import (
 )
 
 type Env struct {
-	Host            string
-	Port            string
-	Username        string
-	Password        string
-	DBName          string
-	DBDate          string
-	DBSchema        string
-	BlobAccountName string
-	BlobAccountKey  string
-	ServerAddress   string
-	SslMode         string
-	ContextTimeout  int
+	Host             string
+	Port             string
+	Username         string
+	Password         string
+	DBName           string
+	DBDate           string
+	DBSchema         string
+	BlobAccountName  string
+	BlobAccountKey   string
+	ServerAddress    string
+	SslMode          string
+	ContextTimeout   int
+	MobileAppVersion string
 }
 
 func NewEnv() *Env {
@@ -44,6 +45,7 @@ func NewEnv() *Env {
 	env.DBName = os.Getenv("DB_NAME")
 	env.DBDate = os.Getenv("DB_DATE")
 	env.DBSchema = os.Getenv("DB_SCHEMA")
+	env.MobileAppVersion = os.Getenv("MOBILE_APP_VERSION")
 	// Blob Storage
 	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
 	env.BlobAccountKey = os.Getenv("BLOB_ACCOUNT_KEY")
@@ -55,6 +57,7 @@ func NewEnv() *Env {
 	log.Printf("DB_DATE: %s", env.DBDate)
 	log.Printf("DB_SCHEMA: %s", env.DBSchema)
 	log.Printf("SSL_MODE: %s", env.SslMode)
+	log.Printf("MOBILE_APP_VERSION: %s", env.MobileAppVersion)
 	return &env
 
 }

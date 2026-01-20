@@ -22,6 +22,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 
 	v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
+	NewGeneralRouter(v1Route, env)
 	NewGeneralQueriesRouter(v1Route, env)
 	NewItemQueryRouter(db, v1Route)
 	NewItemLookupRouter(db, v1Route)

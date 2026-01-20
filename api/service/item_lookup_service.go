@@ -10,6 +10,9 @@ type ItemLookupService interface {
 	LookupLINByNIIN(niin string) ([]model.LookupLinNiin, error)
 	LookupNIINByLIN(niin string) ([]model.LookupLinNiin, error)
 
+	LookupSubstituteLINAll() ([]model.ArmySubstituteLin, error)
+	LookupCAGEByCode(cage string) ([]model.CageAddress, error)
+
 	LookupUOCByPage(page int) (response.UOCPageResponse, error)
 	LookupSpecificUOC(uoc string) ([]model.LookupUoc, error)
 	LookupUOCByModel(model string) ([]model.LookupUoc, error)

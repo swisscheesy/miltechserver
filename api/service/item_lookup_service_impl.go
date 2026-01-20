@@ -59,6 +59,31 @@ func (service *ItemLookupServiceImpl) LookupNIINByLIN(lin string) ([]model.Looku
 	return niinData, nil
 }
 
+// LookupSubstituteLINAll looks up all substitute LIN records.
+// \return a slice of ArmySubstituteLin containing all substitute LIN data.
+// \return an error if the operation fails.
+func (service *ItemLookupServiceImpl) LookupSubstituteLINAll() ([]model.ArmySubstituteLin, error) {
+	substituteData, err := service.ItemLookupService.SearchSubstituteLINAll()
+	if err != nil {
+		return nil, err
+	}
+
+	return substituteData, nil
+}
+
+// LookupCAGEByCode looks up CAGE address records by CAGE code.
+// \param cage - the CAGE code to search for.
+// \return a slice of CageAddress containing the matching CAGE data.
+// \return an error if the operation fails.
+func (service *ItemLookupServiceImpl) LookupCAGEByCode(cage string) ([]model.CageAddress, error) {
+	cageData, err := service.ItemLookupService.SearchCAGEByCode(strings.ToUpper(cage))
+	if err != nil {
+		return nil, err
+	}
+
+	return cageData, nil
+}
+
 // LookupUOCByPage looks up UOC (Unit of Consumption) by page.
 // \param page - the page number to retrieve.
 // \return a UOCPageResponse containing the UOC data.

@@ -109,6 +109,52 @@ func (controller *ItemLookupController) LookupNIINByLIN(c *gin.Context) {
 
 }
 
+// LookupSubstituteLINAll handles the request to lookup all substitute LIN records.
+// \param c - the Gin context for the request.
+func (controller *ItemLookupController) LookupSubstituteLINAll(c *gin.Context) {
+	substituteData, err := controller.ItemLookupService.LookupSubstituteLINAll()
+
+	if err != nil {
+		if strings.Contains(err.Error(), "no item") {
+			c.JSON(404, response.NoItemFoundResponseMessage())
+		} else {
+			c.JSON(500, response.InternalErrorResponseMessage())
+		}
+	} else {
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    substituteData,
+		})
+	}
+}
+
+// LookupCAGEByCode handles the request to lookup CAGE address records by CAGE code.
+// \param c - the Gin context for the request.
+func (controller *ItemLookupController) LookupCAGEByCode(c *gin.Context) {
+	cage := strings.TrimSpace(c.Param("cage"))
+	if cage == "" {
+		c.JSON(400, gin.H{"error": "CAGE parameter is required"})
+		return
+	}
+
+	cageData, err := controller.ItemLookupService.LookupCAGEByCode(cage)
+
+	if err != nil {
+		if strings.Contains(err.Error(), "no item") {
+			c.JSON(404, response.NoItemFoundResponseMessage())
+		} else {
+			c.JSON(500, response.InternalErrorResponseMessage())
+		}
+	} else {
+		c.JSON(200, response.StandardResponse{
+			Status:  200,
+			Message: "",
+			Data:    cageData,
+		})
+	}
+}
+
 // LookupUOCByPage handles the request to lookup UOC by page.
 // \param c - the Gin context for the request.
 func (controller *ItemLookupController) LookupUOCByPage(c *gin.Context) {
