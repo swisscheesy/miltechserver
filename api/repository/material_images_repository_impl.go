@@ -484,6 +484,10 @@ func (r *MaterialImagesRepositoryImpl) GetFlagsByImage(imageID string) ([]model.
 
 // Rate limiting
 
+const (
+	maxUploadsPerHour = 3
+)
+
 func (r *MaterialImagesRepositoryImpl) CheckUploadLimit(userID string, niin string) (bool, *time.Time, error) {
 	stmt := SELECT(
 		MaterialImagesUploadLimits.AllColumns,
@@ -504,14 +508,21 @@ func (r *MaterialImagesRepositoryImpl) CheckUploadLimit(userID string, niin stri
 		return false, nil, fmt.Errorf("failed to check upload limit: %w", err)
 	}
 
-	// Check if 1 hour has passed - ensure we use UTC for consistent comparison
-	nextAllowedTime := limit.LastUploadTime.Add(1 * time.Hour)
-	now := time.Now().UTC()  // Convert to UTC for consistent comparison
-	
-	if now.After(nextAllowedTime) {
+	now := time.Now().UTC()
+	windowStart := limit.LastUploadTime.Add(-1 * time.Hour)
+
+	// If the last upload was more than 1 hour ago, reset the window - user can upload
+	if now.After(limit.LastUploadTime.Add(1 * time.Hour)) {
 		return true, nil, nil
 	}
 
+	// Within the hour window - check if under the limit
+	if limit.UploadCount < maxUploadsPerHour {
+		return true, nil, nil
+	}
+
+	// Rate limited - calculate when the window resets
+	nextAllowedTime := windowStart.Add(1 * time.Hour)
 	return false, &nextAllowedTime, nil
 }
 

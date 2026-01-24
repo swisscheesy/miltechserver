@@ -26,8 +26,11 @@ func NewLibraryRouter(
 	repo := repository.NewLibraryRepositoryImpl(db)
 	_ = repo // Silence unused variable warning
 
+	analyticsRepo := repository.NewAnalyticsRepositoryImpl(db)
+	analyticsService := service.NewAnalyticsServiceImpl(analyticsRepo)
+
 	// Initialize service with blob client and credential (needed for SAS generation)
-	svc := service.NewLibraryServiceImpl(blobClient, blobCredential, env)
+	svc := service.NewLibraryServiceImpl(blobClient, blobCredential, env, analyticsService)
 
 	// Initialize controller
 	ctrl := controller.NewLibraryController(svc)

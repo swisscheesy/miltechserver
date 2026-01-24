@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
 	"strings"
 	"time"
 
@@ -24,17 +25,20 @@ type LibraryServiceImpl struct {
 	blobClient *azblob.Client
 	credential *azblob.SharedKeyCredential // Needed for SAS token generation
 	env        *bootstrap.Env
+	analytics  AnalyticsService
 }
 
 func NewLibraryServiceImpl(
 	blobClient *azblob.Client,
 	credential *azblob.SharedKeyCredential,
 	env *bootstrap.Env,
+	analyticsService AnalyticsService,
 ) LibraryService {
 	return &LibraryServiceImpl{
 		blobClient: blobClient,
 		credential: credential,
 		env:        env,
+		analytics:  analyticsService,
 	}
 }
 
@@ -273,6 +277,10 @@ func (s *LibraryServiceImpl) GenerateDownloadURL(blobPath string) (*response.Dow
 		"blobPath", blobPath,
 		"expiresAt", expiryTime.Format(time.RFC3339))
 
+	if analyticsErr := s.trackPMCSDownload(blobPath); analyticsErr != nil {
+		slog.Warn("Failed to increment analytics for PMCS download", "blobPath", blobPath, "error", analyticsErr)
+	}
+
 	return &response.DownloadURLResponse{
 		BlobPath:    blobPath,
 		DownloadURL: downloadURL,
@@ -288,4 +296,50 @@ func extractFileName(blobPath string) string {
 		return blobPath
 	}
 	return parts[len(parts)-1]
+}
+
+func (s *LibraryServiceImpl) trackPMCSDownload(blobPath string) error {
+	if s.analytics == nil {
+		return nil
+	}
+
+	equipmentName, ok := extractPMCSEquipmentName(blobPath)
+	if !ok {
+		return nil
+	}
+
+	fileName := extractFileName(blobPath)
+	if fileName == "" {
+		return nil
+	}
+	baseName := strings.TrimSuffix(fileName, path.Ext(fileName))
+	if strings.TrimSpace(baseName) == "" {
+		return nil
+	}
+
+	displayName := formatDisplayName(equipmentName)
+	if displayName == "" {
+		displayName = baseName
+	}
+
+	return s.analytics.IncrementPMCSManualDownload(baseName, displayName)
+}
+
+func extractPMCSEquipmentName(blobPath string) (string, bool) {
+	if !strings.HasPrefix(blobPath, PMCSPrefix) {
+		return "", false
+	}
+
+	trimmed := strings.TrimPrefix(blobPath, PMCSPrefix)
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 2 {
+		return "", false
+	}
+
+	equipmentName := strings.TrimSpace(parts[0])
+	if equipmentName == "" {
+		return "", false
+	}
+
+	return equipmentName, true
 }

@@ -11,9 +11,14 @@ import (
 func NewItemQueryRouter(db *sql.DB, group *gin.RouterGroup) {
 	itemQueryRepo := repository.NewItemQueryRepositoryImpl(db)
 	itemDetailedRepo := repository.NewItemDetailedRepositoryImpl(db)
+	analyticsRepo := repository.NewAnalyticsRepositoryImpl(db)
+	analyticsService := service.NewAnalyticsServiceImpl(analyticsRepo)
+
 	pc := &controller.ItemQueryController{
 		ItemQueryService: service.NewItemQueryServiceImpl(
-			itemQueryRepo),
+			itemQueryRepo,
+			analyticsService,
+		),
 		ItemDetailedService: service.NewItemDetailedServiceImpl(
 			itemDetailedRepo),
 	}
