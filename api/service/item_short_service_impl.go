@@ -29,7 +29,8 @@ func (service *ItemShortServiceImpl) FindShortByNiin(niin string) (model.NiinLoo
 		return model.NiinLookup{}, err
 	} else {
 		normalizedNiin := normalizeNiinPointer(val.Niin, niin)
-		service.trackItemSearchSuccess(normalizedNiin)
+		nomenclature := normalizeNiinPointer(val.ItemName, "")
+		service.trackItemSearchSuccess(normalizedNiin, nomenclature)
 		return val, nil
 	}
 }
@@ -40,7 +41,7 @@ func (service *ItemShortServiceImpl) FindShortByPart(part string) ([]model.NiinL
 		return []model.NiinLookup{}, err
 	}
 
-	uniqueNiins := make(map[string]struct{})
+	uniqueNiins := make(map[string]string)
 	for _, result := range results {
 		normalizedNiin := normalizeNiinPointer(result.Niin, "")
 		if normalizedNiin == "" {
@@ -49,11 +50,12 @@ func (service *ItemShortServiceImpl) FindShortByPart(part string) ([]model.NiinL
 		if _, exists := uniqueNiins[normalizedNiin]; exists {
 			continue
 		}
-		uniqueNiins[normalizedNiin] = struct{}{}
+		nomenclature := normalizeNiinPointer(result.ItemName, "")
+		uniqueNiins[normalizedNiin] = nomenclature
 	}
 
-	for normalizedNiin := range uniqueNiins {
-		service.trackItemSearchSuccess(normalizedNiin)
+	for normalizedNiin, nomenclature := range uniqueNiins {
+		service.trackItemSearchSuccess(normalizedNiin, nomenclature)
 	}
 
 	return results, nil
@@ -74,11 +76,11 @@ func normalizeNiinPointer(niin *string, fallback string) string {
 	return normalizedFallback
 }
 
-func (service *ItemShortServiceImpl) trackItemSearchSuccess(niin string) {
+func (service *ItemShortServiceImpl) trackItemSearchSuccess(niin string, nomenclature string) {
 	if service.AnalyticsService == nil || niin == "" {
 		return
 	}
-	if analyticsErr := service.AnalyticsService.IncrementItemSearchSuccess(niin); analyticsErr != nil {
+	if analyticsErr := service.AnalyticsService.IncrementItemSearchSuccess(niin, nomenclature); analyticsErr != nil {
 		slog.Warn("Failed to increment analytics for item search", "niin", niin, "error", analyticsErr)
 	}
 }

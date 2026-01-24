@@ -73,7 +73,7 @@ Counts are incremented atomically via `INSERT ... ON CONFLICT DO UPDATE` to avoi
 
 ### Overview
 Add a single counter table (`analytics_event_counters`) and an `AnalyticsService` that exposes:
-- `IncrementItemSearchSuccess(niin string)`
+- `IncrementItemSearchSuccess(niin string, nomenclature string)`
 - `IncrementPMCSManualDownload(formattedEquipmentName string)`
 - `IncrementCounter(eventType string, entityKey string, entityLabel string)`
 
@@ -146,7 +146,7 @@ Normalization:
 Event:
 - `event_type = "item_search_success"`
 - `entity_key = "<NIIN>"`
-- `entity_label = "<NIIN>"`
+- `entity_label = "<NOMENCLATURE>"`
 
 ### 2. PMCS Manual Download
 Trigger point:

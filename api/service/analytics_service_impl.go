@@ -19,12 +19,16 @@ func NewAnalyticsServiceImpl(analyticsRepository repository.AnalyticsRepository)
 	return &AnalyticsServiceImpl{AnalyticsRepository: analyticsRepository}
 }
 
-func (service *AnalyticsServiceImpl) IncrementItemSearchSuccess(niin string) error {
-	normalized := normalizeAnalyticsKey(niin)
-	if normalized == "" {
+func (service *AnalyticsServiceImpl) IncrementItemSearchSuccess(niin string, nomenclature string) error {
+	normalizedKey := normalizeAnalyticsKey(niin)
+	normalizedLabel := normalizeAnalyticsKey(nomenclature)
+	if normalizedKey == "" {
 		return nil
 	}
-	return service.IncrementCounter(analyticsEventItemSearchSuccess, normalized, normalized)
+	if normalizedLabel == "" {
+		normalizedLabel = normalizedKey
+	}
+	return service.IncrementCounter(analyticsEventItemSearchSuccess, normalizedKey, normalizedLabel)
 }
 
 func (service *AnalyticsServiceImpl) IncrementPMCSManualDownload(entityKey string, entityLabel string) error {

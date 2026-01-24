@@ -1,7 +1,7 @@
 package service
 
 type AnalyticsService interface {
-	IncrementItemSearchSuccess(niin string) error
+	IncrementItemSearchSuccess(niin string, nomenclature string) error
 	IncrementPMCSManualDownload(entityKey string, entityLabel string) error
 	IncrementCounter(eventType string, entityKey string, entityLabel string) error
 }
