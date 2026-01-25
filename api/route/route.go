@@ -37,6 +37,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewUserVehicleRouter(db, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
 	NewEquipmentServicesRouter(db, blobClient, env, authRoutes)
+	NewItemCommentsRouter(db, v1Route, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)
 	NewMaterialImagesRouter(db, blobClient, env, authClient, v1Route, authRoutes)
