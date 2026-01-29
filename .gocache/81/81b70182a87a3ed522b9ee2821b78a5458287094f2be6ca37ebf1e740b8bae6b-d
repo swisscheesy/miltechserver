@@ -1,0 +1,8 @@
+./equipment_services_request.go
+./item_comments_request.go
+./library_request.go
+./material_images_request.go
+./shops_request.go
+./user_delete_request.go
+./user_display_name_change_request.go
+./user_login_request.go

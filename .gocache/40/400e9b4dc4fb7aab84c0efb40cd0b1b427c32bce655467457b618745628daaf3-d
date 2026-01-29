@@ -1,0 +1,5 @@
+./column_meta_data.go
+./dialect_query_set.go
+./enum_meta_data.go
+./schema_meta_data.go
+./table_meta_data.go

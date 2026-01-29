@@ -1,0 +1,10 @@
+./amdf.go
+./army_packaging_and_freight.go
+./characteristics.go
+./disposition.go
+./freight.go
+./identification.go
+./management.go
+./packaging.go
+./reference.go
+./sarsscat.go

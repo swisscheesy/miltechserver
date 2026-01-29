@@ -1,0 +1,6 @@
+./file_templates.go
+./format.go
+./generator_template.go
+./model_template.go
+./process.go
+./sql_builder_template.go

@@ -1,0 +1,5 @@
+./app.go
+./authentication.go
+./azure_blob.go
+./database.go
+./env.go

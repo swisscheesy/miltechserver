@@ -8,6 +8,7 @@ import (
 	"miltechserver/api/repository"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"time"
 
@@ -16,16 +17,16 @@ import (
 
 type EquipmentServicesServiceImpl struct {
 	EquipmentServicesRepository repository.EquipmentServicesRepository
-	ShopsRepository             repository.ShopsRepository
+	ShopAuthorization           shared.ShopAuthorization
 }
 
 func NewEquipmentServicesServiceImpl(
 	equipmentServicesRepo repository.EquipmentServicesRepository,
-	shopsRepo repository.ShopsRepository,
+	shopAuthorization shared.ShopAuthorization,
 ) *EquipmentServicesServiceImpl {
 	return &EquipmentServicesServiceImpl{
 		EquipmentServicesRepository: equipmentServicesRepo,
-		ShopsRepository:             shopsRepo,
+		ShopAuthorization:           shopAuthorization,
 	}
 }
 
@@ -248,7 +249,7 @@ func (service *EquipmentServicesServiceImpl) GetEquipmentServices(user *bootstra
 	}
 
 	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.ShopAuthorization.IsUserMemberOfShop(user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -345,7 +346,7 @@ func (service *EquipmentServicesServiceImpl) GetServicesInDateRange(user *bootst
 	}
 
 	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.ShopAuthorization.IsUserMemberOfShop(user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -415,7 +416,7 @@ func (service *EquipmentServicesServiceImpl) GetOverdueServices(user *bootstrap.
 	}
 
 	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.ShopAuthorization.IsUserMemberOfShop(user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -441,7 +442,7 @@ func (service *EquipmentServicesServiceImpl) GetServicesDueSoon(user *bootstrap.
 	}
 
 	// Check if user is shop member
-	isMember, err := service.ShopsRepository.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.ShopAuthorization.IsUserMemberOfShop(user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -463,7 +464,7 @@ func (service *EquipmentServicesServiceImpl) GetServicesDueSoon(user *bootstrap.
 // Helper method for permission checking (modify permissions)
 func (service *EquipmentServicesServiceImpl) canUserModifyService(user *bootstrap.User, shopID, serviceID string) (bool, error) {
 	// Check if user is shop admin
-	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.ShopAuthorization.IsUserShopAdmin(user, shopID)
 	if err != nil {
 		return false, err
 	}
@@ -533,7 +534,7 @@ func (service *EquipmentServicesServiceImpl) CompleteEquipmentService(user *boot
 // Helper method for permission checking (delete permissions)
 func (service *EquipmentServicesServiceImpl) canUserDeleteService(user *bootstrap.User, shopID, serviceID string) (bool, error) {
 	// Check if user is shop admin
-	isAdmin, err := service.ShopsRepository.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.ShopAuthorization.IsUserShopAdmin(user, shopID)
 	if err != nil {
 		return false, err
 	}
