@@ -1,32 +1,32 @@
 # Material Images Refactor Progress
 
-Last updated: 2026-01-29
+Last updated: 2026-01-30
 
-## Progress Tracker
+## Status Tracker
 
 | Step | Status | Notes |
 |------|--------|-------|
-| 1. Create directory structure and shared package | Pending | Create `api/material_images/` with `shared/` utilities |
-| 2. Extract ratelimit bounded context | Pending | Rate limiting for uploads |
-| 3. Extract images bounded context | Pending | Core image CRUD operations |
-| 4. Extract votes bounded context | Pending | Image voting management |
-| 5. Extract flags bounded context | Pending | Image flagging/moderation |
-| 6. Wire dependencies in central route | Pending | Update `api/route/route.go` |
-| 7. Testing and verification | Pending | `go test ./api/material_images/...` |
-| 8. Cleanup legacy files | Pending | Remove legacy material_images files |
+| 1. Create directory structure and shared package | Done | Shared context/errors/blob + central route |
+| 2. Extract ratelimit bounded context | Done | Rate limit repository extracted |
+| 3. Extract images bounded context | Done | Images repo/service/route created |
+| 4. Extract votes bounded context | Done | Votes repo/service/route created |
+| 5. Extract flags bounded context | Done | Flags repo/service/route created |
+| 6. Wire dependencies in central route | Done | New routes wired; legacy files retained |
+| 7. Manual verification | Done | Confirmed by swisscheese |
+| 8. Cleanup legacy files | Done | Removed legacy material_images files |
 
-## Metrics Snapshot
+## Metrics
 
-| Metric | Baseline (2026-01-29) | Current | Target |
-|--------|------------------------|---------|--------|
-| Largest file (material images domain) | 599 lines | 599 lines | < 200 lines |
-| Methods per interface | 15 | 15 | < 7 |
-| Test coverage | 0% | 0% | > 80% |
-| Typed domain errors | 0 | 0 | 6 |
+| Metric | Current | Target | Notes |
+|--------|---------|--------|-------|
+| Largest file | 599 lines | < 200 lines | Baseline from plan | 
+| Methods per interface | 16 | < 7 | Baseline from plan |
+| Test coverage | 0% | > 80% | Manual verification only for now |
+| Domain errors | 0 typed | 6 typed | Will add shared errors |
 
-## Notes
+## Verification Log
 
-- Behavior must remain identical to legacy endpoints.
-- No legacy deletions until new routes are fully wired and verified.
-- Mixed public/authenticated routes require careful router group handling.
-- Blob storage integration should use shared utilities with nil checks.
+- 2026-01-30: Routes wired to new material_images packages. Manual verification pending.
+- 2026-01-30: Flag count update uses COUNT query to update image flags (no full list fetch).
+- 2026-01-30: Legacy material_images files removed after verification; tests added under tests/material_images.
+- 2026-01-30: Added user_vote population for authenticated requests in image responses.

@@ -2,6 +2,7 @@ package route
 
 import (
 	"database/sql"
+	"miltechserver/api/material_images"
 	"miltechserver/api/middleware"
 	"miltechserver/api/user_saves"
 	"miltechserver/api/user_vehicles"
@@ -46,7 +47,12 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewItemCommentsRouter(db, v1Route, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)
-	NewMaterialImagesRouter(db, blobClient, env, authClient, v1Route, authRoutes)
+	material_images.RegisterRoutes(material_images.Dependencies{
+		DB:         db,
+		BlobClient: blobClient,
+		Env:        env,
+		AuthClient: authClient,
+	}, v1Route, authRoutes)
 	NewLibraryRouter(db, blobClient, blobCredential, env, authClient, v1Route, authRoutes)
 
 	// Serve static assets (CSS, JS, images, etc.)
