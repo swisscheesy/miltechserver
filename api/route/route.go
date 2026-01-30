@@ -2,6 +2,7 @@ package route
 
 import (
 	"database/sql"
+	"miltechserver/api/equipment_services"
 	"miltechserver/api/material_images"
 	"miltechserver/api/middleware"
 	"miltechserver/api/user_saves"
@@ -43,7 +44,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewUserGeneralRouter(db, authRoutes)
 	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
-	NewEquipmentServicesRouter(db, blobClient, env, authRoutes)
+	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
 	NewItemCommentsRouter(db, v1Route, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)
