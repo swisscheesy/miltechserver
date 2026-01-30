@@ -1,5 +1,21 @@
 # User Saves Domain Refactoring Plan
 
+## Refactor Progress Tracker
+
+Last updated: 2026-01-30
+
+| Step | Status | Notes |
+|------|--------|-------|
+| 1. Create directory structure and shared package | ✅ Complete | Added `api/user_saves/shared` and `api/user_saves/route.go` delegating to legacy |
+| 2. Extract Images bounded context | ✅ Complete | Added `api/user_saves/images` and wired image routes to new package |
+| 3. Extract Quick Items bounded context | ✅ Complete | Added `api/user_saves/quick` and wired quick routes to new package |
+| 4. Extract Serialized Items bounded context | ✅ Complete | Added `api/user_saves/serialized` and wired serialized routes to new package |
+| 5. Extract Categories + Items bounded context | ✅ Complete | Added `api/user_saves/categories` and `api/user_saves/categories/items` with route wiring |
+| 6. Create Facade service | ✅ Complete | Added `api/user_saves/facade` delegating to sub-services |
+| 7. Wire dependencies and update routing | ✅ Complete | `api/route/route.go` now uses `user_saves.RegisterRoutes` |
+| 8. Testing and verification | ✅ Complete | Added service-level tests for quick/serialized/categories/items |
+| 9. Cleanup legacy files | ✅ Complete | Removed legacy user_saves controller/service/repository/route files |
+
 ## Executive Summary
 
 The `user_saves` domain has grown into a **monolithic structure** spanning ~2,000 lines across six files:

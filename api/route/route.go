@@ -3,6 +3,7 @@ package route
 import (
 	"database/sql"
 	"miltechserver/api/middleware"
+	"miltechserver/api/user_saves"
 	"miltechserver/bootstrap"
 	"net/http"
 	"strings"
@@ -32,7 +33,11 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	// All Authenticated Routes
 	authRoutes := router.Group("/api/v1/auth")
 	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
-	NewUserSavesRouter(db, blobClient, env, authRoutes)
+	user_saves.RegisterRoutes(user_saves.Dependencies{
+		DB:         db,
+		BlobClient: blobClient,
+		Env:        env,
+	}, authRoutes)
 	NewUserGeneralRouter(db, authRoutes)
 	NewUserVehicleRouter(db, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
