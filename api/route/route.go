@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"miltechserver/api/middleware"
 	"miltechserver/api/user_saves"
+	"miltechserver/api/user_vehicles"
 	"miltechserver/bootstrap"
 	"net/http"
 	"strings"
@@ -39,7 +40,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 		Env:        env,
 	}, authRoutes)
 	NewUserGeneralRouter(db, authRoutes)
-	NewUserVehicleRouter(db, authRoutes)
+	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
 	NewEquipmentServicesRouter(db, blobClient, env, authRoutes)
 	NewItemCommentsRouter(db, v1Route, authRoutes)
