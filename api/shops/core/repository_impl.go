@@ -308,6 +308,10 @@ func (repo *RepositoryImpl) AddMemberToShop(user *bootstrap.User, shopID string,
 }
 
 func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
+	if repo.blobClient == nil {
+		return nil
+	}
+
 	ctx := context.Background()
 
 	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)

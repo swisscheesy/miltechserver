@@ -342,7 +342,7 @@ func getFileExtensionFromMIME(contentType string) string {
 }
 
 func extractImageURLFromMessage(messageText string) string {
-	re := regexp.MustCompile(`\\[IMAGE:(https://[^\\]]+)\\]`)
+	re := regexp.MustCompile(`\[IMAGE:(https://[^]]+)\]`)
 	matches := re.FindStringSubmatch(messageText)
 	if len(matches) > 1 {
 		return matches[1]

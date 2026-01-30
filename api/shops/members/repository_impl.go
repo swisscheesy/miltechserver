@@ -234,6 +234,10 @@ func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) erro
 }
 
 func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
+	if repo.blobClient == nil {
+		return nil
+	}
+
 	ctx := context.Background()
 
 	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)
