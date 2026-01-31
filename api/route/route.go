@@ -2,9 +2,17 @@ package route
 
 import (
 	"database/sql"
+	"miltechserver/api/analytics"
+	"miltechserver/api/eic"
 	"miltechserver/api/equipment_services"
+	"miltechserver/api/item_comments"
+	"miltechserver/api/item_lookup"
+	"miltechserver/api/item_query"
+	"miltechserver/api/library"
 	"miltechserver/api/material_images"
 	"miltechserver/api/middleware"
+	"miltechserver/api/quick_lists"
+	"miltechserver/api/user_general"
 	"miltechserver/api/user_saves"
 	"miltechserver/api/user_vehicles"
 	"miltechserver/bootstrap"
@@ -28,10 +36,10 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	// All Public Routes
 	NewGeneralRouter(v1Route, env)
 	NewGeneralQueriesRouter(v1Route, env)
-	NewItemQueryRouter(db, v1Route)
-	NewItemLookupRouter(db, v1Route)
-	NewItemQuickListsRouter(db, v1Route)
-	NewEICRouter(db, v1Route)
+	item_query.RegisterRoutes(item_query.Dependencies{DB: db}, v1Route)
+	item_lookup.RegisterRoutes(item_lookup.Dependencies{DB: db}, v1Route)
+	quick_lists.RegisterRoutes(quick_lists.Dependencies{DB: db}, v1Route)
+	eic.RegisterRoutes(eic.Dependencies{DB: db}, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := router.Group("/api/v1/auth")
@@ -41,11 +49,11 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 		BlobClient: blobClient,
 		Env:        env,
 	}, authRoutes)
-	NewUserGeneralRouter(db, authRoutes)
+	user_general.RegisterRoutes(user_general.Dependencies{DB: db}, authRoutes)
 	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
 	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
-	NewItemCommentsRouter(db, v1Route, authRoutes)
+	item_comments.RegisterRoutes(item_comments.Dependencies{DB: db}, v1Route, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)
 	material_images.RegisterRoutes(material_images.Dependencies{
@@ -54,7 +62,14 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 		Env:        env,
 		AuthClient: authClient,
 	}, v1Route, authRoutes)
-	NewLibraryRouter(db, blobClient, blobCredential, env, authClient, v1Route, authRoutes)
+	analyticsService := analytics.New(db)
+	library.RegisterRoutes(library.Dependencies{
+		DB:             db,
+		BlobClient:     blobClient,
+		BlobCredential: blobCredential,
+		Env:            env,
+		Analytics:      analyticsService,
+	}, v1Route, authRoutes)
 
 	// Serve static assets (CSS, JS, images, etc.)
 	router.Static("/_app", "./static/_app")

@@ -34,8 +34,8 @@ Both endpoints follow existing architecture (route → controller → service �
 ## Current Implementation Analysis
 
 ### Existing Patterns
-- Public item lookup routes are defined in `api/route/item_lookup_route.go`.
-- Handlers follow the controller/service/repository pattern.
+- Public item lookup routes are defined in `api/item_lookup/route.go`.
+- Handlers live alongside routes within bounded contexts under `api/item_lookup/`.
 - Responses use `response.StandardResponse` for successful results and `response.NoItemFoundResponseMessage()` for missing data.
 - Jet is used for queries via generated table/model types in `.gen/miltech_ng/public`.
 
@@ -78,10 +78,10 @@ Both endpoints follow existing architecture (route → controller → service �
 Reuse the existing item lookup stack:
 
 ```
-Route (api/route/item_lookup_route.go)
-  -> Controller (api/controller/item_lookup_controller.go)
-    -> Service (api/service/item_lookup_service_impl.go)
-      -> Repository (api/repository/item_lookup_repository_impl.go)
+Route (api/item_lookup/route.go)
+  -> Context Route (api/item_lookup/substitute/route.go, api/item_lookup/cage/route.go)
+    -> Service (api/item_lookup/substitute/service_impl.go, api/item_lookup/cage/service_impl.go)
+      -> Repository (api/item_lookup/substitute/repository_impl.go, api/item_lookup/cage/repository_impl.go)
         -> Jet Query (table.ArmySubstituteLin / table.CageAddress)
 ```
 
@@ -90,12 +90,12 @@ Route (api/route/item_lookup_route.go)
 ## Technical Design
 
 ### 1. Route Layer
-Add two new routes to `api/route/item_lookup_route.go`:
-- `group.GET("/lookup/substitute-lin", pc.LookupSubstituteLINAll)`
-- `group.GET("/lookup/cage/:cage", pc.LookupCAGEByCode)`
+Add two new routes to `api/item_lookup/substitute/route.go` and `api/item_lookup/cage/route.go`:
+- `router.GET("/lookup/substitute-lin", ...)`
+- `router.GET("/lookup/cage/:cage", ...)`
 
 ### 2. Controller Layer
-Add controller methods in `api/controller/item_lookup_controller.go`:
+Add handlers in `api/item_lookup/substitute/route.go` and `api/item_lookup/cage/route.go`:
 
 - `LookupSubstituteLINAll`
   - Calls service to fetch all substitute LIN rows.
@@ -111,18 +111,18 @@ Add controller methods in `api/controller/item_lookup_controller.go`:
   - Returns standard responses as above.
 
 ### 3. Service Layer
-Add methods to `api/service/item_lookup_service.go` and implementation:
-- `LookupSubstituteLINAll() ([]model.ArmySubstituteLin, error)`
-- `LookupCAGEByCode(cage string) ([]model.CageAddress, error)`
+Add methods to `api/item_lookup/substitute/service.go` and `api/item_lookup/cage/service.go`:
+- `LookupAll() ([]model.ArmySubstituteLin, error)`
+- `LookupByCode(cage string) ([]model.CageAddress, error)`
 
 Responsibilities:
 - Normalize CAGE input to uppercase in service.
 - Pass through data or errors from repository.
 
 ### 4. Repository Layer
-Add methods to `api/repository/item_lookup_repository.go` and implementation:
-- `SearchSubstituteLINAll() ([]model.ArmySubstituteLin, error)`
-- `SearchCAGEByCode(cage string) ([]model.CageAddress, error)`
+Add methods to `api/item_lookup/substitute/repository.go` and `api/item_lookup/cage/repository.go`:
+- `SearchAll() ([]model.ArmySubstituteLin, error)`
+- `SearchByCode(cage string) ([]model.CageAddress, error)`
 
 Jet queries:
 - Substitute LIN:
@@ -241,12 +241,11 @@ Use the existing standard response wrapper:
 
 ## Implementation Plan
 
-1. Add new route registrations in `api/route/item_lookup_route.go`.
-2. Add controller methods in `api/controller/item_lookup_controller.go`.
-3. Extend service interface and implementation in `api/service/item_lookup_service.go` and `api/service/item_lookup_service_impl.go`.
-4. Extend repository interface and implementation in `api/repository/item_lookup_repository.go` and `api/repository/item_lookup_repository_impl.go`.
-5. Ensure inputs are normalized and error paths match existing patterns.
-6. Run tests or manual verification against the database.
+1. Add new route registrations in `api/item_lookup/substitute/route.go` and `api/item_lookup/cage/route.go`.
+2. Add service methods in `api/item_lookup/substitute/service.go` and `api/item_lookup/cage/service.go`.
+3. Add repository methods in `api/item_lookup/substitute/repository.go` and `api/item_lookup/cage/repository.go`.
+4. Ensure inputs are normalized and error paths match existing patterns.
+5. Run tests or manual verification against the database.
 
 ---
 

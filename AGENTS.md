@@ -45,7 +45,6 @@ Use `mcp__sequential-thinking__sequentialthinking` for:
 - API integrations (error cases, rate limits, costs)
 - State management changes (race conditions, cleanup)
 
-```
 
 ### 2. Required Questions Before Implementation
 
@@ -75,6 +74,23 @@ ASK QUESTIONS. LOTS OF THEM.
 - "What documentation needs updating?"
 
 NEVER ASSUME. ALWAYS CLARIFY.
+
+## Project Memory System
+
+### Memory-Aware Protocols
+
+**Before proposing architectural changes:**
+- Check `docs/project_notes/decisions.md` for existing decisions
+- Verify the proposed approach doesn't conflict with past choices
+
+**When encountering errors or bugs:**
+- Search `docs/project_notes/bugs.md` for similar issues
+- Apply known solutions if found
+- Document new bugs and solutions when resolved
+
+**When looking up project configuration:**
+- Check `docs/project_notes/key_facts.md` for credentials, ports, URLs
+- Prefer documented facts over assumptions
 
 ## Code Quality Standards
 
