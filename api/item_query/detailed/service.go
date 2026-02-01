@@ -1,7 +1,11 @@
 package detailed
 
-import "miltechserver/api/response"
+import (
+	"context"
+
+	"miltechserver/api/response"
+)
 
 type Service interface {
-	FindDetailedItem(niin string) (response.DetailedResponse, error)
+	FindDetailedItem(ctx context.Context, niin string) (response.DetailedResponse, error)
 }

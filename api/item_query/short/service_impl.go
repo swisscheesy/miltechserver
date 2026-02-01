@@ -8,13 +8,34 @@ import (
 	"miltechserver/api/item_query/shared"
 )
 
+type analyticsEvent struct {
+	niin         string
+	nomenclature string
+}
+
 type ServiceImpl struct {
-	repo      Repository
-	analytics shared.AnalyticsTracker
+	repo       Repository
+	analytics  shared.AnalyticsTracker
+	analyticsQ chan analyticsEvent
 }
 
 func NewService(repo Repository, analytics shared.AnalyticsTracker) *ServiceImpl {
-	return &ServiceImpl{repo: repo, analytics: analytics}
+	s := &ServiceImpl{
+		repo:       repo,
+		analytics:  analytics,
+		analyticsQ: make(chan analyticsEvent, 100),
+	}
+	go s.processAnalytics()
+	return s
+}
+
+// processAnalytics runs in the background, processing analytics events without blocking requests.
+func (s *ServiceImpl) processAnalytics() {
+	for event := range s.analyticsQ {
+		if err := s.analytics.IncrementItemSearchSuccess(event.niin, event.nomenclature); err != nil {
+			slog.Warn("Failed to increment analytics for item search", "niin", event.niin, "error", err)
+		}
+	}
 }
 
 func (service *ServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, error) {
@@ -70,11 +91,15 @@ func normalizeNiinPointer(niin *string, fallback string) string {
 	return normalizedFallback
 }
 
+// trackItemSearchSuccess sends analytics events to a buffered channel for async processing.
+// If the queue is full, events are dropped to prevent blocking the request.
 func (service *ServiceImpl) trackItemSearchSuccess(niin string, nomenclature string) {
 	if service.analytics == nil || niin == "" {
 		return
 	}
-	if err := service.analytics.IncrementItemSearchSuccess(niin, nomenclature); err != nil {
-		slog.Warn("Failed to increment analytics for item search", "niin", niin, "error", err)
+	select {
+	case service.analyticsQ <- analyticsEvent{niin: niin, nomenclature: nomenclature}:
+	default:
+		slog.Warn("Analytics queue full, dropping event", "niin", niin)
 	}
 }

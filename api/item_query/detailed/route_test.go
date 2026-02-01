@@ -1,6 +1,7 @@
 package detailed
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ type serviceStub struct {
 	err  error
 }
 
-func (s *serviceStub) FindDetailedItem(string) (response.DetailedResponse, error) {
+func (s *serviceStub) FindDetailedItem(ctx context.Context, niin string) (response.DetailedResponse, error) {
 	return s.resp, s.err
 }
 

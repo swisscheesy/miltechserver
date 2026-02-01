@@ -22,8 +22,9 @@ func registerHandlers(router *gin.RouterGroup, service Service) {
 }
 
 func (handler *Handler) findDetailed(c *gin.Context) {
+	ctx := c.Request.Context()
 	niin := c.Query("niin")
-	itemData, err := handler.service.FindDetailedItem(niin)
+	itemData, err := handler.service.FindDetailedItem(ctx, niin)
 	if err != nil {
 		c.Error(err)
 		return

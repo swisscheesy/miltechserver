@@ -3,6 +3,7 @@ package short
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -48,6 +49,9 @@ func TestFindShortByNiinTracksAnalytics(t *testing.T) {
 	result, err := svc.FindShortByNiin(niin)
 	require.NoError(t, err)
 	require.Equal(t, niin, deref(result.Niin))
+
+	// Wait for async analytics processing
+	time.Sleep(10 * time.Millisecond)
 	require.Len(t, analytics.calls, 1)
 }
 
@@ -61,6 +65,9 @@ func TestFindShortByPartTracksUniqueNiins(t *testing.T) {
 	results, err := svc.FindShortByPart("part")
 	require.NoError(t, err)
 	require.Len(t, results, 2)
+
+	// Wait for async analytics processing
+	time.Sleep(10 * time.Millisecond)
 	require.Len(t, analytics.calls, 1)
 }
 
@@ -82,6 +89,9 @@ func TestFindShortByNiinAnalyticsFailureDoesNotFail(t *testing.T) {
 	result, err := svc.FindShortByNiin(niin)
 	require.NoError(t, err)
 	require.Equal(t, niin, deref(result.Niin))
+
+	// Wait for async analytics processing
+	time.Sleep(10 * time.Millisecond)
 	require.Len(t, analytics.calls, 1)
 }
 

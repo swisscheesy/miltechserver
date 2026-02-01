@@ -185,3 +185,35 @@ Based on the current project setup:
 - Consistent module layout and dependency wiring for small domains
 - Easier maintenance and clearer ownership of request/response types
 - No external behavior changes, but new tests provide coverage for refactored handlers
+
+### ADR-010: Item Query Performance Optimization (2026-01-31)
+
+**Context:**
+- Detailed item query endpoint (`GET /api/v1/queries/items/detailed`) executed ~45 sequential database queries
+- Each request made serial round-trips to 10 query functions, each containing 1-8 internal queries
+- Default Go connection pool (MaxIdleConns=2) was insufficient for parallel workloads
+- No request context propagation meant queries couldn't be cancelled on client disconnect
+- Identical NIIN lookups hit the database repeatedly with no caching
+
+**Decision:**
+- Implement 7 optimizations as designed in `docs/designs/item_query_performance_optimization_design.md`:
+  1. **Connection Pool Tuning**: Configure `MaxOpenConns=50`, `MaxIdleConns=25`, with connection recycling via `ConnMaxLifetime=5min`
+  2. **Top-Level Parallelization**: Use `errgroup` to execute all 10 query functions concurrently in `repository_impl.go`
+  3. **Context Propagation**: Thread `context.Context` from handler → service → repository → queries; use `QueryContext` instead of `Query`
+  4. **Inner Query Parallelization**: Apply `errgroup` within each query function for independent sub-queries
+  5. **In-Memory Caching**: Add TTL-based cache (24h) at service layer with background cleanup
+  6. **Async Analytics**: Use buffered channel for fire-and-forget analytics in short query service
+  7. **Database Indexes**: Create migration script for NIIN indexes on all queried tables
+
+**Alternatives considered:**
+- Single PostgreSQL stored function returning all data (rejected: harder to maintain, less flexible)
+- Redis caching (deferred: single instance deployment doesn't require distributed cache)
+- Query result streaming (rejected: response structure requires full data assembly)
+
+**Consequences:**
+- Expected 10-40x performance improvement (from ~45 sequential to ~1-2 parallel round-trips)
+- Cache hits return in <1ms without database load
+- Queries respect request cancellation via context
+- Partial data returned on individual query failures (logged but non-fatal)
+- Connection pool settings configurable via `DB_MAX_OPEN_CONNS` and `DB_MAX_IDLE_CONNS` env vars
+- Migration `003_create_item_query_indexes.sql` must be run to create NIIN indexes

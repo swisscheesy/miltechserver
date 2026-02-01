@@ -148,14 +148,14 @@ func clearMaterialImagesTables(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	if !hasTable(t, db, "material_images_upload_limits") {
-		t.Skip("material_image_upload_limits table missing in test DB")
+		t.Skip("material_images_upload_limits table missing in test DB")
 	}
 
 	_, err := db.Exec(
 		`TRUNCATE TABLE
 			material_images_flags,
 			material_images_votes,
-			material_image_upload_limits,
+			material_images_upload_limits,
 			material_images
 		RESTART IDENTITY CASCADE`,
 	)

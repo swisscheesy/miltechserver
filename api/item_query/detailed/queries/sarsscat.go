@@ -1,7 +1,11 @@
 package queries
 
 import (
+	"context"
 	"database/sql"
+
+	"github.com/go-jet/jet/v2/qrm"
+	"golang.org/x/sync/errgroup"
 
 	"miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/details"
@@ -9,36 +13,47 @@ import (
 	. "github.com/go-jet/jet/v2/postgres"
 )
 
-func GetSarsscat(db *sql.DB, niin string) (details.Sarsscat, error) {
+// GetSarsscat fetches SARSSCAT data using parallel queries.
+// All 3 queries are independent and execute concurrently.
+// Uses plain errgroup to prevent context cancellation on "no rows" errors.
+func GetSarsscat(ctx context.Context, db *sql.DB, niin string) (details.Sarsscat, error) {
 	sarsscat := details.Sarsscat{}
+	var g errgroup.Group
 
-	sarsscatStmt := SELECT(
-		table.ArmySarsscat.AllColumns,
-	).FROM(table.ArmySarsscat).
-		WHERE(table.ArmySarsscat.Niin.EQ(String(niin)))
+	g.Go(func() error {
+		stmt := SELECT(table.ArmySarsscat.AllColumns).
+			FROM(table.ArmySarsscat).
+			WHERE(table.ArmySarsscat.Niin.EQ(String(niin)))
+		err := stmt.QueryContext(ctx, db, &sarsscat.ArmySarsscat)
+		if err != nil && err != qrm.ErrNoRows {
+			return err
+		}
+		return nil
+	})
 
-	err := sarsscatStmt.Query(db, &sarsscat.ArmySarsscat)
-	if err != nil {
-		return details.Sarsscat{}, err
-	}
+	g.Go(func() error {
+		stmt := SELECT(table.MoeRule.AllColumns).
+			FROM(table.MoeRule).
+			WHERE(table.MoeRule.Niin.EQ(String(niin)))
+		err := stmt.QueryContext(ctx, db, &sarsscat.MoeRule)
+		if err != nil && err != qrm.ErrNoRows {
+			return err
+		}
+		return nil
+	})
 
-	moeRuleStmt := SELECT(
-		table.MoeRule.AllColumns,
-	).FROM(table.MoeRule).
-		WHERE(table.MoeRule.Niin.EQ(String(niin)))
+	g.Go(func() error {
+		stmt := SELECT(table.AmdfFreight.AllColumns).
+			FROM(table.AmdfFreight).
+			WHERE(table.AmdfFreight.Niin.EQ(String(niin)))
+		err := stmt.QueryContext(ctx, db, &sarsscat.AmdfFreight)
+		if err != nil && err != qrm.ErrNoRows {
+			return err
+		}
+		return nil
+	})
 
-	err = moeRuleStmt.Query(db, &sarsscat.MoeRule)
-	if err != nil {
-		return details.Sarsscat{}, err
-	}
-
-	amdfFreightStmt := SELECT(
-		table.AmdfFreight.AllColumns,
-	).FROM(table.AmdfFreight).
-		WHERE(table.AmdfFreight.Niin.EQ(String(niin)))
-
-	err = amdfFreightStmt.Query(db, &sarsscat.AmdfFreight)
-	if err != nil {
+	if err := g.Wait(); err != nil {
 		return details.Sarsscat{}, err
 	}
 

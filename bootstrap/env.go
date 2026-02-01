@@ -3,9 +3,19 @@ package bootstrap
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
+
+func getEnvAsInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if intVal, err := strconv.Atoi(val); err == nil {
+			return intVal
+		}
+	}
+	return defaultVal
+}
 
 type Env struct {
 	Host             string
@@ -21,6 +31,9 @@ type Env struct {
 	SslMode          string
 	ContextTimeout   int
 	MobileAppVersion string
+	// Connection pool settings for parallel query workloads
+	DBMaxOpenConns int
+	DBMaxIdleConns int
 }
 
 func NewEnv() *Env {
@@ -46,6 +59,9 @@ func NewEnv() *Env {
 	env.DBDate = os.Getenv("DB_DATE")
 	env.DBSchema = os.Getenv("DB_SCHEMA")
 	env.MobileAppVersion = os.Getenv("MOBILE_APP_VERSION")
+	// Connection pool settings (defaults optimized for parallel query workloads)
+	env.DBMaxOpenConns = getEnvAsInt("DB_MAX_OPEN_CONNS", 50)
+	env.DBMaxIdleConns = getEnvAsInt("DB_MAX_IDLE_CONNS", 25)
 	// Blob Storage
 	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
 	env.BlobAccountKey = os.Getenv("BLOB_ACCOUNT_KEY")
