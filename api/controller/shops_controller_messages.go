@@ -36,7 +36,8 @@ func (controller *ShopsController) CreateShopMessage(c *gin.Context) {
 		Message: req.Message,
 	}
 
-	createdMessage, err := controller.ShopsService.CreateShopMessage(user, message)
+	service := controller.serviceForRequest(c)
+	createdMessage, err := service.CreateShopMessage(user, message)
 	if err != nil {
 		c.Error(err)
 		return
@@ -66,7 +67,8 @@ func (controller *ShopsController) GetShopMessages(c *gin.Context) {
 		return
 	}
 
-	messages, err := controller.ShopsService.GetShopMessages(user, shopID)
+	service := controller.serviceForRequest(c)
+	messages, err := service.GetShopMessages(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -110,8 +112,13 @@ func (controller *ShopsController) GetShopMessagesPaginated(c *gin.Context) {
 	if req.Limit == 0 {
 		req.Limit = 20
 	}
+	if req.BeforeID != nil && req.AfterID != nil {
+		c.JSON(400, gin.H{"message": "before_id and after_id cannot be used together"})
+		return
+	}
 
-	paginatedMessages, err := controller.ShopsService.GetShopMessagesPaginated(user, shopID, req.Page, req.Limit)
+	service := controller.serviceForRequest(c)
+	paginatedMessages, err := service.GetShopMessagesPaginated(user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -147,7 +154,8 @@ func (controller *ShopsController) UpdateShopMessage(c *gin.Context) {
 		Message: req.Message,
 	}
 
-	err := controller.ShopsService.UpdateShopMessage(user, message)
+	service := controller.serviceForRequest(c)
+	err := service.UpdateShopMessage(user, message)
 	if err != nil {
 		c.Error(err)
 		return
@@ -173,7 +181,8 @@ func (controller *ShopsController) DeleteShopMessage(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteShopMessage(user, messageID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteShopMessage(user, messageID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -231,7 +240,8 @@ func (controller *ShopsController) UploadMessageImage(c *gin.Context) {
 	contentType := header.Header.Get("Content-Type")
 
 	// Upload to blob storage
-	messageID, fileExtension, imageURL, err := controller.ShopsService.UploadMessageImage(user, shopID, imageData, contentType)
+	service := controller.serviceForRequest(c)
+	messageID, fileExtension, imageURL, err := service.UploadMessageImage(user, shopID, imageData, contentType)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
 		c.JSON(500, gin.H{"message": fmt.Sprintf("failed to upload image: %v", err)})
@@ -273,7 +283,8 @@ func (controller *ShopsController) DeleteMessageImage(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteMessageImage(user, shopID, messageID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteMessageImage(user, shopID, messageID)
 	if err != nil {
 		c.Error(err)
 		return

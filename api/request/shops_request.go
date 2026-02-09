@@ -141,8 +141,8 @@ type RemoveListItemRequest struct {
 }
 
 type AddListItemBatchRequest struct {
-	ListID string                `json:"list_id" binding:"required"`
-	Items  []AddListItemRequest  `json:"items" binding:"required"`
+	ListID string               `json:"list_id" binding:"required"`
+	Items  []AddListItemRequest `json:"items" binding:"required"`
 }
 
 type RemoveListItemBatchRequest struct {
@@ -150,8 +150,10 @@ type RemoveListItemBatchRequest struct {
 }
 
 type GetShopMessagesPaginatedRequest struct {
-	Page  int `form:"page,default=1" binding:"omitempty,min=1"`
-	Limit int `form:"limit,default=20" binding:"omitempty,min=1,max=100"`
+	Page     int     `form:"page,default=1" binding:"omitempty,min=1"`
+	Limit    int     `form:"limit,default=20" binding:"omitempty,min=1,max=100"`
+	BeforeID *string `form:"before_id" binding:"omitempty"`
+	AfterID  *string `form:"after_id" binding:"omitempty"`
 }
 
 type UpdateAdminOnlyListsRequest struct {

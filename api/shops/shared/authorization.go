@@ -24,6 +24,10 @@ type ShopAuthorization interface {
 	RequireShopAdmin(user *bootstrap.User, shopID string) error
 }
 
+type AuthorizationAware interface {
+	WithAuthorization(auth ShopAuthorization) AuthorizationAware
+}
+
 type ShopAuthorizationImpl struct {
 	db *sql.DB
 }
@@ -33,42 +37,44 @@ func NewShopAuthorization(db *sql.DB) *ShopAuthorizationImpl {
 }
 
 func (auth *ShopAuthorizationImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
+	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(user.UserID))),
-		)
+		).
+		LIMIT(1)
 
-	var result struct {
-		Count int64 `sql:"primary_key"`
+	var result []struct {
+		Exists int `sql:"exists"`
 	}
 	err := stmt.Query(auth.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
 
-	return result.Count > 0, nil
+	return len(result) > 0, nil
 }
 
 func (auth *ShopAuthorizationImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
+	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(user.UserID))).
 				AND(ShopMembers.Role.EQ(String("admin"))),
-		)
+		).
+		LIMIT(1)
 
-	var result struct {
-		Count int64 `sql:"primary_key"`
+	var result []struct {
+		Exists int `sql:"exists"`
 	}
 	err := stmt.Query(auth.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check admin status: %w", err)
 	}
 
-	return result.Count > 0, nil
+	return len(result) > 0, nil
 }
 
 func (auth *ShopAuthorizationImpl) GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error) {
@@ -186,12 +192,14 @@ func (auth *ShopAuthorizationImpl) RequireShopAdmin(user *bootstrap.User, shopID
 }
 
 func (auth *ShopAuthorizationImpl) getShopAdminOnlyListsSetting(shopID string) (bool, error) {
-	stmt := SELECT(Shops.AllColumns).
+	stmt := SELECT(Shops.AdminOnlyLists).
 		FROM(Shops).
 		WHERE(Shops.ID.EQ(String(shopID)))
 
-	var shop model.Shops
-	err := stmt.Query(auth.db, &shop)
+	var result struct {
+		AdminOnlyLists bool
+	}
+	err := stmt.Query(auth.db, &result)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, ErrShopNotFound
@@ -199,5 +207,5 @@ func (auth *ShopAuthorizationImpl) getShopAdminOnlyListsSetting(shopID string) (
 		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
 	}
 
-	return shop.AdminOnlyLists, nil
+	return result.AdminOnlyLists, nil
 }

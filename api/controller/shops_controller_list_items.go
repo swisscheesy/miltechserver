@@ -39,7 +39,8 @@ func (controller *ShopsController) AddListItem(c *gin.Context) {
 		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
-	createdItem, err := controller.ShopsService.AddListItem(user, item)
+	service := controller.serviceForRequest(c)
+	createdItem, err := service.AddListItem(user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -69,7 +70,8 @@ func (controller *ShopsController) GetListItems(c *gin.Context) {
 		return
 	}
 
-	items, err := controller.ShopsService.GetListItems(user, listID)
+	service := controller.serviceForRequest(c)
+	items, err := service.GetListItems(user, listID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -109,7 +111,8 @@ func (controller *ShopsController) UpdateListItem(c *gin.Context) {
 		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
-	err := controller.ShopsService.UpdateListItem(user, item)
+	service := controller.serviceForRequest(c)
+	err := service.UpdateListItem(user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -136,7 +139,8 @@ func (controller *ShopsController) RemoveListItem(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.RemoveListItem(user, req.ItemID)
+	service := controller.serviceForRequest(c)
+	err := service.RemoveListItem(user, req.ItemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -176,7 +180,8 @@ func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	createdItems, err := controller.ShopsService.AddListItemBatch(user, items)
+	service := controller.serviceForRequest(c)
+	createdItems, err := service.AddListItemBatch(user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -207,7 +212,8 @@ func (controller *ShopsController) RemoveListItemBatch(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.RemoveListItemBatch(user, req.ItemIDs)
+	service := controller.serviceForRequest(c)
+	err := service.RemoveListItemBatch(user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return

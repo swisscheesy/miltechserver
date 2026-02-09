@@ -217,3 +217,35 @@ Based on the current project setup:
 - Partial data returned on individual query failures (logged but non-fatal)
 - Connection pool settings configurable via `DB_MAX_OPEN_CONNS` and `DB_MAX_IDLE_CONNS` env vars
 - Migration `003_create_item_query_indexes.sql` must be run to create NIIN indexes
+
+### ADR-011: Shops Performance Optimization Refactor (2026-02-01)
+
+**Context:**
+- Shops endpoints executed repeated authorization checks per request and used COUNT-based membership queries
+- Vehicle notifications loaded items with an N+1 pattern
+- Shop stats admin subquery scanned all admins instead of filtering by user
+- Blob cleanup used unbounded sequential deletes with no timeout
+- Paginated messages relied on offset-based SQL without cursor opt-in
+- Several handlers allocated slices without pre-sizing, and vehicle service had no-op assignments
+
+**Decision:**
+- Add request-scoped authorization caching via Gin context and a cached wrapper
+- Replace COUNT membership/admin checks with LIMIT 1 existence checks
+- Fix notification N+1 by fetching items in a single IN query and grouping in memory
+- Filter admin_check subquery by user_id in the shops stats query
+- Add blob listing timeout and bounded concurrent deletions (best-effort, log-only failures)
+- Implement optional cursor pagination for shop messages with `before_id`/`after_id` and `next_cursor` response field; keep existing page/limit behavior
+- Pre-allocate known-size slices and remove no-op vehicle field assignments
+- Do not add the invite code index (intentionally omitted)
+
+**Alternatives considered:**
+- Leave authorization checks uncached (rejected: redundant per-request queries)
+- Use Redis for cross-request caching (deferred: not required for single instance)
+- Keep offset-only pagination (rejected: degrades with deep history)
+- Move blob deletion to background jobs (deferred: out of current scope)
+
+**Consequences:**
+- Fewer DB round-trips on hot request paths and faster notification retrieval
+- Cursor pagination is opt-in and backwards compatible; pagination metadata is omitted for cursor responses
+- Blob cleanup completes faster but still tolerates partial failures without surfacing to users
+- Manual index creation remains required; invite code lookup still relies on existing schema

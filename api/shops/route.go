@@ -69,7 +69,7 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 		notificationChangesService,
 	)
 
-	controller := controller.NewShopsController(shopsService)
+	controller := controller.NewShopsController(shopsService, authorization)
 
 	core.RegisterRoutes(router, controller)
 	settings.RegisterRoutes(router, controller)

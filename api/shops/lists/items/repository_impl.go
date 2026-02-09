@@ -284,9 +284,9 @@ func (repo *RepositoryImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []
 		return nil
 	}
 
-	var expressions []Expression
-	for _, id := range itemIDs {
-		expressions = append(expressions, String(id))
+	expressions := make([]Expression, len(itemIDs))
+	for i, id := range itemIDs {
+		expressions[i] = String(id)
 	}
 
 	stmt := ShopListItems.DELETE().

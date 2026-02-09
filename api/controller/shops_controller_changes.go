@@ -28,7 +28,8 @@ func (controller *ShopsController) GetNotificationChangeHistory(c *gin.Context) 
 		return
 	}
 
-	changes, err := controller.ShopsService.GetNotificationChangeHistory(user, notificationID)
+	service := controller.serviceForRequest(c)
+	changes, err := service.GetNotificationChangeHistory(user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -67,7 +68,8 @@ func (controller *ShopsController) GetShopNotificationChanges(c *gin.Context) {
 		}
 	}
 
-	changes, err := controller.ShopsService.GetShopNotificationChanges(user, shopID, limit)
+	service := controller.serviceForRequest(c)
+	changes, err := service.GetShopNotificationChanges(user, shopID, limit)
 	if err != nil {
 		c.Error(err)
 		return
@@ -97,7 +99,8 @@ func (controller *ShopsController) GetVehicleNotificationChanges(c *gin.Context)
 		return
 	}
 
-	changes, err := controller.ShopsService.GetVehicleNotificationChanges(user, vehicleID)
+	service := controller.serviceForRequest(c)
+	changes, err := service.GetVehicleNotificationChanges(user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return

@@ -4,10 +4,13 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 )
 
 type Service interface {
+	WithAuthorization(auth shared.ShopAuthorization) Service
+
 	// Shop Operations
 	CreateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
 	UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error)
@@ -32,7 +35,7 @@ type Service interface {
 	// Shop Message Operations
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error)
-	GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error)
+	GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(user *bootstrap.User, messageID string) error
 	UploadMessageImage(user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error)
@@ -144,7 +147,7 @@ type ListItemsService interface {
 type MessagesService interface {
 	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error)
-	GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error)
+	GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(user *bootstrap.User, messageID string) error
 	UploadMessageImage(user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error)

@@ -39,7 +39,8 @@ func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
 		Completed:   false,
 	}
 
-	createdNotification, err := controller.ShopsService.CreateVehicleNotification(user, notification)
+	service := controller.serviceForRequest(c)
+	createdNotification, err := service.CreateVehicleNotification(user, notification)
 	if err != nil {
 		c.Error(err)
 		return
@@ -69,7 +70,8 @@ func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
 		return
 	}
 
-	notifications, err := controller.ShopsService.GetVehicleNotifications(user, vehicleID)
+	service := controller.serviceForRequest(c)
+	notifications, err := service.GetVehicleNotifications(user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -99,7 +101,8 @@ func (controller *ShopsController) GetVehicleNotificationsWithItems(c *gin.Conte
 		return
 	}
 
-	notificationsWithItems, err := controller.ShopsService.GetVehicleNotificationsWithItems(user, vehicleID)
+	service := controller.serviceForRequest(c)
+	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -129,7 +132,8 @@ func (controller *ShopsController) GetShopNotifications(c *gin.Context) {
 		return
 	}
 
-	notifications, err := controller.ShopsService.GetShopNotifications(user, shopID)
+	service := controller.serviceForRequest(c)
+	notifications, err := service.GetShopNotifications(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -159,7 +163,8 @@ func (controller *ShopsController) GetVehicleNotificationByID(c *gin.Context) {
 		return
 	}
 
-	notification, err := controller.ShopsService.GetVehicleNotificationByID(user, notificationID)
+	service := controller.serviceForRequest(c)
+	notification, err := service.GetVehicleNotificationByID(user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -198,7 +203,8 @@ func (controller *ShopsController) UpdateVehicleNotification(c *gin.Context) {
 		Completed:   req.Completed,
 	}
 
-	err := controller.ShopsService.UpdateVehicleNotification(user, notification)
+	service := controller.serviceForRequest(c)
+	err := service.UpdateVehicleNotification(user, notification)
 	if err != nil {
 		c.Error(err)
 		return
@@ -224,7 +230,8 @@ func (controller *ShopsController) DeleteVehicleNotification(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteVehicleNotification(user, notificationID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteVehicleNotification(user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return

@@ -21,6 +21,13 @@ func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	}
 }
 
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo: service.repo,
+		auth: auth,
+	}
+}
+
 // GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
 // Any shop member can read this setting
 func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error) {

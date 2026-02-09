@@ -11,15 +11,23 @@ import (
 )
 
 type ServiceImpl struct {
-	repo         Repository
-	inviteRepo   invites.Repository
-	auth         shared.ShopAuthorization
+	repo       Repository
+	inviteRepo invites.Repository
+	auth       shared.ShopAuthorization
 }
 
 func NewService(repo Repository, inviteRepo invites.Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	return &ServiceImpl{
 		repo:       repo,
 		inviteRepo: inviteRepo,
+		auth:       auth,
+	}
+}
+
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo:       service.repo,
+		inviteRepo: service.inviteRepo,
 		auth:       auth,
 	}
 }

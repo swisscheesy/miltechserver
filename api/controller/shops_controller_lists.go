@@ -35,7 +35,8 @@ func (controller *ShopsController) CreateShopList(c *gin.Context) {
 		Description: req.Description,
 	}
 
-	createdList, err := controller.ShopsService.CreateShopList(user, list)
+	service := controller.serviceForRequest(c)
+	createdList, err := service.CreateShopList(user, list)
 	if err != nil {
 		c.Error(err)
 		return
@@ -65,7 +66,8 @@ func (controller *ShopsController) GetShopLists(c *gin.Context) {
 		return
 	}
 
-	lists, err := controller.ShopsService.GetShopLists(user, shopID)
+	service := controller.serviceForRequest(c)
+	lists, err := service.GetShopLists(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -95,7 +97,8 @@ func (controller *ShopsController) GetShopListByID(c *gin.Context) {
 		return
 	}
 
-	list, err := controller.ShopsService.GetShopListByID(user, listID)
+	service := controller.serviceForRequest(c)
+	list, err := service.GetShopListByID(user, listID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -131,7 +134,8 @@ func (controller *ShopsController) UpdateShopList(c *gin.Context) {
 		Description: req.Description,
 	}
 
-	err := controller.ShopsService.UpdateShopList(user, list)
+	service := controller.serviceForRequest(c)
+	err := service.UpdateShopList(user, list)
 	if err != nil {
 		c.Error(err)
 		return
@@ -158,7 +162,8 @@ func (controller *ShopsController) DeleteShopList(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteShopList(user, req.ListID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteShopList(user, req.ListID)
 	if err != nil {
 		c.Error(err)
 		return

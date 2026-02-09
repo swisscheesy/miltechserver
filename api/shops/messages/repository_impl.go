@@ -12,14 +12,19 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	. "github.com/go-jet/jet/v2/postgres"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
 	shopMessageImagesContainer = "shop-message-images"
+	blobOperationTimeout       = 30 * time.Second
+	maxConcurrentBlobDeletes   = 10
 )
 
 type RepositoryImpl struct {
@@ -83,6 +88,30 @@ func (repo *RepositoryImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 	err := stmt.Query(repo.db, &messages)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
+	}
+
+	return messages, nil
+}
+
+func (repo *RepositoryImpl) GetShopMessagesByCursor(user *bootstrap.User, shopID string, cursorTime time.Time, isBefore bool, limit int) ([]model.ShopMessages, error) {
+	condition := ShopMessages.CreatedAt.LT(TimestampzT(cursorTime))
+	if !isBefore {
+		condition = ShopMessages.CreatedAt.GT(TimestampzT(cursorTime))
+	}
+
+	stmt := SELECT(ShopMessages.AllColumns).
+		FROM(ShopMessages).
+		WHERE(
+			ShopMessages.ShopID.EQ(String(shopID)).
+				AND(condition),
+		).
+		ORDER_BY(ShopMessages.CreatedAt.DESC()).
+		LIMIT(int64(limit))
+
+	var messages []model.ShopMessages
+	err := stmt.Query(repo.db, &messages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cursor-based shop messages: %w", err)
 	}
 
 	return messages, nil
@@ -280,7 +309,8 @@ func (repo *RepositoryImpl) DeleteBlobByURL(messageText string) error {
 }
 
 func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), blobOperationTimeout)
+	defer cancel()
 
 	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)
 
@@ -289,14 +319,16 @@ func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
 		Prefix: &prefix,
 	})
 
-	deletedCount := 0
-	errorCount := 0
+	var deletedCount int64
+	var errorCount int64
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentBlobDeletes)
 
 	for pager.More() {
-		page, err := pager.NextPage(ctx)
+		page, err := pager.NextPage(groupCtx)
 		if err != nil {
 			slog.Warn("Failed to list blobs for shop deletion", "shop_id", shopID, "error", err)
-			continue
+			break
 		}
 
 		for _, blob := range page.Segment.BlobItems {
@@ -304,17 +336,26 @@ func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
 				continue
 			}
 
-			_, err := repo.blobClient.DeleteBlob(ctx, shopMessageImagesContainer, *blob.Name, nil)
-			if err != nil {
-				slog.Warn("Failed to delete shop message blob",
-					"shop_id", shopID,
-					"blob_name", *blob.Name,
-					"error", err)
-				errorCount++
-			} else {
-				deletedCount++
-			}
+			blobName := *blob.Name
+			group.Go(func() error {
+				_, err := repo.blobClient.DeleteBlob(groupCtx, shopMessageImagesContainer, blobName, nil)
+				if err != nil {
+					slog.Warn("Failed to delete shop message blob",
+						"shop_id", shopID,
+						"blob_name", blobName,
+						"error", err)
+					atomic.AddInt64(&errorCount, 1)
+					return nil
+				}
+
+				atomic.AddInt64(&deletedCount, 1)
+				return nil
+			})
 		}
+	}
+
+	if err := group.Wait(); err != nil {
+		slog.Warn("Blob deletion group exited with error", "shop_id", shopID, "error", err)
 	}
 
 	slog.Info("Shop message blobs cleanup completed",
@@ -370,20 +411,21 @@ func parseBlobNameFromURL(url string, expectedContainer string) (string, error) 
 }
 
 func (repo *RepositoryImpl) isUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
+	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(user.UserID))),
-		)
+		).
+		LIMIT(1)
 
-	var result struct {
-		Count int64 `sql:"primary_key"`
+	var result []struct {
+		Exists int `sql:"exists"`
 	}
 	err := stmt.Query(repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
 
-	return result.Count > 0, nil
+	return len(result) > 0, nil
 }

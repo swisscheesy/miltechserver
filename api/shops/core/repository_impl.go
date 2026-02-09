@@ -10,14 +10,20 @@ import (
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
+	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	. "github.com/go-jet/jet/v2/postgres"
+	"golang.org/x/sync/errgroup"
 )
 
-const shopMessageImagesContainer = "shop-message-images"
+const (
+	shopMessageImagesContainer = "shop-message-images"
+	blobOperationTimeout       = 30 * time.Second
+	maxConcurrentBlobDeletes   = 10
+)
 
 type RepositoryImpl struct {
 	db         *sql.DB
@@ -227,7 +233,7 @@ func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]re
 		LEFT JOIN (
 			SELECT shop_id, user_id
 			FROM shop_members
-			WHERE role = 'admin'
+			WHERE role = 'admin' AND user_id = $1
 		) admin_check ON s.id = admin_check.shop_id AND admin_check.user_id = $1
 		WHERE sm.user_id = $1
 		ORDER BY s.created_at DESC
@@ -239,7 +245,7 @@ func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]re
 	}
 	defer rows.Close()
 
-	var results []response.ShopWithStats
+	results := make([]response.ShopWithStats, 0, 16)
 	for rows.Next() {
 		var shop model.Shops
 		var memberCount, vehicleCount int64
@@ -312,7 +318,8 @@ func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
 		return nil
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), blobOperationTimeout)
+	defer cancel()
 
 	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)
 
@@ -321,14 +328,16 @@ func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
 		Prefix: &prefix,
 	})
 
-	deletedCount := 0
-	errorCount := 0
+	var deletedCount int64
+	var errorCount int64
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentBlobDeletes)
 
 	for pager.More() {
-		page, err := pager.NextPage(ctx)
+		page, err := pager.NextPage(groupCtx)
 		if err != nil {
 			slog.Warn("Failed to list blobs for shop deletion", "shop_id", shopID, "error", err)
-			continue
+			break
 		}
 
 		for _, blob := range page.Segment.BlobItems {
@@ -336,17 +345,26 @@ func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
 				continue
 			}
 
-			_, err := repo.blobClient.DeleteBlob(ctx, shopMessageImagesContainer, *blob.Name, nil)
-			if err != nil {
-				slog.Warn("Failed to delete shop message blob",
-					"shop_id", shopID,
-					"blob_name", *blob.Name,
-					"error", err)
-				errorCount++
-			} else {
-				deletedCount++
-			}
+			blobName := *blob.Name
+			group.Go(func() error {
+				_, err := repo.blobClient.DeleteBlob(groupCtx, shopMessageImagesContainer, blobName, nil)
+				if err != nil {
+					slog.Warn("Failed to delete shop message blob",
+						"shop_id", shopID,
+						"blob_name", blobName,
+						"error", err)
+					atomic.AddInt64(&errorCount, 1)
+					return nil
+				}
+
+				atomic.AddInt64(&deletedCount, 1)
+				return nil
+			})
 		}
+	}
+
+	if err := group.Wait(); err != nil {
+		slog.Warn("Blob deletion group exited with error", "shop_id", shopID, "error", err)
 	}
 
 	slog.Info("Shop message blobs cleanup completed",

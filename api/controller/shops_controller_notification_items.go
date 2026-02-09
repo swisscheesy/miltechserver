@@ -37,7 +37,8 @@ func (controller *ShopsController) AddNotificationItem(c *gin.Context) {
 		Quantity:       req.Quantity,
 	}
 
-	createdItem, err := controller.ShopsService.AddNotificationItem(user, item)
+	service := controller.serviceForRequest(c)
+	createdItem, err := service.AddNotificationItem(user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -67,7 +68,8 @@ func (controller *ShopsController) GetNotificationItems(c *gin.Context) {
 		return
 	}
 
-	items, err := controller.ShopsService.GetNotificationItems(user, notificationID)
+	service := controller.serviceForRequest(c)
+	items, err := service.GetNotificationItems(user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -97,7 +99,8 @@ func (controller *ShopsController) GetShopNotificationItems(c *gin.Context) {
 		return
 	}
 
-	items, err := controller.ShopsService.GetShopNotificationItems(user, shopID)
+	service := controller.serviceForRequest(c)
+	items, err := service.GetShopNotificationItems(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -139,7 +142,8 @@ func (controller *ShopsController) AddNotificationItemList(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	createdItems, err := controller.ShopsService.AddNotificationItemList(user, items)
+	service := controller.serviceForRequest(c)
+	createdItems, err := service.AddNotificationItemList(user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -169,7 +173,8 @@ func (controller *ShopsController) RemoveNotificationItem(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.RemoveNotificationItem(user, itemID)
+	service := controller.serviceForRequest(c)
+	err := service.RemoveNotificationItem(user, itemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -196,7 +201,8 @@ func (controller *ShopsController) RemoveNotificationItemList(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.RemoveNotificationItemList(user, req.ItemIDs)
+	service := controller.serviceForRequest(c)
+	err := service.RemoveNotificationItemList(user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return

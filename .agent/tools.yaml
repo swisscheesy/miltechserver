@@ -1,0 +1,35 @@
+sources:
+  my-pg-source:
+    kind: postgres
+    host: 192.168.20.70
+    port: 5432
+    database: miltech_ng
+    user: postgres
+    password: potato123
+
+tools:
+  execute_sql:
+    kind: postgres-execute-sql
+    source: my-pg-source
+    description: Execute an arbitrary SQL query on the database (SELECT/EXPLAIN recommended for safety)
+
+  analyze_query:
+    kind: postgres-execute-sql
+    source: my-pg-source
+    description: Run EXPLAIN on a SQL query for performance analysis
+
+  list_tables:
+    kind: postgres-sql
+    source: my-pg-source
+    description: List all tables in the public schema
+    statement: "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+
+  get_table_info:
+    kind: postgres-sql
+    source: my-pg-source
+    description: Show column names and types for a given table
+    parameters:
+      - name: table
+        type: string
+        description: The table name
+    statement: "SELECT column_name, data_type FROM information_schema.columns WHERE table_name=$1;"

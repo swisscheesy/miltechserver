@@ -42,7 +42,8 @@ func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
 		Comment: req.Comment,
 	}
 
-	createdVehicle, err := controller.ShopsService.CreateShopVehicle(user, vehicle)
+	service := controller.serviceForRequest(c)
+	createdVehicle, err := service.CreateShopVehicle(user, vehicle)
 	if err != nil {
 		c.Error(err)
 		return
@@ -72,7 +73,8 @@ func (controller *ShopsController) GetShopVehicles(c *gin.Context) {
 		return
 	}
 
-	vehicles, err := controller.ShopsService.GetShopVehicles(user, shopID)
+	service := controller.serviceForRequest(c)
+	vehicles, err := service.GetShopVehicles(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -102,7 +104,8 @@ func (controller *ShopsController) GetShopVehicleByID(c *gin.Context) {
 		return
 	}
 
-	vehicle, err := controller.ShopsService.GetShopVehicleByID(user, vehicleID)
+	service := controller.serviceForRequest(c)
+	vehicle, err := service.GetShopVehicleByID(user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -147,7 +150,8 @@ func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
 		TrackedHours:   req.TrackedHours,
 	}
 
-	err := controller.ShopsService.UpdateShopVehicle(user, vehicle)
+	service := controller.serviceForRequest(c)
+	err := service.UpdateShopVehicle(user, vehicle)
 	if err != nil {
 		c.Error(err)
 		return
@@ -173,7 +177,8 @@ func (controller *ShopsController) DeleteShopVehicle(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteShopVehicle(user, vehicleID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteShopVehicle(user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return

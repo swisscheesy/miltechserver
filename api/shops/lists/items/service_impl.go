@@ -31,6 +31,15 @@ func NewService(repo Repository, listRepo lists.Repository, settingsRepo setting
 	}
 }
 
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo:         service.repo,
+		listRepo:     service.listRepo,
+		settingsRepo: service.settingsRepo,
+		auth:         auth,
+	}
+}
+
 func (service *ServiceImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")

@@ -62,13 +62,14 @@ type PaginationMetadata struct {
 
 type PaginatedShopMessagesResponse struct {
 	Messages   []model.ShopMessages `json:"messages"`
-	Pagination PaginationMetadata   `json:"pagination"`
+	Pagination *PaginationMetadata  `json:"pagination,omitempty"`
+	NextCursor *string              `json:"next_cursor,omitempty"`
 }
 
 // ShopDetailResponse includes shop data with calculated statistics
 // Used by GetShopByID endpoint to provide comprehensive shop information
 type ShopDetailResponse struct {
-	model.Shops              // Embed base shop model for backwards compatibility
+	model.Shops         // Embed base shop model for backwards compatibility
 	TotalMessages int64 `json:"total_messages"` // Total count of messages in shop
 	MemberCount   int64 `json:"member_count"`   // Total count of shop members
 	VehicleCount  int64 `json:"vehicle_count"`  // Total count of shop vehicles

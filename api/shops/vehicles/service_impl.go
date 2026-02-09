@@ -25,6 +25,13 @@ func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	}
 }
 
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo: service.repo,
+		auth: auth,
+	}
+}
+
 func (service *ServiceImpl) CreateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) (*model.ShopVehicle, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
@@ -45,30 +52,8 @@ func (service *ServiceImpl) CreateShopVehicle(user *bootstrap.User, vehicle mode
 	vehicle.SaveTime = now
 	vehicle.LastUpdated = now
 
-	if vehicle.Niin == "" {
-		vehicle.Niin = ""
-	}
-	if vehicle.Model == "" {
-		vehicle.Model = ""
-	}
-	if vehicle.Serial == "" {
-		vehicle.Serial = ""
-	}
-	if vehicle.Comment == "" {
-		vehicle.Comment = ""
-	}
-	if vehicle.Admin == "" {
-		vehicle.Admin = ""
-	}
 	if vehicle.Uoc == "" {
 		vehicle.Uoc = "UNK"
-	}
-
-	if vehicle.Mileage == 0 {
-		vehicle.Mileage = 0
-	}
-	if vehicle.Hours == 0 {
-		vehicle.Hours = 0
 	}
 
 	createdVehicle, err := service.repo.CreateShopVehicle(user, vehicle)
@@ -150,30 +135,8 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 		return errors.New("access denied: only vehicle creator or shop admin can update vehicles")
 	}
 
-	if vehicle.Niin == "" {
-		vehicle.Niin = ""
-	}
-	if vehicle.Model == "" {
-		vehicle.Model = ""
-	}
-	if vehicle.Serial == "" {
-		vehicle.Serial = ""
-	}
-	if vehicle.Comment == "" {
-		vehicle.Comment = ""
-	}
-	if vehicle.Admin == "" {
-		vehicle.Admin = ""
-	}
 	if vehicle.Uoc == "" {
 		vehicle.Uoc = "UNK"
-	}
-
-	if vehicle.Mileage == 0 {
-		vehicle.Mileage = 0
-	}
-	if vehicle.Hours == 0 {
-		vehicle.Hours = 0
 	}
 
 	vehicle.LastUpdated = time.Now().UTC()

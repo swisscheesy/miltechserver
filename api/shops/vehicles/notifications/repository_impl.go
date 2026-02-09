@@ -63,24 +63,63 @@ func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(user *bootstrap.Use
 		return nil, fmt.Errorf("failed to get vehicle notifications: %w", err)
 	}
 
-	var result []response.VehicleNotificationWithItems
-	for _, notification := range notifications {
-		items, err := repo.GetNotificationItems(user, notification.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get items for notification %s: %w", notification.ID, err)
-		}
+	if len(notifications) == 0 {
+		return []response.VehicleNotificationWithItems{}, nil
+	}
 
+	notificationIDs := make([]string, len(notifications))
+	for i, notification := range notifications {
+		notificationIDs[i] = notification.ID
+	}
+
+	allItems, err := repo.GetItemsByNotificationIDs(notificationIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification items: %w", err)
+	}
+
+	itemsByNotification := make(map[string][]model.ShopNotificationItems, len(notificationIDs))
+	for _, item := range allItems {
+		itemsByNotification[item.NotificationID] = append(itemsByNotification[item.NotificationID], item)
+	}
+
+	result := make([]response.VehicleNotificationWithItems, len(notifications))
+	for i, notification := range notifications {
+		items := itemsByNotification[notification.ID]
 		if items == nil {
 			items = []model.ShopNotificationItems{}
 		}
 
-		result = append(result, response.VehicleNotificationWithItems{
+		result[i] = response.VehicleNotificationWithItems{
 			Notification: notification,
 			Items:        items,
-		})
+		}
 	}
 
 	return result, nil
+}
+
+func (repo *RepositoryImpl) GetItemsByNotificationIDs(notificationIDs []string) ([]model.ShopNotificationItems, error) {
+	if len(notificationIDs) == 0 {
+		return []model.ShopNotificationItems{}, nil
+	}
+
+	expressions := make([]Expression, len(notificationIDs))
+	for i, id := range notificationIDs {
+		expressions[i] = String(id)
+	}
+
+	stmt := SELECT(ShopNotificationItems.AllColumns).
+		FROM(ShopNotificationItems).
+		WHERE(ShopNotificationItems.NotificationID.IN(expressions...)).
+		ORDER_BY(ShopNotificationItems.SaveTime.ASC())
+
+	var items []model.ShopNotificationItems
+	err := stmt.Query(repo.db, &items)
+	if err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
 
 func (repo *RepositoryImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
@@ -214,22 +253,23 @@ func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID s
 }
 
 func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
+	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(user.UserID))),
-		)
+		).
+		LIMIT(1)
 
-	var result struct {
-		Count int64 `sql:"primary_key"`
+	var result []struct {
+		Exists int `sql:"exists"`
 	}
 	err := stmt.Query(repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
 
-	return result.Count > 0, nil
+	return len(result) > 0, nil
 }
 
 func (repo *RepositoryImpl) GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {

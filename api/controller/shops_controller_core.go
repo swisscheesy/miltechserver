@@ -40,7 +40,8 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 		shop.AdminOnlyLists = *req.AdminOnlyLists
 	}
 
-	createdShop, err := controller.ShopsService.CreateShop(user, shop)
+	service := controller.serviceForRequest(c)
+	createdShop, err := service.CreateShop(user, shop)
 	if err != nil {
 		c.Error(err)
 		return
@@ -70,7 +71,8 @@ func (controller *ShopsController) DeleteShop(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteShop(user, shopID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteShop(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -90,7 +92,8 @@ func (controller *ShopsController) GetUserShops(c *gin.Context) {
 		return
 	}
 
-	shops, err := controller.ShopsService.GetShopsByUser(user)
+	service := controller.serviceForRequest(c)
+	shops, err := service.GetShopsByUser(user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -114,7 +117,8 @@ func (controller *ShopsController) GetUserDataWithShops(c *gin.Context) {
 		return
 	}
 
-	userShopsData, err := controller.ShopsService.GetUserDataWithShops(user)
+	service := controller.serviceForRequest(c)
+	userShopsData, err := service.GetUserDataWithShops(user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -144,7 +148,8 @@ func (controller *ShopsController) GetShopByID(c *gin.Context) {
 		return
 	}
 
-	shop, err := controller.ShopsService.GetShopByID(user, shopID)
+	service := controller.serviceForRequest(c)
+	shop, err := service.GetShopByID(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -187,7 +192,8 @@ func (controller *ShopsController) UpdateShop(c *gin.Context) {
 		Details: req.Details,
 	}
 
-	updatedShop, err := controller.ShopsService.UpdateShop(user, shop)
+	service := controller.serviceForRequest(c)
+	updatedShop, err := service.UpdateShop(user, shop)
 	if err != nil {
 		c.Error(err)
 		return

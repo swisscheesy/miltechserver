@@ -4,6 +4,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 )
 
@@ -46,6 +47,85 @@ func NewService(
 		NotificationsService:       notificationsService,
 		NotificationItemsService:   notificationItemsService,
 		NotificationChangesService: notificationChangesService,
+	}
+}
+
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) Service {
+	coreService := service.CoreService
+	if aware, ok := coreService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(CoreService); ok {
+			coreService = updated
+		}
+	}
+
+	settingsService := service.SettingsService
+	if aware, ok := settingsService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(SettingsService); ok {
+			settingsService = updated
+		}
+	}
+
+	membersService := service.MembersService
+	if aware, ok := membersService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(MembersService); ok {
+			membersService = updated
+		}
+	}
+
+	inviteService := service.InviteService
+	if aware, ok := inviteService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(InviteService); ok {
+			inviteService = updated
+		}
+	}
+
+	listsService := service.ListsService
+	if aware, ok := listsService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(ListsService); ok {
+			listsService = updated
+		}
+	}
+
+	listItemsService := service.ListItemsService
+	if aware, ok := listItemsService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(ListItemsService); ok {
+			listItemsService = updated
+		}
+	}
+
+	messagesService := service.MessagesService
+	if aware, ok := messagesService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(MessagesService); ok {
+			messagesService = updated
+		}
+	}
+
+	vehiclesService := service.VehiclesService
+	if aware, ok := vehiclesService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(VehiclesService); ok {
+			vehiclesService = updated
+		}
+	}
+
+	notificationsService := service.NotificationsService
+	if aware, ok := notificationsService.(shared.AuthorizationAware); ok {
+		if updated, ok := aware.WithAuthorization(auth).(NotificationsService); ok {
+			notificationsService = updated
+		}
+	}
+
+	return &ServiceImpl{
+		CoreService:                coreService,
+		SettingsService:            settingsService,
+		MembersService:             membersService,
+		InviteService:              inviteService,
+		ListsService:               listsService,
+		ListItemsService:           listItemsService,
+		MessagesService:            messagesService,
+		VehiclesService:            vehiclesService,
+		NotificationsService:       notificationsService,
+		NotificationItemsService:   service.NotificationItemsService,
+		NotificationChangesService: service.NotificationChangesService,
 	}
 }
 
@@ -121,8 +201,8 @@ func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string)
 	return service.MessagesService.GetShopMessages(user, shopID)
 }
 
-func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error) {
-	return service.MessagesService.GetShopMessagesPaginated(user, shopID, page, limit)
+func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error) {
+	return service.MessagesService.GetShopMessagesPaginated(user, shopID, req)
 }
 
 func (service *ServiceImpl) UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
@@ -25,6 +26,13 @@ type ServiceImpl struct {
 func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	return &ServiceImpl{
 		repo: repo,
+		auth: auth,
+	}
+}
+
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo: service.repo,
 		auth: auth,
 	}
 }
@@ -85,16 +93,16 @@ func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string)
 	return messages, nil
 }
 
-func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, page int, limit int) (*response.PaginatedShopMessagesResponse, error) {
+func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	if page < 1 {
-		page = 1
+	if req.Page < 1 {
+		req.Page = 1
 	}
-	if limit < 1 || limit > 100 {
-		limit = 20
+	if req.Limit < 1 || req.Limit > 100 {
+		req.Limit = 20
 	}
 
 	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
@@ -106,9 +114,59 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	offset := (page - 1) * limit
+	if req.BeforeID != nil && req.AfterID != nil {
+		return nil, errors.New("before_id and after_id cannot be used together")
+	}
 
-	messages, err := service.repo.GetShopMessagesPaginated(user, shopID, offset, limit)
+	if req.BeforeID != nil || req.AfterID != nil {
+		cursorID := req.BeforeID
+		isBefore := true
+		if req.AfterID != nil {
+			cursorID = req.AfterID
+			isBefore = false
+		}
+
+		cursorMessage, err := service.repo.GetShopMessageByID(user, *cursorID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load cursor message: %w", err)
+		}
+		if cursorMessage.ShopID != shopID {
+			return nil, errors.New("cursor message does not belong to this shop")
+		}
+		if cursorMessage.CreatedAt == nil {
+			return nil, errors.New("cursor message missing created_at")
+		}
+
+		messages, err := service.repo.GetShopMessagesByCursor(user, shopID, *cursorMessage.CreatedAt, isBefore, req.Limit+1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get cursor-based shop messages: %w", err)
+		}
+
+		hasMore := len(messages) > req.Limit
+		if hasMore {
+			messages = messages[:req.Limit]
+		}
+
+		if messages == nil {
+			messages = []model.ShopMessages{}
+		}
+
+		var nextCursor *string
+		if hasMore && len(messages) > 0 {
+			lastMessageID := messages[len(messages)-1].ID
+			nextCursor = &lastMessageID
+		}
+
+		return &response.PaginatedShopMessagesResponse{
+			Messages:   messages,
+			Pagination: nil,
+			NextCursor: nextCursor,
+		}, nil
+	}
+
+	offset := (req.Page - 1) * req.Limit
+
+	messages, err := service.repo.GetShopMessagesPaginated(user, shopID, offset, req.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
 	}
@@ -118,17 +176,17 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 		return nil, fmt.Errorf("failed to get shop messages count: %w", err)
 	}
 
-	totalPages := int((totalCount + int64(limit) - 1) / int64(limit))
+	totalPages := int((totalCount + int64(req.Limit) - 1) / int64(req.Limit))
 	if totalPages == 0 {
 		totalPages = 1
 	}
 
 	paginationMetadata := response.PaginationMetadata{
-		Page:       page,
-		Limit:      limit,
+		Page:       req.Page,
+		Limit:      req.Limit,
 		TotalPages: totalPages,
-		HasNext:    page < totalPages,
-		HasPrev:    page > 1,
+		HasNext:    req.Page < totalPages,
+		HasPrev:    req.Page > 1,
 	}
 
 	if messages == nil {
@@ -137,7 +195,7 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 
 	paginatedResponse := &response.PaginatedShopMessagesResponse{
 		Messages:   messages,
-		Pagination: paginationMetadata,
+		Pagination: &paginationMetadata,
 	}
 
 	return paginatedResponse, nil

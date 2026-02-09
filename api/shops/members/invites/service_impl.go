@@ -27,6 +27,13 @@ func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	}
 }
 
+func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
+	return &ServiceImpl{
+		repo: service.repo,
+		auth: auth,
+	}
+}
+
 func (service *ServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")

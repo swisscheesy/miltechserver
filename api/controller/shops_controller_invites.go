@@ -29,7 +29,8 @@ func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
 		return
 	}
 
-	code, err := controller.ShopsService.GenerateInviteCode(user, req.ShopID)
+	service := controller.serviceForRequest(c)
+	code, err := service.GenerateInviteCode(user, req.ShopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -59,7 +60,8 @@ func (controller *ShopsController) GetInviteCodesByShop(c *gin.Context) {
 		return
 	}
 
-	codes, err := controller.ShopsService.GetInviteCodesByShop(user, shopID)
+	service := controller.serviceForRequest(c)
+	codes, err := service.GetInviteCodesByShop(user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -89,7 +91,8 @@ func (controller *ShopsController) DeactivateInviteCode(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeactivateInviteCode(user, codeID)
+	service := controller.serviceForRequest(c)
+	err := service.DeactivateInviteCode(user, codeID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -115,7 +118,8 @@ func (controller *ShopsController) DeleteInviteCode(c *gin.Context) {
 		return
 	}
 
-	err := controller.ShopsService.DeleteInviteCode(user, codeID)
+	service := controller.serviceForRequest(c)
+	err := service.DeleteInviteCode(user, codeID)
 	if err != nil {
 		c.Error(err)
 		return
