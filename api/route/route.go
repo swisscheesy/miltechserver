@@ -11,6 +11,7 @@ import (
 	"miltechserver/api/library"
 	"miltechserver/api/material_images"
 	"miltechserver/api/middleware"
+	"miltechserver/api/pol_products"
 	"miltechserver/api/quick_lists"
 	"miltechserver/api/user_general"
 	"miltechserver/api/user_saves"
@@ -39,6 +40,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	item_query.RegisterRoutes(item_query.Dependencies{DB: db}, v1Route)
 	item_lookup.RegisterRoutes(item_lookup.Dependencies{DB: db}, v1Route)
 	quick_lists.RegisterRoutes(quick_lists.Dependencies{DB: db}, v1Route)
+	pol_products.RegisterRoutes(pol_products.Dependencies{DB: db}, v1Route)
 	eic.RegisterRoutes(eic.Dependencies{DB: db}, v1Route)
 
 	// All Authenticated Routes
