@@ -6,6 +6,34 @@
 
 **Refactoring Summary:** The codebase underwent a major Domain-Driven Design refactoring initiative using the Strangler Fig pattern. Monolithic domains were decomposed into focused bounded contexts while maintaining full backward API compatibility.
 
+
+- POL
+- Quick Lists
+- PMCS
+- LIN Lookup
+- UOC Lookup
+- MMDF
+- Substitute LINS
+- CAGE Lookup
+- Reference Library
+
+=== Shops ===
+- Create Shop
+- Create List
+--- Empty Shop Audit List throws error:
+flutter: \^[[38;5;196m┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\^[[0m
+flutter: \^[[38;5;196m│ ⛔ type 'Null' is not a subtype of type 'Map<String, dynamic>'\^[[0m
+flutter: \^[[38;5;196m└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\^[[0m
+flutter: \^[[38;5;196m┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\^[[0m
+flutter: \^[[38;5;196m│ ⛔ getShopNotificationChanges failed: Instance of 'RemoteUserSavesException'\^[[0m
+flutter: \^[[38;5;196m└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\^[[0m
+
+--- Vehicle Mileage Update
+Only the user that updates the mileage sees the updated mileage.  Server still appears to send mileage and hours instead of tracked_mileage and tracked_hours
+---
+-- Created/Completed services are not tracked by auditing.
+-- List Creation/Modification/Deletion isn't tracked by auditing.
+
 ---
 
 ## Table of Contents
@@ -44,14 +72,14 @@
 - [ ] Server running on port 8080
 
 ### Test User Accounts
-- [ ] Create at least 2 test users in Firebase Auth
-- [ ] Obtain valid Firebase ID tokens for both users
-- [ ] Note user IDs for ownership verification tests
+- [x] Create at least 2 test users in Firebase Auth
+- [x] Obtain valid Firebase ID tokens for both users
+- [x] Note user IDs for ownership verification tests
 
 ### Test Data
-- [ ] Have valid NIIN values available for item queries
-- [ ] Have valid LIN values for lookup tests
-- [ ] Have valid CAGE codes for CAGE lookup tests
+- [x] Have valid NIIN values available for item queries
+- [x] Have valid LIN values for lookup tests
+- [x] Have valid CAGE codes for CAGE lookup tests
 
 ---
 

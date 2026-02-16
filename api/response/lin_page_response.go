@@ -5,7 +5,7 @@ import (
 )
 
 type LINPageResponse struct {
-	Lins       []model.LookupLinNiin `json:"lins"`
+	Lins       []model.LookupLinNiinMat `json:"lins"`
 	Count      int                   `json:"count"`
 	Page       int                   `json:"page"`
 	TotalPages int                   `json:"total_pages"`

@@ -8,16 +8,41 @@ import (
 	"miltechserver/api/item_lookup/shared"
 	"miltechserver/api/response"
 	"strings"
+	"sync"
+	"time"
 
 	. "github.com/go-jet/jet/v2/postgres"
 )
 
+const countCacheTTL = 15 * 24 * time.Hour
+
 type RepositoryImpl struct {
-	db *sql.DB
+	db         *sql.DB
+	countMu    sync.RWMutex
+	countCache int
+	countSetAt time.Time
 }
 
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
+}
+
+func (repo *RepositoryImpl) getCachedCount() (int, bool) {
+	repo.countMu.RLock()
+	defer repo.countMu.RUnlock()
+
+	if repo.countCache > 0 && time.Since(repo.countSetAt) < countCacheTTL {
+		return repo.countCache, true
+	}
+	return 0, false
+}
+
+func (repo *RepositoryImpl) setCachedCount(count int) {
+	repo.countMu.Lock()
+	defer repo.countMu.Unlock()
+
+	repo.countCache = count
+	repo.countSetAt = time.Now()
 }
 
 func (repo *RepositoryImpl) SearchByPage(page int) (response.LINPageResponse, error) {
@@ -25,11 +50,12 @@ func (repo *RepositoryImpl) SearchByPage(page int) (response.LINPageResponse, er
 		return response.LINPageResponse{}, shared.ErrInvalidPage
 	}
 
-	var linData []model.LookupLinNiin
+	var linData []model.LookupLinNiinMat
 	offset := shared.CalculateOffset(page, shared.DefaultPageSize)
 	stmt := SELECT(
-		view.LookupLinNiin.AllColumns,
-	).FROM(view.LookupLinNiin).
+		view.LookupLinNiinMat.AllColumns,
+	).FROM(view.LookupLinNiinMat).
+		ORDER_BY(view.LookupLinNiinMat.Lin.ASC(), view.LookupLinNiinMat.Niin.ASC()).
 		LIMIT(shared.DefaultPageSize).
 		OFFSET(offset)
 
@@ -38,43 +64,49 @@ func (repo *RepositoryImpl) SearchByPage(page int) (response.LINPageResponse, er
 		return response.LINPageResponse{}, fmt.Errorf("failed to query LIN data: %w", err)
 	}
 
-	var count struct {
-		Count int
-	}
+	totalCount, ok := repo.getCachedCount()
+	if !ok {
+		var count struct {
+			Count int
+		}
 
-	countStmt := SELECT(
-		COUNT(view.LookupLinNiin.Lin),
-	).FROM(view.LookupLinNiin)
+		countStmt := SELECT(
+			COUNT(view.LookupLinNiinMat.Lin),
+		).FROM(view.LookupLinNiinMat)
 
-	err = countStmt.Query(repo.db, &count)
-	if err != nil {
-		return response.LINPageResponse{}, fmt.Errorf("failed to get total LIN count: %w", err)
+		err = countStmt.Query(repo.db, &count)
+		if err != nil {
+			return response.LINPageResponse{}, fmt.Errorf("failed to get total LIN count: %w", err)
+		}
+
+		totalCount = count.Count
+		repo.setCachedCount(totalCount)
 	}
 
 	if len(linData) == 0 {
 		return response.LINPageResponse{}, shared.ErrNotFound
 	}
 
-	totalPages := shared.CalculateTotalPages(count.Count, shared.DefaultPageSize)
+	totalPages := shared.CalculateTotalPages(totalCount, shared.DefaultPageSize)
 	return response.LINPageResponse{
 		Lins:       linData,
-		Count:      count.Count,
+		Count:      totalCount,
 		Page:       page,
 		TotalPages: totalPages,
 		IsLastPage: page >= totalPages,
 	}, nil
 }
 
-func (repo *RepositoryImpl) SearchByNIIN(niin string) ([]model.LookupLinNiin, error) {
+func (repo *RepositoryImpl) SearchByNIIN(niin string) ([]model.LookupLinNiinMat, error) {
 	if strings.TrimSpace(niin) == "" {
 		return nil, shared.ErrEmptyParam
 	}
 
-	var linData []model.LookupLinNiin
+	var linData []model.LookupLinNiinMat
 	stmt := SELECT(
-		view.LookupLinNiin.AllColumns).
-		FROM(view.LookupLinNiin).
-		WHERE(view.LookupLinNiin.Niin.LIKE(String("%" + niin + "%")))
+		view.LookupLinNiinMat.AllColumns).
+		FROM(view.LookupLinNiinMat).
+		WHERE(view.LookupLinNiinMat.Niin.LIKE(String("%" + niin + "%")))
 
 	err := stmt.Query(repo.db, &linData)
 	if err != nil {
@@ -88,16 +120,16 @@ func (repo *RepositoryImpl) SearchByNIIN(niin string) ([]model.LookupLinNiin, er
 	return linData, nil
 }
 
-func (repo *RepositoryImpl) SearchNIINByLIN(lin string) ([]model.LookupLinNiin, error) {
+func (repo *RepositoryImpl) SearchNIINByLIN(lin string) ([]model.LookupLinNiinMat, error) {
 	if strings.TrimSpace(lin) == "" {
 		return nil, shared.ErrEmptyParam
 	}
 
-	var linData []model.LookupLinNiin
+	var linData []model.LookupLinNiinMat
 	stmt := SELECT(
-		view.LookupLinNiin.AllColumns).
-		FROM(view.LookupLinNiin).
-		WHERE(view.LookupLinNiin.Lin.LIKE(String("%" + lin + "%")))
+		view.LookupLinNiinMat.AllColumns).
+		FROM(view.LookupLinNiinMat).
+		WHERE(view.LookupLinNiinMat.Lin.LIKE(String("%" + lin + "%")))
 
 	err := stmt.Query(repo.db, &linData)
 	if err != nil {

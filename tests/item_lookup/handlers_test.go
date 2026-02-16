@@ -25,11 +25,11 @@ func TestItemLookupLinRoutes(t *testing.T) {
 	zeroPage := doJSONRequest(t, router, http.MethodGet, "/api/v1/lookup/lin?page=0")
 	require.Equal(t, http.StatusBadRequest, zeroPage.Code)
 
-	if !hasRelation(t, testDB, "lookup_lin_niin") {
-		t.Skip("lookup_lin_niin view missing in test DB")
+	if !hasRelation(t, testDB, "lookup_lin_niin_mat") {
+		t.Skip("lookup_lin_niin_mat view missing in test DB")
 	}
 
-	rowCount := countRows(t, testDB, "lookup_lin_niin")
+	rowCount := countRows(t, testDB, "lookup_lin_niin_mat")
 	pageResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/lookup/lin?page=1")
 	if rowCount == 0 {
 		require.Equal(t, http.StatusNotFound, pageResp.Code)
@@ -211,11 +211,11 @@ func TestItemLookupInternalError(t *testing.T) {
 func TestItemLookupPaginationMetadata(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "lookup_lin_niin") {
-		t.Skip("lookup_lin_niin view missing in test DB")
+	if !hasRelation(t, testDB, "lookup_lin_niin_mat") {
+		t.Skip("lookup_lin_niin_mat view missing in test DB")
 	}
 
-	total := countRows(t, testDB, "lookup_lin_niin")
+	total := countRows(t, testDB, "lookup_lin_niin_mat")
 	if total == 0 {
 		t.Skip("no LIN data available for pagination metadata test")
 	}

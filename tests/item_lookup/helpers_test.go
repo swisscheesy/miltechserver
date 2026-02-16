@@ -75,13 +75,13 @@ func countRows(t *testing.T, db *sql.DB, relation string) int {
 func fetchLinSample(t *testing.T, db *sql.DB) (string, string, bool) {
 	t.Helper()
 
-	if !hasRelation(t, db, "lookup_lin_niin") {
+	if !hasRelation(t, db, "lookup_lin_niin_mat") {
 		return "", "", false
 	}
 
 	var lin sql.NullString
 	var niin sql.NullString
-	err := db.QueryRow("SELECT lin, niin FROM lookup_lin_niin LIMIT 1").Scan(&lin, &niin)
+	err := db.QueryRow("SELECT lin, niin FROM lookup_lin_niin_mat LIMIT 1").Scan(&lin, &niin)
 	if err == sql.ErrNoRows {
 		return "", "", false
 	}

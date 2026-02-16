@@ -249,3 +249,33 @@ Based on the current project setup:
 - Cursor pagination is opt-in and backwards compatible; pagination metadata is omitted for cursor responses
 - Blob cleanup completes faster but still tolerates partial failures without surfacing to users
 - Manual index creation remains required; invite code lookup still relies on existing schema
+
+### ADR-012: LIN SearchByPage Performance Optimization (2026-02-15)
+
+**Context:**
+- Mobile users reported slow load times on the LIN lookup page
+- `SearchByPage` executed two separate queries against `lookup_lin_niin` (a view joining `nsn` 7.3M rows / 698 MB with `army_lin_to_niin` 18K rows)
+- The COUNT query forced a full nested-loop join on every page request (114ms), even though the count (~18,204) rarely changes
+- OFFSET-based pagination degraded linearly: page 1 at 0.28ms, last page at 271ms (968x slower)
+- No ORDER BY clause meant pagination results were non-deterministic (correctness bug)
+- Two DB roundtrips doubled mobile network latency impact
+- Full analysis documented in `docs/designs/lin_searchbypage_performance_analysis.md`
+
+**Decision:**
+- **Switch from view to materialized view**: Replace `lookup_lin_niin` (view) with `lookup_lin_niin_mat` (materialized view) across all repository queries. The materialized view pre-computes the join, eliminating the 698 MB `nsn` table from the hot query path. Queries now scan a ~1 MB precomputed dataset instead of joining on every request.
+- **Cache the total count with 15-day TTL**: Add an in-memory count cache to `RepositoryImpl` using `sync.RWMutex`. The COUNT query only executes on first request and after TTL expiry. 15-day TTL chosen because this is reference data that changes only during bulk data imports.
+- **Add deterministic ORDER BY**: Add `ORDER BY lin ASC, niin ASC` to the paginated query to fix non-deterministic pagination. Users will no longer see duplicates or miss rows when navigating pages.
+
+**Alternatives considered:**
+- Window function `COUNT(*) OVER()` to combine into single query (rejected: still computes full count on every request; caching is more effective)
+- Keyset/cursor pagination (deferred: requires API contract change and mobile app update; OFFSET is acceptable for 911 pages with materialized view)
+- Redis for count caching (rejected: single-value cache doesn't justify distributed cache dependency)
+- Background goroutine cleanup for cache (rejected: single-value cache with 15-day TTL doesn't need periodic cleanup)
+
+**Consequences:**
+- COUNT query eliminated on cache hits (114ms -> 0ms); first request still pays ~4ms against materialized view
+- Data queries against materialized view are faster (no join overhead) and deterministic (ORDER BY)
+- Materialized view must be refreshed when underlying data changes (`REFRESH MATERIALIZED VIEW CONCURRENTLY lookup_lin_niin_mat`)
+- API response JSON is unchanged (`LookupLinNiinMat` has identical fields/tags to `LookupLinNiin`); no mobile app changes needed
+- Tests updated to reference `lookup_lin_niin_mat`; existing test behavior preserved
+- OFFSET degradation on later pages remains but is mitigated by querying a small materialized table instead of a 698 MB join
