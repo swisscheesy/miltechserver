@@ -170,3 +170,6 @@ CLAUDE.md
 .gitignore
 __debug_bin594938418
 #426,162
+.agent/
+.claude/
+.gemini/

@@ -218,6 +218,44 @@ Based on the current project setup:
 - Connection pool settings configurable via `DB_MAX_OPEN_CONNS` and `DB_MAX_IDLE_CONNS` env vars
 - Migration `003_create_item_query_indexes.sql` must be run to create NIIN indexes
 
+### ADR-011: Complete Shops HTTP Adapter Migration to Bounded Subdomains (2026-02-18)
+
+**Context:**
+- `shops` domain logic was already separated into bounded subpackages under `api/shops/*`
+- HTTP route adapters still depended on global `api/controller/shops_controller_*.go` handlers
+- `api/shops/facade` exposed a very wide interface coupling unrelated subdomains together
+- Other domains (`item_lookup`, `item_query`, `library`, etc.) had already adopted colocated route/handler/service modules
+
+**Decision:**
+- Move shops HTTP handlers into subdomain-local files:
+  - `api/shops/core/handler.go`
+  - `api/shops/settings/handler.go`
+  - `api/shops/members/handler.go`
+  - `api/shops/members/invites/handler.go`
+  - `api/shops/lists/handler.go`
+  - `api/shops/lists/items/handler.go`
+  - `api/shops/messages/handler.go`
+  - `api/shops/vehicles/handler.go`
+  - `api/shops/vehicles/notifications/handler.go`
+  - `api/shops/vehicles/notifications/items/handler.go`
+  - `api/shops/vehicles/notifications/changes/handler.go`
+- Rewire each `api/shops/*/route.go` to register endpoints directly from local handlers and local service interfaces
+- Remove `api/shops/facade` and `api/controller/shops_controller_*.go`
+- Preserve existing route paths and response schemas
+- Keep direct migration approach (no feature flag path)
+
+**Alternatives considered:**
+- Keep the controller/facade architecture and only reorganize folders
+- Introduce feature flags and dual-route wiring for phased runtime switching
+- Migrate only one shops subdomain and defer full completion
+
+**Consequences:**
+- Shops now matches the bounded-context HTTP adapter pattern used by other refactored domains
+- Reduced coupling by eliminating monolithic controller and facade interfaces
+- Route registration now depends on narrow subdomain service contracts
+- Existing API contract remains unchanged while internal architecture is simplified
+- Full suite verification was required due wide route wiring changes (`go test ./...`)
+
 ### ADR-011: Shops Performance Optimization Refactor (2026-02-01)
 
 **Context:**

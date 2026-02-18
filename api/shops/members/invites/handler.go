@@ -1,4 +1,4 @@
-package controller
+package invites
 
 import (
 	"log/slog"
@@ -9,10 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Invite Code Operations
 
 // GenerateInviteCode creates a new invite code for a shop
-func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
+func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -29,7 +33,7 @@ func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	code, err := service.GenerateInviteCode(user, req.ShopID)
 	if err != nil {
 		c.Error(err)
@@ -44,7 +48,7 @@ func (controller *ShopsController) GenerateInviteCode(c *gin.Context) {
 }
 
 // GetInviteCodesByShop returns all invite codes for a shop
-func (controller *ShopsController) GetInviteCodesByShop(c *gin.Context) {
+func (handler *Handler) GetInviteCodesByShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -60,7 +64,7 @@ func (controller *ShopsController) GetInviteCodesByShop(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	codes, err := service.GetInviteCodesByShop(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -75,7 +79,7 @@ func (controller *ShopsController) GetInviteCodesByShop(c *gin.Context) {
 }
 
 // DeactivateInviteCode deactivates an invite code
-func (controller *ShopsController) DeactivateInviteCode(c *gin.Context) {
+func (handler *Handler) DeactivateInviteCode(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -91,7 +95,7 @@ func (controller *ShopsController) DeactivateInviteCode(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeactivateInviteCode(user, codeID)
 	if err != nil {
 		c.Error(err)
@@ -102,7 +106,7 @@ func (controller *ShopsController) DeactivateInviteCode(c *gin.Context) {
 }
 
 // DeleteInviteCode permanently deletes an invite code
-func (controller *ShopsController) DeleteInviteCode(c *gin.Context) {
+func (handler *Handler) DeleteInviteCode(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -118,7 +122,7 @@ func (controller *ShopsController) DeleteInviteCode(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteInviteCode(user, codeID)
 	if err != nil {
 		c.Error(err)

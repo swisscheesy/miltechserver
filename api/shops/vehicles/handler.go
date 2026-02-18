@@ -1,4 +1,4 @@
-package controller
+package vehicles
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Vehicle Operations
 
 // CreateShopVehicle creates a new vehicle for a shop
-func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
+func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -42,7 +46,7 @@ func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
 		Comment: req.Comment,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdVehicle, err := service.CreateShopVehicle(user, vehicle)
 	if err != nil {
 		c.Error(err)
@@ -57,7 +61,7 @@ func (controller *ShopsController) CreateShopVehicle(c *gin.Context) {
 }
 
 // GetShopVehicles returns all vehicles for a shop
-func (controller *ShopsController) GetShopVehicles(c *gin.Context) {
+func (handler *Handler) GetShopVehicles(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -73,7 +77,7 @@ func (controller *ShopsController) GetShopVehicles(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	vehicles, err := service.GetShopVehicles(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -88,7 +92,7 @@ func (controller *ShopsController) GetShopVehicles(c *gin.Context) {
 }
 
 // GetShopVehicleByID returns a specific vehicle by ID
-func (controller *ShopsController) GetShopVehicleByID(c *gin.Context) {
+func (handler *Handler) GetShopVehicleByID(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -104,7 +108,7 @@ func (controller *ShopsController) GetShopVehicleByID(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	vehicle, err := service.GetShopVehicleByID(user, vehicleID)
 	if err != nil {
 		c.Error(err)
@@ -119,7 +123,7 @@ func (controller *ShopsController) GetShopVehicleByID(c *gin.Context) {
 }
 
 // UpdateShopVehicle updates an existing shop vehicle
-func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
+func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -150,7 +154,7 @@ func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
 		TrackedHours:   req.TrackedHours,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateShopVehicle(user, vehicle)
 	if err != nil {
 		c.Error(err)
@@ -161,7 +165,7 @@ func (controller *ShopsController) UpdateShopVehicle(c *gin.Context) {
 }
 
 // DeleteShopVehicle deletes a shop vehicle
-func (controller *ShopsController) DeleteShopVehicle(c *gin.Context) {
+func (handler *Handler) DeleteShopVehicle(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -177,7 +181,7 @@ func (controller *ShopsController) DeleteShopVehicle(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteShopVehicle(user, vehicleID)
 	if err != nil {
 		c.Error(err)

@@ -1,4 +1,4 @@
-package controller
+package notifications
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Vehicle Notification Operations
 
 // CreateVehicleNotification creates a new notification for a vehicle
-func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
+func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -39,7 +43,7 @@ func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
 		Completed:   false,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdNotification, err := service.CreateVehicleNotification(user, notification)
 	if err != nil {
 		c.Error(err)
@@ -54,7 +58,7 @@ func (controller *ShopsController) CreateVehicleNotification(c *gin.Context) {
 }
 
 // GetVehicleNotifications returns all notifications for a vehicle
-func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
+func (handler *Handler) GetVehicleNotifications(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -70,7 +74,7 @@ func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	notifications, err := service.GetVehicleNotifications(user, vehicleID)
 	if err != nil {
 		c.Error(err)
@@ -85,7 +89,7 @@ func (controller *ShopsController) GetVehicleNotifications(c *gin.Context) {
 }
 
 // GetVehicleNotificationsWithItems returns all notifications for a vehicle with their items
-func (controller *ShopsController) GetVehicleNotificationsWithItems(c *gin.Context) {
+func (handler *Handler) GetVehicleNotificationsWithItems(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -101,7 +105,7 @@ func (controller *ShopsController) GetVehicleNotificationsWithItems(c *gin.Conte
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(user, vehicleID)
 	if err != nil {
 		c.Error(err)
@@ -116,7 +120,7 @@ func (controller *ShopsController) GetVehicleNotificationsWithItems(c *gin.Conte
 }
 
 // GetShopNotifications returns all notifications for a shop
-func (controller *ShopsController) GetShopNotifications(c *gin.Context) {
+func (handler *Handler) GetShopNotifications(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -132,7 +136,7 @@ func (controller *ShopsController) GetShopNotifications(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	notifications, err := service.GetShopNotifications(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -147,7 +151,7 @@ func (controller *ShopsController) GetShopNotifications(c *gin.Context) {
 }
 
 // GetVehicleNotificationByID returns a specific notification by ID
-func (controller *ShopsController) GetVehicleNotificationByID(c *gin.Context) {
+func (handler *Handler) GetVehicleNotificationByID(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -163,7 +167,7 @@ func (controller *ShopsController) GetVehicleNotificationByID(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	notification, err := service.GetVehicleNotificationByID(user, notificationID)
 	if err != nil {
 		c.Error(err)
@@ -178,7 +182,7 @@ func (controller *ShopsController) GetVehicleNotificationByID(c *gin.Context) {
 }
 
 // UpdateVehicleNotification updates an existing vehicle notification
-func (controller *ShopsController) UpdateVehicleNotification(c *gin.Context) {
+func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -203,7 +207,7 @@ func (controller *ShopsController) UpdateVehicleNotification(c *gin.Context) {
 		Completed:   req.Completed,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateVehicleNotification(user, notification)
 	if err != nil {
 		c.Error(err)
@@ -214,7 +218,7 @@ func (controller *ShopsController) UpdateVehicleNotification(c *gin.Context) {
 }
 
 // DeleteVehicleNotification deletes a vehicle notification
-func (controller *ShopsController) DeleteVehicleNotification(c *gin.Context) {
+func (handler *Handler) DeleteVehicleNotification(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -230,7 +234,7 @@ func (controller *ShopsController) DeleteVehicleNotification(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteVehicleNotification(user, notificationID)
 	if err != nil {
 		c.Error(err)

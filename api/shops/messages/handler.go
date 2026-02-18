@@ -1,4 +1,4 @@
-package controller
+package messages
 
 import (
 	"fmt"
@@ -11,10 +11,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Message Operations
 
 // CreateShopMessage creates a new message in the shop chat
-func (controller *ShopsController) CreateShopMessage(c *gin.Context) {
+func (handler *Handler) CreateShopMessage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -36,7 +40,7 @@ func (controller *ShopsController) CreateShopMessage(c *gin.Context) {
 		Message: req.Message,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdMessage, err := service.CreateShopMessage(user, message)
 	if err != nil {
 		c.Error(err)
@@ -51,7 +55,7 @@ func (controller *ShopsController) CreateShopMessage(c *gin.Context) {
 }
 
 // GetShopMessages returns all messages for a shop
-func (controller *ShopsController) GetShopMessages(c *gin.Context) {
+func (handler *Handler) GetShopMessages(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -67,7 +71,7 @@ func (controller *ShopsController) GetShopMessages(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	messages, err := service.GetShopMessages(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -82,7 +86,7 @@ func (controller *ShopsController) GetShopMessages(c *gin.Context) {
 }
 
 // GetShopMessagesPaginated returns paginated messages for a shop
-func (controller *ShopsController) GetShopMessagesPaginated(c *gin.Context) {
+func (handler *Handler) GetShopMessagesPaginated(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -117,7 +121,7 @@ func (controller *ShopsController) GetShopMessagesPaginated(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	paginatedMessages, err := service.GetShopMessagesPaginated(user, shopID, req)
 	if err != nil {
 		c.Error(err)
@@ -132,7 +136,7 @@ func (controller *ShopsController) GetShopMessagesPaginated(c *gin.Context) {
 }
 
 // UpdateShopMessage updates an existing shop message
-func (controller *ShopsController) UpdateShopMessage(c *gin.Context) {
+func (handler *Handler) UpdateShopMessage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -154,7 +158,7 @@ func (controller *ShopsController) UpdateShopMessage(c *gin.Context) {
 		Message: req.Message,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateShopMessage(user, message)
 	if err != nil {
 		c.Error(err)
@@ -165,7 +169,7 @@ func (controller *ShopsController) UpdateShopMessage(c *gin.Context) {
 }
 
 // DeleteShopMessage deletes a shop message
-func (controller *ShopsController) DeleteShopMessage(c *gin.Context) {
+func (handler *Handler) DeleteShopMessage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -181,7 +185,7 @@ func (controller *ShopsController) DeleteShopMessage(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteShopMessage(user, messageID)
 	if err != nil {
 		c.Error(err)
@@ -192,7 +196,7 @@ func (controller *ShopsController) DeleteShopMessage(c *gin.Context) {
 }
 
 // UploadMessageImage handles image upload for shop messages
-func (controller *ShopsController) UploadMessageImage(c *gin.Context) {
+func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -240,7 +244,7 @@ func (controller *ShopsController) UploadMessageImage(c *gin.Context) {
 	contentType := header.Header.Get("Content-Type")
 
 	// Upload to blob storage
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	messageID, fileExtension, imageURL, err := service.UploadMessageImage(user, shopID, imageData, contentType)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
@@ -261,7 +265,7 @@ func (controller *ShopsController) UploadMessageImage(c *gin.Context) {
 }
 
 // DeleteMessageImage handles deletion of orphaned message images
-func (controller *ShopsController) DeleteMessageImage(c *gin.Context) {
+func (handler *Handler) DeleteMessageImage(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -283,7 +287,7 @@ func (controller *ShopsController) DeleteMessageImage(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteMessageImage(user, shopID, messageID)
 	if err != nil {
 		c.Error(err)

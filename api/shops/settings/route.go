@@ -1,14 +1,14 @@
 package settings
 
 import (
-	"miltechserver/api/controller"
-
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, controller *controller.ShopsController) {
-	router.GET("/shops/:shop_id/settings", controller.GetShopSettings)
-	router.PUT("/shops/:shop_id/settings", controller.UpdateShopSettings)
-	router.GET("/shops/:shop_id/settings/admin-only-lists", controller.GetShopAdminOnlyListsSetting)
-	router.PUT("/shops/:shop_id/settings/admin-only-lists", controller.UpdateShopAdminOnlyListsSetting)
+func RegisterRoutes(router *gin.RouterGroup, service Service) {
+	handler := Handler{service: service}
+	router.GET("/shops/:shop_id/settings", handler.GetShopSettings)
+	router.PUT("/shops/:shop_id/settings", handler.UpdateShopSettings)
+	router.GET("/shops/:shop_id/settings/admin-only-lists", handler.GetShopAdminOnlyListsSetting)
+	router.PUT("/shops/:shop_id/settings/admin-only-lists", handler.UpdateShopAdminOnlyListsSetting)
+	router.GET("/shops/:shop_id/is-admin", handler.CheckUserIsShopAdmin)
 }

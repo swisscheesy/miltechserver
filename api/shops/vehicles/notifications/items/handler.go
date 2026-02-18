@@ -1,4 +1,4 @@
-package controller
+package items
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Notification Item Operations
 
 // AddNotificationItem adds an item to a vehicle notification
-func (controller *ShopsController) AddNotificationItem(c *gin.Context) {
+func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -37,7 +41,7 @@ func (controller *ShopsController) AddNotificationItem(c *gin.Context) {
 		Quantity:       req.Quantity,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdItem, err := service.AddNotificationItem(user, item)
 	if err != nil {
 		c.Error(err)
@@ -52,7 +56,7 @@ func (controller *ShopsController) AddNotificationItem(c *gin.Context) {
 }
 
 // GetNotificationItems returns all items for a notification
-func (controller *ShopsController) GetNotificationItems(c *gin.Context) {
+func (handler *Handler) GetNotificationItems(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -68,7 +72,7 @@ func (controller *ShopsController) GetNotificationItems(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	items, err := service.GetNotificationItems(user, notificationID)
 	if err != nil {
 		c.Error(err)
@@ -83,7 +87,7 @@ func (controller *ShopsController) GetNotificationItems(c *gin.Context) {
 }
 
 // GetShopNotificationItems returns all notification items for a shop
-func (controller *ShopsController) GetShopNotificationItems(c *gin.Context) {
+func (handler *Handler) GetShopNotificationItems(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -99,7 +103,7 @@ func (controller *ShopsController) GetShopNotificationItems(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	items, err := service.GetShopNotificationItems(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -114,7 +118,7 @@ func (controller *ShopsController) GetShopNotificationItems(c *gin.Context) {
 }
 
 // AddNotificationItemList adds multiple items to a vehicle notification
-func (controller *ShopsController) AddNotificationItemList(c *gin.Context) {
+func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -142,7 +146,7 @@ func (controller *ShopsController) AddNotificationItemList(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdItems, err := service.AddNotificationItemList(user, items)
 	if err != nil {
 		c.Error(err)
@@ -157,7 +161,7 @@ func (controller *ShopsController) AddNotificationItemList(c *gin.Context) {
 }
 
 // RemoveNotificationItem removes an item from a vehicle notification
-func (controller *ShopsController) RemoveNotificationItem(c *gin.Context) {
+func (handler *Handler) RemoveNotificationItem(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -173,7 +177,7 @@ func (controller *ShopsController) RemoveNotificationItem(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.RemoveNotificationItem(user, itemID)
 	if err != nil {
 		c.Error(err)
@@ -184,7 +188,7 @@ func (controller *ShopsController) RemoveNotificationItem(c *gin.Context) {
 }
 
 // RemoveNotificationItemList removes multiple items from vehicle notifications
-func (controller *ShopsController) RemoveNotificationItemList(c *gin.Context) {
+func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -201,7 +205,7 @@ func (controller *ShopsController) RemoveNotificationItemList(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.RemoveNotificationItemList(user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)

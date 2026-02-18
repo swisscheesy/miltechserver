@@ -2,9 +2,7 @@ package shops
 
 import (
 	"database/sql"
-	"miltechserver/api/controller"
 	"miltechserver/api/shops/core"
-	"miltechserver/api/shops/facade"
 	"miltechserver/api/shops/lists"
 	listitems "miltechserver/api/shops/lists/items"
 	"miltechserver/api/shops/members"
@@ -55,31 +53,15 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	notificationItemsService := notificationitems.NewService(notificationItemsRepository)
 	notificationChangesService := notificationchanges.NewService(notificationChangesRepository)
 
-	shopsService := facade.NewService(
-		coreService,
-		settingsService,
-		membersService,
-		inviteService,
-		listsService,
-		listItemsService,
-		messagesService,
-		vehiclesService,
-		notificationsService,
-		notificationItemsService,
-		notificationChangesService,
-	)
-
-	controller := controller.NewShopsController(shopsService, authorization)
-
-	core.RegisterRoutes(router, controller)
-	settings.RegisterRoutes(router, controller)
-	members.RegisterRoutes(router, controller)
-	invites.RegisterRoutes(router, controller)
-	messages.RegisterRoutes(router, controller)
-	vehicles.RegisterRoutes(router, controller)
-	notifications.RegisterRoutes(router, controller)
-	notificationitems.RegisterRoutes(router, controller)
-	notificationchanges.RegisterRoutes(router, controller)
-	lists.RegisterRoutes(router, controller)
-	listitems.RegisterRoutes(router, controller)
+	core.RegisterRoutes(router, coreService)
+	settings.RegisterRoutes(router, settingsService)
+	members.RegisterRoutes(router, membersService)
+	invites.RegisterRoutes(router, inviteService)
+	messages.RegisterRoutes(router, messagesService)
+	vehicles.RegisterRoutes(router, vehiclesService)
+	notifications.RegisterRoutes(router, notificationsService)
+	notificationitems.RegisterRoutes(router, notificationItemsService)
+	notificationchanges.RegisterRoutes(router, notificationChangesService)
+	lists.RegisterRoutes(router, listsService)
+	listitems.RegisterRoutes(router, listItemsService)
 }

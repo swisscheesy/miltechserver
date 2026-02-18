@@ -1,4 +1,4 @@
-package controller
+package members
 
 import (
 	"log/slog"
@@ -9,10 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Member Operations
 
 // JoinShopViaInviteCode allows a user to join a shop using an invite code
-func (controller *ShopsController) JoinShopViaInviteCode(c *gin.Context) {
+func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -29,7 +33,7 @@ func (controller *ShopsController) JoinShopViaInviteCode(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.JoinShopViaInviteCode(user, req.InviteCode)
 	if err != nil {
 		c.Error(err)
@@ -40,7 +44,7 @@ func (controller *ShopsController) JoinShopViaInviteCode(c *gin.Context) {
 }
 
 // LeaveShop allows a user to leave a shop
-func (controller *ShopsController) LeaveShop(c *gin.Context) {
+func (handler *Handler) LeaveShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -56,7 +60,7 @@ func (controller *ShopsController) LeaveShop(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.LeaveShop(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -67,7 +71,7 @@ func (controller *ShopsController) LeaveShop(c *gin.Context) {
 }
 
 // RemoveMemberFromShop allows admins to remove members from a shop
-func (controller *ShopsController) RemoveMemberFromShop(c *gin.Context) {
+func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -84,7 +88,7 @@ func (controller *ShopsController) RemoveMemberFromShop(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.RemoveMemberFromShop(user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
@@ -95,7 +99,7 @@ func (controller *ShopsController) RemoveMemberFromShop(c *gin.Context) {
 }
 
 // PromoteMemberToAdmin allows admins to promote members to admin role
-func (controller *ShopsController) PromoteMemberToAdmin(c *gin.Context) {
+func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -112,7 +116,7 @@ func (controller *ShopsController) PromoteMemberToAdmin(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.PromoteMemberToAdmin(user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
@@ -123,7 +127,7 @@ func (controller *ShopsController) PromoteMemberToAdmin(c *gin.Context) {
 }
 
 // GetShopMembers returns all members of a shop
-func (controller *ShopsController) GetShopMembers(c *gin.Context) {
+func (handler *Handler) GetShopMembers(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -139,7 +143,7 @@ func (controller *ShopsController) GetShopMembers(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	members, err := service.GetShopMembers(user, shopID)
 	if err != nil {
 		c.Error(err)

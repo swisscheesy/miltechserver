@@ -1,4 +1,4 @@
-package controller
+package settings
 
 import (
 	"log/slog"
@@ -9,10 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop Settings Operations
 
 // GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
-func (controller *ShopsController) GetShopAdminOnlyListsSetting(c *gin.Context) {
+func (handler *Handler) GetShopAdminOnlyListsSetting(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -28,7 +32,7 @@ func (controller *ShopsController) GetShopAdminOnlyListsSetting(c *gin.Context) 
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	adminOnlyLists, err := service.GetShopAdminOnlyListsSetting(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -46,7 +50,7 @@ func (controller *ShopsController) GetShopAdminOnlyListsSetting(c *gin.Context) 
 }
 
 // UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop (admin only)
-func (controller *ShopsController) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
+func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -69,7 +73,7 @@ func (controller *ShopsController) UpdateShopAdminOnlyListsSetting(c *gin.Contex
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateShopAdminOnlyListsSetting(user, shopID, req.AdminOnlyLists)
 	if err != nil {
 		c.Error(err)
@@ -87,7 +91,7 @@ func (controller *ShopsController) UpdateShopAdminOnlyListsSetting(c *gin.Contex
 }
 
 // CheckUserIsShopAdmin checks if the current user is an admin for the specified shop
-func (controller *ShopsController) CheckUserIsShopAdmin(c *gin.Context) {
+func (handler *Handler) CheckUserIsShopAdmin(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -103,7 +107,7 @@ func (controller *ShopsController) CheckUserIsShopAdmin(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	isAdmin, err := service.IsUserShopAdmin(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -124,7 +128,7 @@ func (controller *ShopsController) CheckUserIsShopAdmin(c *gin.Context) {
 // Unified Shop Settings Operations
 
 // GetShopSettings returns all settings for a shop
-func (controller *ShopsController) GetShopSettings(c *gin.Context) {
+func (handler *Handler) GetShopSettings(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -140,7 +144,7 @@ func (controller *ShopsController) GetShopSettings(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	settings, err := service.GetShopSettings(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -155,7 +159,7 @@ func (controller *ShopsController) GetShopSettings(c *gin.Context) {
 }
 
 // UpdateShopSettings updates one or more shop settings (admin only)
-func (controller *ShopsController) UpdateShopSettings(c *gin.Context) {
+func (handler *Handler) UpdateShopSettings(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -185,7 +189,7 @@ func (controller *ShopsController) UpdateShopSettings(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	updatedSettings, err := service.UpdateShopSettings(user, shopID, req)
 	if err != nil {
 		c.Error(err)

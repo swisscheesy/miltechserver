@@ -1,4 +1,4 @@
-package controller
+package lists
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop List Operations
 
 // CreateShopList creates a new list for a shop
-func (controller *ShopsController) CreateShopList(c *gin.Context) {
+func (handler *Handler) CreateShopList(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -35,7 +39,7 @@ func (controller *ShopsController) CreateShopList(c *gin.Context) {
 		Description: req.Description,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdList, err := service.CreateShopList(user, list)
 	if err != nil {
 		c.Error(err)
@@ -50,7 +54,7 @@ func (controller *ShopsController) CreateShopList(c *gin.Context) {
 }
 
 // GetShopLists returns all lists for a shop with creator usernames
-func (controller *ShopsController) GetShopLists(c *gin.Context) {
+func (handler *Handler) GetShopLists(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -66,7 +70,7 @@ func (controller *ShopsController) GetShopLists(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	lists, err := service.GetShopLists(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -81,7 +85,7 @@ func (controller *ShopsController) GetShopLists(c *gin.Context) {
 }
 
 // GetShopListByID returns a specific list by ID
-func (controller *ShopsController) GetShopListByID(c *gin.Context) {
+func (handler *Handler) GetShopListByID(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -97,7 +101,7 @@ func (controller *ShopsController) GetShopListByID(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	list, err := service.GetShopListByID(user, listID)
 	if err != nil {
 		c.Error(err)
@@ -112,7 +116,7 @@ func (controller *ShopsController) GetShopListByID(c *gin.Context) {
 }
 
 // UpdateShopList updates an existing shop list
-func (controller *ShopsController) UpdateShopList(c *gin.Context) {
+func (handler *Handler) UpdateShopList(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -134,7 +138,7 @@ func (controller *ShopsController) UpdateShopList(c *gin.Context) {
 		Description: req.Description,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateShopList(user, list)
 	if err != nil {
 		c.Error(err)
@@ -145,7 +149,7 @@ func (controller *ShopsController) UpdateShopList(c *gin.Context) {
 }
 
 // DeleteShopList deletes a shop list
-func (controller *ShopsController) DeleteShopList(c *gin.Context) {
+func (handler *Handler) DeleteShopList(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -162,7 +166,7 @@ func (controller *ShopsController) DeleteShopList(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteShopList(user, req.ListID)
 	if err != nil {
 		c.Error(err)

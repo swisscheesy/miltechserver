@@ -1,4 +1,4 @@
-package controller
+package core
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service ShopService
+}
+
 // Shop Operations
 
 // CreateShop handles shop creation
-func (controller *ShopsController) CreateShop(c *gin.Context) {
+func (handler *Handler) CreateShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -40,7 +44,7 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 		shop.AdminOnlyLists = *req.AdminOnlyLists
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdShop, err := service.CreateShop(user, shop)
 	if err != nil {
 		c.Error(err)
@@ -55,7 +59,7 @@ func (controller *ShopsController) CreateShop(c *gin.Context) {
 }
 
 // DeleteShop handles shop deletion
-func (controller *ShopsController) DeleteShop(c *gin.Context) {
+func (handler *Handler) DeleteShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -71,7 +75,7 @@ func (controller *ShopsController) DeleteShop(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.DeleteShop(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -82,7 +86,7 @@ func (controller *ShopsController) DeleteShop(c *gin.Context) {
 }
 
 // GetUserShops returns all shops for the authenticated user
-func (controller *ShopsController) GetUserShops(c *gin.Context) {
+func (handler *Handler) GetUserShops(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -92,7 +96,7 @@ func (controller *ShopsController) GetUserShops(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	shops, err := service.GetShopsByUser(user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
@@ -107,7 +111,7 @@ func (controller *ShopsController) GetUserShops(c *gin.Context) {
 }
 
 // GetUserDataWithShops returns user data along with all shops they are a part of
-func (controller *ShopsController) GetUserDataWithShops(c *gin.Context) {
+func (handler *Handler) GetUserDataWithShops(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -117,7 +121,7 @@ func (controller *ShopsController) GetUserDataWithShops(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	userShopsData, err := service.GetUserDataWithShops(user)
 	if err != nil {
 		c.Error(err)
@@ -132,7 +136,7 @@ func (controller *ShopsController) GetUserDataWithShops(c *gin.Context) {
 }
 
 // GetShopByID returns a specific shop by ID
-func (controller *ShopsController) GetShopByID(c *gin.Context) {
+func (handler *Handler) GetShopByID(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -148,7 +152,7 @@ func (controller *ShopsController) GetShopByID(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	shop, err := service.GetShopByID(user, shopID)
 	if err != nil {
 		c.Error(err)
@@ -163,7 +167,7 @@ func (controller *ShopsController) GetShopByID(c *gin.Context) {
 }
 
 // UpdateShop handles shop updates
-func (controller *ShopsController) UpdateShop(c *gin.Context) {
+func (handler *Handler) UpdateShop(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -192,7 +196,7 @@ func (controller *ShopsController) UpdateShop(c *gin.Context) {
 		Details: req.Details,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	updatedShop, err := service.UpdateShop(user, shop)
 	if err != nil {
 		c.Error(err)

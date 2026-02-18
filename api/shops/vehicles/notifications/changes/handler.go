@@ -1,4 +1,4 @@
-package controller
+package changes
 
 import (
 	"fmt"
@@ -9,10 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Notification Change Tracking (Audit Trail) Operations
 
 // GetNotificationChangeHistory returns the complete change history for a notification
-func (controller *ShopsController) GetNotificationChangeHistory(c *gin.Context) {
+func (handler *Handler) GetNotificationChangeHistory(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -28,7 +32,7 @@ func (controller *ShopsController) GetNotificationChangeHistory(c *gin.Context) 
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	changes, err := service.GetNotificationChangeHistory(user, notificationID)
 	if err != nil {
 		c.Error(err)
@@ -43,7 +47,7 @@ func (controller *ShopsController) GetNotificationChangeHistory(c *gin.Context) 
 }
 
 // GetShopNotificationChanges returns recent notification changes for all notifications in a shop
-func (controller *ShopsController) GetShopNotificationChanges(c *gin.Context) {
+func (handler *Handler) GetShopNotificationChanges(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -68,7 +72,7 @@ func (controller *ShopsController) GetShopNotificationChanges(c *gin.Context) {
 		}
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	changes, err := service.GetShopNotificationChanges(user, shopID, limit)
 	if err != nil {
 		c.Error(err)
@@ -83,7 +87,7 @@ func (controller *ShopsController) GetShopNotificationChanges(c *gin.Context) {
 }
 
 // GetVehicleNotificationChanges returns all notification changes for a specific vehicle
-func (controller *ShopsController) GetVehicleNotificationChanges(c *gin.Context) {
+func (handler *Handler) GetVehicleNotificationChanges(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -99,7 +103,7 @@ func (controller *ShopsController) GetVehicleNotificationChanges(c *gin.Context)
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	changes, err := service.GetVehicleNotificationChanges(user, vehicleID)
 	if err != nil {
 		c.Error(err)

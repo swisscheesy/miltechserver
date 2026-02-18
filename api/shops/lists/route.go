@@ -1,15 +1,14 @@
 package lists
 
 import (
-	"miltechserver/api/controller"
-
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, controller *controller.ShopsController) {
-	router.POST("/shops/lists", controller.CreateShopList)
-	router.GET("/shops/:shop_id/lists", controller.GetShopLists)
-	router.GET("/shops/lists/:list_id", controller.GetShopListByID)
-	router.PUT("/shops/lists", controller.UpdateShopList)
-	router.DELETE("/shops/lists", controller.DeleteShopList)
+func RegisterRoutes(router *gin.RouterGroup, service Service) {
+	handler := Handler{service: service}
+	router.POST("/shops/lists", handler.CreateShopList)
+	router.GET("/shops/:shop_id/lists", handler.GetShopLists)
+	router.GET("/shops/lists/:list_id", handler.GetShopListByID)
+	router.PUT("/shops/lists", handler.UpdateShopList)
+	router.DELETE("/shops/lists", handler.DeleteShopList)
 }

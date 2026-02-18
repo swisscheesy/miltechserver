@@ -1,4 +1,4 @@
-package controller
+package items
 
 import (
 	"log/slog"
@@ -10,10 +10,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type Handler struct {
+	service Service
+}
+
 // Shop List Item Operations
 
 // AddListItem adds an item to a shop list
-func (controller *ShopsController) AddListItem(c *gin.Context) {
+func (handler *Handler) AddListItem(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -39,7 +43,7 @@ func (controller *ShopsController) AddListItem(c *gin.Context) {
 		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdItem, err := service.AddListItem(user, item)
 	if err != nil {
 		c.Error(err)
@@ -54,7 +58,7 @@ func (controller *ShopsController) AddListItem(c *gin.Context) {
 }
 
 // GetListItems returns all items for a list with added by usernames
-func (controller *ShopsController) GetListItems(c *gin.Context) {
+func (handler *Handler) GetListItems(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -70,7 +74,7 @@ func (controller *ShopsController) GetListItems(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	items, err := service.GetListItems(user, listID)
 	if err != nil {
 		c.Error(err)
@@ -85,7 +89,7 @@ func (controller *ShopsController) GetListItems(c *gin.Context) {
 }
 
 // UpdateListItem updates an existing list item
-func (controller *ShopsController) UpdateListItem(c *gin.Context) {
+func (handler *Handler) UpdateListItem(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -111,7 +115,7 @@ func (controller *ShopsController) UpdateListItem(c *gin.Context) {
 		UnitOfMeasure: req.UnitOfMeasure,
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.UpdateListItem(user, item)
 	if err != nil {
 		c.Error(err)
@@ -122,7 +126,7 @@ func (controller *ShopsController) UpdateListItem(c *gin.Context) {
 }
 
 // RemoveListItem removes an item from a list
-func (controller *ShopsController) RemoveListItem(c *gin.Context) {
+func (handler *Handler) RemoveListItem(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -139,7 +143,7 @@ func (controller *ShopsController) RemoveListItem(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.RemoveListItem(user, req.ItemID)
 	if err != nil {
 		c.Error(err)
@@ -150,7 +154,7 @@ func (controller *ShopsController) RemoveListItem(c *gin.Context) {
 }
 
 // AddListItemBatch adds multiple items to a list
-func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
+func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -180,7 +184,7 @@ func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	createdItems, err := service.AddListItemBatch(user, items)
 	if err != nil {
 		c.Error(err)
@@ -195,7 +199,7 @@ func (controller *ShopsController) AddListItemBatch(c *gin.Context) {
 }
 
 // RemoveListItemBatch removes multiple items from lists
-func (controller *ShopsController) RemoveListItemBatch(c *gin.Context) {
+func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
 
@@ -212,7 +216,7 @@ func (controller *ShopsController) RemoveListItemBatch(c *gin.Context) {
 		return
 	}
 
-	service := controller.serviceForRequest(c)
+	service := handler.service
 	err := service.RemoveListItemBatch(user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
