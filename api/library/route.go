@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"miltechserver/api/analytics"
+	"miltechserver/api/library/ps_mag"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
@@ -30,6 +31,7 @@ type Handler struct {
 func RegisterRoutes(deps Dependencies, publicGroup, authGroup *gin.RouterGroup) {
 	svc := NewService(deps.BlobClient, deps.BlobCredential, deps.Env, deps.Analytics)
 	registerHandlers(publicGroup, authGroup, svc)
+	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient, deps.BlobCredential)
 }
 
 func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
