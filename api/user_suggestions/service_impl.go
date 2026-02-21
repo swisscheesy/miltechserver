@@ -50,7 +50,48 @@ func (s *ServiceImpl) CreateSuggestion(user *bootstrap.User, title, description 
 }
 
 func (s *ServiceImpl) GetAllSuggestions(currentUser *bootstrap.User) ([]SuggestionResponse, error) {
-	return nil, nil
+	voterID := ""
+	if currentUser != nil {
+		voterID = currentUser.UserID
+	}
+
+	suggestions, err := s.repo.GetAllWithScores(voterID)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]SuggestionResponse, 0, len(suggestions))
+	for _, sug := range suggestions {
+		username := "Unknown"
+		if sug.Username != nil {
+			username = *sug.Username
+		}
+
+		resp := SuggestionResponse{
+			ID:          sug.ID.String(),
+			UserID:      sug.UserID,
+			Username:    username,
+			Title:       sug.Title,
+			Description: sug.Description,
+			Status:      sug.Status,
+			Score:       sug.Score,
+			CreatedAt:   sug.CreatedAt.Format(time.RFC3339),
+		}
+
+		if sug.UpdatedAt != nil {
+			formatted := sug.UpdatedAt.Format(time.RFC3339)
+			resp.UpdatedAt = &formatted
+		}
+
+		// Only include MyVote when user is authenticated
+		if currentUser != nil {
+			resp.MyVote = sug.MyVote
+		}
+
+		results = append(results, resp)
+	}
+
+	return results, nil
 }
 
 func (s *ServiceImpl) UpdateSuggestion(user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
@@ -118,11 +159,41 @@ func (s *ServiceImpl) DeleteSuggestion(user *bootstrap.User, suggestionID string
 }
 
 func (s *ServiceImpl) Vote(user *bootstrap.User, suggestionID string, direction int16) error {
-	return nil
+	if user == nil {
+		return ErrUnauthorized
+	}
+
+	id, err := parseID(suggestionID)
+	if err != nil {
+		return err
+	}
+
+	if direction != 1 && direction != -1 {
+		return ErrInvalidDirection
+	}
+
+	existing, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrSuggestionNotFound
+	}
+
+	return s.repo.UpsertVote(id, user.UserID, direction)
 }
 
 func (s *ServiceImpl) RemoveVote(user *bootstrap.User, suggestionID string) error {
-	return nil
+	if user == nil {
+		return ErrUnauthorized
+	}
+
+	id, err := parseID(suggestionID)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.DeleteVote(id, user.UserID)
 }
 
 func mapSuggestionToResponse(s *model.UserSuggestions, username string, score int, myVote *int16) SuggestionResponse {

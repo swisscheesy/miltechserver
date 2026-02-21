@@ -270,3 +270,165 @@ func TestCreateSuggestion_Success(t *testing.T) {
 	require.Equal(t, "testuser", result.Username)
 	require.Equal(t, "user-1", result.UserID)
 }
+
+// --- Vote tests ---
+
+func TestVote_Unauthorized(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+
+	err := svc.Vote(nil, uuid.New().String(), 1)
+	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+func TestVote_InvalidID(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, "not-a-uuid", 1)
+	require.ErrorIs(t, err, ErrInvalidID)
+}
+
+func TestVote_InvalidDirection(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), 0)
+	require.ErrorIs(t, err, ErrInvalidDirection)
+
+	err = svc.Vote(user, suggID.String(), 2)
+	require.ErrorIs(t, err, ErrInvalidDirection)
+}
+
+func TestVote_SuggestionNotFound(t *testing.T) {
+	repo := &mockRepository{suggestion: nil}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, uuid.New().String(), 1)
+	require.ErrorIs(t, err, ErrSuggestionNotFound)
+}
+
+func TestVote_Upvote(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), 1)
+	require.NoError(t, err)
+	require.Equal(t, suggID, repo.capturedSuggestionID)
+	require.Equal(t, int16(1), repo.capturedDirection)
+}
+
+func TestVote_Downvote(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), -1)
+	require.NoError(t, err)
+	require.Equal(t, int16(-1), repo.capturedDirection)
+}
+
+// --- RemoveVote tests ---
+
+func TestRemoveVote_Unauthorized(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+
+	err := svc.RemoveVote(nil, uuid.New().String())
+	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+func TestRemoveVote_Success(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.RemoveVote(user, suggID.String())
+	require.NoError(t, err)
+	require.Equal(t, suggID, repo.capturedSuggestionID)
+}
+
+// --- GetAllSuggestions tests ---
+
+func strPtr(s string) *string {
+	return &s
+}
+
+func TestGetAllSuggestions_Unauthenticated(t *testing.T) {
+	repo := &mockRepository{
+		allWithScores: []SuggestionWithScore{
+			{
+				ID:          uuid.New(),
+				UserID:      "user-1",
+				Title:       "Feature A",
+				Description: "Description A",
+				Status:      "Submitted",
+				CreatedAt:   time.Now(),
+				Username:    strPtr("testuser"),
+				Score:       5,
+				MyVote:      nil,
+			},
+		},
+	}
+	svc := NewService(repo)
+
+	results, err := svc.GetAllSuggestions(nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, "Feature A", results[0].Title)
+	require.Equal(t, 5, results[0].Score)
+	require.Nil(t, results[0].MyVote)
+	require.Equal(t, "", repo.capturedVoterID)
+}
+
+func TestGetAllSuggestions_Authenticated(t *testing.T) {
+	vote := int16(1)
+	repo := &mockRepository{
+		allWithScores: []SuggestionWithScore{
+			{
+				ID:          uuid.New(),
+				UserID:      "user-1",
+				Title:       "Feature A",
+				Description: "Description A",
+				Status:      "Submitted",
+				CreatedAt:   time.Now(),
+				Username:    strPtr("testuser"),
+				Score:       3,
+				MyVote:      &vote,
+			},
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
+
+	results, err := svc.GetAllSuggestions(user)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, int16(1), *results[0].MyVote)
+	require.Equal(t, "user-1", repo.capturedVoterID)
+}
+
+func TestGetAllSuggestions_Empty(t *testing.T) {
+	repo := &mockRepository{
+		allWithScores: []SuggestionWithScore{},
+	}
+	svc := NewService(repo)
+
+	results, err := svc.GetAllSuggestions(nil)
+	require.NoError(t, err)
+	require.Empty(t, results)
+}
