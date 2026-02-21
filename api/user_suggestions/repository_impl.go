@@ -35,7 +35,7 @@ func (r *RepositoryImpl) GetAllWithScores(voterID string) ([]SuggestionWithScore
 		LEFT JOIN user_suggestion_votes uv ON s.id = uv.suggestion_id AND uv.voter_id = $1
 		GROUP BY s.id, s.user_id, s.title, s.description, s.status,
 		         s.created_at, s.updated_at, u.username, uv.direction
-		ORDER BY s.created_at DESC
+		ORDER BY score DESC, s.created_at DESC
 	`
 
 	rows, err := r.db.Query(rawSQL, voterID)
