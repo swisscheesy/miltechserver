@@ -10,9 +10,9 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 
 	"miltechserver/api/analytics"
+	"miltechserver/api/library/shared"
 	"miltechserver/bootstrap"
 )
 
@@ -23,20 +23,17 @@ const (
 
 type ServiceImpl struct {
 	blobClient *azblob.Client
-	credential *azblob.SharedKeyCredential // Needed for SAS token generation
 	env        *bootstrap.Env
 	analytics  analytics.Service
 }
 
 func NewService(
 	blobClient *azblob.Client,
-	credential *azblob.SharedKeyCredential,
 	env *bootstrap.Env,
 	analyticsService analytics.Service,
 ) Service {
 	return &ServiceImpl{
 		blobClient: blobClient,
-		credential: credential,
 		env:        env,
 		analytics:  analyticsService,
 	}
@@ -189,12 +186,14 @@ func formatDisplayName(name string) string {
 }
 
 // GenerateDownloadURL creates a time-limited SAS URL for secure blob downloads.
-func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error) {
-	ctx := context.Background()
-
+// ctx should be the request context so Azure calls are cancelled if the client disconnects.
+func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error) {
 	if strings.TrimSpace(blobPath) == "" {
 		return nil, ErrEmptyBlobPath
 	}
+
+	// Sanitise the path to prevent directory traversal (e.g. "pmcs/../secret.pdf").
+	blobPath = path.Clean(blobPath)
 
 	if !strings.HasPrefix(blobPath, "pmcs/") && !strings.HasPrefix(blobPath, "bii/") {
 		return nil, ErrInvalidBlobPath
@@ -208,27 +207,16 @@ func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse
 		"container", LibraryContainerName,
 		"blobPath", blobPath)
 
+	// Verify the blob exists before signing a token for it.
 	blobClient := s.blobClient.ServiceClient().NewContainerClient(LibraryContainerName).NewBlobClient(blobPath)
-	_, err := blobClient.GetProperties(ctx, nil)
-	if err != nil {
+	if _, err := blobClient.GetProperties(ctx, nil); err != nil {
 		slog.Error("Blob not found or not accessible",
 			"error", err,
 			"blobPath", blobPath)
 		return nil, fmt.Errorf("%w: %v", ErrDocumentNotFound, err)
 	}
 
-	expiryTime := time.Now().UTC().Add(1 * time.Hour)
-	permissions := sas.BlobPermissions{Read: true}
-
-	sasQueryParams, err := sas.BlobSignatureValues{
-		Protocol:      sas.ProtocolHTTPS,
-		StartTime:     time.Now().UTC().Add(-5 * time.Minute),
-		ExpiryTime:    expiryTime,
-		Permissions:   permissions.String(),
-		ContainerName: LibraryContainerName,
-		BlobName:      blobPath,
-	}.SignWithSharedKey(s.credential)
-
+	sasResult, err := shared.GenerateBlobSASURL(ctx, s.blobClient, LibraryContainerName, blobPath)
 	if err != nil {
 		slog.Error("Failed to generate SAS token",
 			"error", err,
@@ -236,11 +224,9 @@ func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse
 		return nil, fmt.Errorf("%w: %v", ErrSASGenFailed, err)
 	}
 
-	downloadURL := fmt.Sprintf("%s?%s", blobClient.URL(), sasQueryParams.Encode())
-
 	slog.Info("Successfully generated download URL",
 		"blobPath", blobPath,
-		"expiresAt", expiryTime.Format(time.RFC3339))
+		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
 	if analyticsErr := s.trackPMCSDownload(blobPath); analyticsErr != nil {
 		slog.Warn("Failed to increment analytics for PMCS download", "blobPath", blobPath, "error", analyticsErr)
@@ -248,8 +234,8 @@ func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse
 
 	return &DownloadURLResponse{
 		BlobPath:    blobPath,
-		DownloadURL: downloadURL,
-		ExpiresAt:   expiryTime.Format(time.RFC3339),
+		DownloadURL: sasResult.URL,
+		ExpiresAt:   sasResult.ExpiresAt.Format(time.RFC3339),
 	}, nil
 }
 

@@ -1,5 +1,7 @@
 package ps_mag
 
+import "context"
+
 // Service provides methods for accessing PS Magazine issues from Azure Blob Storage.
 type Service interface {
 	// ListIssues returns a paginated, optionally filtered list of PS Magazine issues.
@@ -8,6 +10,7 @@ type Service interface {
 	ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error)
 
 	// GenerateDownloadURL creates a 1-hour SAS URL for a ps-mag blob.
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
 	// blobPath must start with "ps-mag/" and end with ".pdf".
-	GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error)
+	GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error)
 }

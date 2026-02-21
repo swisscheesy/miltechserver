@@ -1,5 +1,9 @@
 package library
 
+import (
+	"context"
+)
+
 // Service provides methods for accessing PMCS and BII library documents.
 type Service interface {
 	// GetPMCSVehicles returns a list of all vehicle folders in the PMCS library.
@@ -11,10 +15,11 @@ type Service interface {
 	GetPMCSDocuments(vehicleName string) (*DocumentsListResponse, error)
 
 	// GenerateDownloadURL creates a time-limited SAS URL for downloading a blob.
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
 	// blobPath: Full blob path (e.g., "pmcs/TRACK/m1-abrams.pdf")
 	// Returns SAS URL valid for 1 hour with read-only permission.
 	// Returns error if blob doesn't exist or SAS generation fails.
-	GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error)
+	GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error)
 
 	// Future endpoints:
 	// GetBIICategories() (*PMCSVehiclesResponse, error)

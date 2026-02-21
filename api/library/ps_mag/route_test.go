@@ -1,6 +1,7 @@
 package ps_mag
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,18 +11,20 @@ import (
 )
 
 type serviceStub struct {
-	listResp     *PSMagIssuesResponse
-	listErr      error
-	downloadResp *DownloadURLResponse
-	downloadErr  error
+	listResp    *PSMagIssuesResponse
+	listErr     error
+	downloadErr error
 }
 
 func (s *serviceStub) ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
 	return s.listResp, s.listErr
 }
 
-func (s *serviceStub) GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error) {
-	return s.downloadResp, s.downloadErr
+func (s *serviceStub) GenerateDownloadURL(_ context.Context, blobPath string) (*DownloadURLResponse, error) {
+	if s.downloadErr != nil {
+		return nil, s.downloadErr
+	}
+	return &DownloadURLResponse{BlobPath: blobPath, DownloadURL: "https://example.com/sas", ExpiresAt: "2099-01-01T00:00:00Z"}, nil
 }
 
 func TestListIssuesSuccess(t *testing.T) {
@@ -130,13 +133,7 @@ func TestListIssuesInvalidIssueParam(t *testing.T) {
 func TestDownloadSuccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	stub := &serviceStub{
-		downloadResp: &DownloadURLResponse{
-			BlobPath:    "ps-mag/PS_Magazine_Issue_495_February_1994.pdf",
-			DownloadURL: "https://example.com/sas",
-			ExpiresAt:   "2026-02-20T12:00:00Z",
-		},
-	}
+	stub := &serviceStub{} // no downloadErr = stub returns success automatically
 	registerHandlers(router.Group("/api/v1"), stub)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/download?blob_path=ps-mag/PS_Magazine_Issue_495_February_1994.pdf", nil)

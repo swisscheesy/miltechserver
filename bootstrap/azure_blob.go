@@ -4,24 +4,28 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
 
-func NewAzureBlobClient(env *Env) (*azblob.Client, *azblob.SharedKeyCredential) {
-	slog.Info("Creating Azure Blob Client")
+// NewAzureBlobClient creates an Azure Blob Storage client authenticated via
+// DefaultAzureCredential (Managed Identity in production, Azure CLI locally).
+// The server must have the Storage Blob Delegator role to generate User Delegation SAS tokens.
+func NewAzureBlobClient(env *Env) *azblob.Client {
+	slog.Info("Creating Azure Blob client using DefaultAzureCredential")
 
-	credential, err := azblob.NewSharedKeyCredential(env.BlobAccountName, env.BlobAccountKey)
+	credential, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		slog.Error("Error creating Blob credential", "error", err)
+		slog.Error("Failed to create Azure credential", "error", err)
 		panic(err)
 	}
 
-	accountUrl := fmt.Sprintf("https://%s.blob.core.windows.net", env.BlobAccountName)
-	blobClient, err := azblob.NewClientWithSharedKeyCredential(accountUrl, credential, nil)
+	accountURL := fmt.Sprintf("https://%s.blob.core.windows.net", env.BlobAccountName)
+	blobClient, err := azblob.NewClient(accountURL, credential, nil)
 	if err != nil {
-		slog.Error("Error creating Blob Client", "error", err)
+		slog.Error("Failed to create Azure Blob client", "error", err)
 		panic(err)
 	}
 
-	return blobClient, credential
+	return blobClient
 }

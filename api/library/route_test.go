@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +28,7 @@ func (s *serviceStub) GetPMCSDocuments(vehicleName string) (*DocumentsListRespon
 	return s.docsResp, s.docsErr
 }
 
-func (s *serviceStub) GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error) {
+func (s *serviceStub) GenerateDownloadURL(_ context.Context, blobPath string) (*DownloadURLResponse, error) {
 	return s.downloadResp, s.downloadErr
 }
 

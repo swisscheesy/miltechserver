@@ -26,7 +26,6 @@ type Env struct {
 	DBDate           string
 	DBSchema         string
 	BlobAccountName  string
-	BlobAccountKey   string
 	ServerAddress    string
 	SslMode          string
 	ContextTimeout   int
@@ -64,7 +63,6 @@ func NewEnv() *Env {
 	env.DBMaxIdleConns = getEnvAsInt("DB_MAX_IDLE_CONNS", 25)
 	// Blob Storage
 	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
-	env.BlobAccountKey = os.Getenv("BLOB_ACCOUNT_KEY")
 
 	log.Printf("DB_HOST: %s", env.Host)
 	log.Printf("DB_PORT: %s", env.Port)

@@ -10,6 +10,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 
+	"miltechserver/api/middleware"
 	"miltechserver/api/response"
 )
 
@@ -20,8 +21,8 @@ type Handler struct {
 
 // RegisterHandlers wires ps_mag routes into the public router group.
 // Called from api/library/route.go.
-func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client, credential *azblob.SharedKeyCredential) {
-	svc := NewService(blobClient, credential)
+func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client) {
+	svc := NewService(blobClient)
 	registerHandlers(publicGroup, svc)
 }
 
@@ -29,7 +30,8 @@ func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client, c
 func registerHandlers(publicGroup *gin.RouterGroup, svc Service) {
 	handler := Handler{service: svc}
 	publicGroup.GET("/library/ps-mag/issues", handler.listIssues)
-	publicGroup.GET("/library/ps-mag/download", handler.generateDownloadURL)
+	// Rate-limited: each IP is allowed a burst of 10 requests, sustained at 2 req/s.
+	publicGroup.GET("/library/ps-mag/download", middleware.RateLimiter(), handler.generateDownloadURL)
 }
 
 // listIssues returns a paginated list of PS Magazine issues.
@@ -107,7 +109,7 @@ func (h *Handler) generateDownloadURL(c *gin.Context) {
 
 	slog.Info("GeneratePSMagDownloadURL endpoint called", "blobPath", blobPath)
 
-	result, err := h.service.GenerateDownloadURL(blobPath)
+	result, err := h.service.GenerateDownloadURL(c.Request.Context(), blobPath)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrIssueNotFound):

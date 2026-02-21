@@ -12,16 +12,16 @@ import (
 
 	"miltechserver/api/analytics"
 	"miltechserver/api/library/ps_mag"
+	"miltechserver/api/middleware"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
 
 type Dependencies struct {
-	DB             *sql.DB
-	BlobClient     *azblob.Client
-	BlobCredential *azblob.SharedKeyCredential
-	Env            *bootstrap.Env
-	Analytics      analytics.Service
+	DB         *sql.DB
+	BlobClient *azblob.Client
+	Env        *bootstrap.Env
+	Analytics  analytics.Service
 }
 
 type Handler struct {
@@ -29,9 +29,9 @@ type Handler struct {
 }
 
 func RegisterRoutes(deps Dependencies, publicGroup, authGroup *gin.RouterGroup) {
-	svc := NewService(deps.BlobClient, deps.BlobCredential, deps.Env, deps.Analytics)
+	svc := NewService(deps.BlobClient, deps.Env, deps.Analytics)
 	registerHandlers(publicGroup, authGroup, svc)
-	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient, deps.BlobCredential)
+	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient)
 }
 
 func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
@@ -39,7 +39,8 @@ func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
 
 	publicGroup.GET("/library/pmcs/vehicles", handler.getPMCSVehicles)
 	publicGroup.GET("/library/pmcs/:vehicle/documents", handler.getPMCSDocuments)
-	publicGroup.GET("/library/download", handler.generateDownloadURL)
+	// Rate-limited: each IP is allowed a burst of 10 requests, sustained at 2 req/s.
+	publicGroup.GET("/library/download", middleware.RateLimiter(), handler.generateDownloadURL)
 
 	// Future public routes:
 	// publicGroup.GET("/library/bii/categories", handler.getBIICategories)
@@ -121,7 +122,7 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 		return
 	}
 
-	downloadURLResp, err := handler.service.GenerateDownloadURL(blobPath)
+	downloadURLResp, err := handler.service.GenerateDownloadURL(c.Request.Context(), blobPath)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrDocumentNotFound):

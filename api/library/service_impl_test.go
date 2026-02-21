@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,20 +31,24 @@ func TestExtractPMCSEquipmentName(t *testing.T) {
 }
 
 func TestGenerateDownloadURLValidation(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil)
+	svc := NewService(nil, nil, nil)
 
-	_, err := svc.GenerateDownloadURL("")
+	_, err := svc.GenerateDownloadURL(context.Background(), "")
 	require.ErrorIs(t, err, ErrEmptyBlobPath)
 
-	_, err = svc.GenerateDownloadURL("invalid/path.pdf")
+	_, err = svc.GenerateDownloadURL(context.Background(), "invalid/path.pdf")
 	require.ErrorIs(t, err, ErrInvalidBlobPath)
 
-	_, err = svc.GenerateDownloadURL("pmcs/vehicle/file.txt")
+	_, err = svc.GenerateDownloadURL(context.Background(), "pmcs/vehicle/file.txt")
 	require.ErrorIs(t, err, ErrInvalidFileType)
+
+	// path traversal: "pmcs/../secret.pdf" cleans to "secret.pdf" which fails prefix check
+	_, err = svc.GenerateDownloadURL(context.Background(), "pmcs/../secret.pdf")
+	require.ErrorIs(t, err, ErrInvalidBlobPath)
 }
 
 func TestGetPMCSDocumentsValidation(t *testing.T) {
-	svc := NewService(nil, nil, nil, nil)
+	svc := NewService(nil, nil, nil)
 
 	_, err := svc.GetPMCSDocuments("")
 	require.ErrorIs(t, err, ErrEmptyVehicleName)

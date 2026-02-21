@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -12,7 +13,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+
+	"miltechserver/api/library/shared"
 )
 
 const (
@@ -25,13 +27,11 @@ var issueRegex = regexp.MustCompile(`^PS_Magazine_Issue_(\d+)_([A-Za-z]+)_(\d{4}
 
 type ServiceImpl struct {
 	blobClient *azblob.Client
-	credential *azblob.SharedKeyCredential
 }
 
-func NewService(blobClient *azblob.Client, credential *azblob.SharedKeyCredential) Service {
+func NewService(blobClient *azblob.Client) Service {
 	return &ServiceImpl{
 		blobClient: blobClient,
-		credential: credential,
 	}
 }
 
@@ -196,10 +196,15 @@ func (s *ServiceImpl) ListIssues(page int, order string, year *int, issueNumber 
 }
 
 // GenerateDownloadURL creates a 1-hour SAS URL for a ps-mag blob.
-func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse, error) {
+// ctx should be the request context so Azure calls are cancelled on client disconnect.
+func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error) {
 	if strings.TrimSpace(blobPath) == "" {
 		return nil, ErrEmptyBlobPath
 	}
+
+	// Sanitise path to prevent directory traversal (e.g. "ps-mag/../secret.pdf").
+	blobPath = path.Clean(blobPath)
+
 	if !strings.HasPrefix(blobPath, PSMagPrefix) {
 		return nil, ErrInvalidBlobPath
 	}
@@ -207,39 +212,25 @@ func (s *ServiceImpl) GenerateDownloadURL(blobPath string) (*DownloadURLResponse
 		return nil, ErrInvalidFileType
 	}
 
-	ctx := context.Background()
 	blobClient := s.blobClient.ServiceClient().NewContainerClient(PSMagContainerName).NewBlobClient(blobPath)
-	_, err := blobClient.GetProperties(ctx, nil)
-	if err != nil {
+	if _, err := blobClient.GetProperties(ctx, nil); err != nil {
 		slog.Error("PS Magazine blob not found", "blobPath", blobPath, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrIssueNotFound, err)
 	}
 
-	expiryTime := time.Now().UTC().Add(1 * time.Hour)
-	permissions := sas.BlobPermissions{Read: true}
-
-	sasQueryParams, err := sas.BlobSignatureValues{
-		Protocol:      sas.ProtocolHTTPS,
-		StartTime:     time.Now().UTC().Add(-5 * time.Minute),
-		ExpiryTime:    expiryTime,
-		Permissions:   permissions.String(),
-		ContainerName: PSMagContainerName,
-		BlobName:      blobPath,
-	}.SignWithSharedKey(s.credential)
+	sasResult, err := shared.GenerateBlobSASURL(ctx, s.blobClient, PSMagContainerName, blobPath)
 	if err != nil {
 		slog.Error("Failed to generate SAS token for PS Magazine", "blobPath", blobPath, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrSASGenFailed, err)
 	}
 
-	downloadURL := fmt.Sprintf("%s?%s", blobClient.URL(), sasQueryParams.Encode())
-
 	slog.Info("Generated PS Magazine download URL",
 		"blobPath", blobPath,
-		"expiresAt", expiryTime.Format(time.RFC3339))
+		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
 	return &DownloadURLResponse{
 		BlobPath:    blobPath,
-		DownloadURL: downloadURL,
-		ExpiresAt:   expiryTime.Format(time.RFC3339),
+		DownloadURL: sasResult.URL,
+		ExpiresAt:   sasResult.ExpiresAt.Format(time.RFC3339),
 	}, nil
 }

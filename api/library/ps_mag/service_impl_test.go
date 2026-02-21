@@ -1,6 +1,7 @@
 package ps_mag
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -162,23 +163,27 @@ func TestPaginateIssuesEmpty(t *testing.T) {
 }
 
 func TestGenerateDownloadURLValidation(t *testing.T) {
-	svc := NewService(nil, nil)
+	svc := NewService(nil)
 
-	_, err := svc.GenerateDownloadURL("")
+	_, err := svc.GenerateDownloadURL(context.Background(), "")
 	require.ErrorIs(t, err, ErrEmptyBlobPath)
 
-	_, err = svc.GenerateDownloadURL("   ")
+	_, err = svc.GenerateDownloadURL(context.Background(), "   ")
 	require.ErrorIs(t, err, ErrEmptyBlobPath)
 
-	_, err = svc.GenerateDownloadURL("pmcs/some-file.pdf")
+	_, err = svc.GenerateDownloadURL(context.Background(), "pmcs/some-file.pdf")
 	require.ErrorIs(t, err, ErrInvalidBlobPath)
 
-	_, err = svc.GenerateDownloadURL("ps-mag/some-file.txt")
+	_, err = svc.GenerateDownloadURL(context.Background(), "ps-mag/some-file.txt")
 	require.ErrorIs(t, err, ErrInvalidFileType)
+
+	// path traversal: "ps-mag/../secret.pdf" cleans to "secret.pdf" which fails prefix check
+	_, err = svc.GenerateDownloadURL(context.Background(), "ps-mag/../secret.pdf")
+	require.ErrorIs(t, err, ErrInvalidBlobPath)
 }
 
 func TestListIssuesValidation(t *testing.T) {
-	svc := NewService(nil, nil)
+	svc := NewService(nil)
 
 	_, err := svc.ListIssues(0, "asc", nil, nil)
 	require.ErrorIs(t, err, ErrInvalidPage)
