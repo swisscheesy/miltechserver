@@ -69,6 +69,153 @@ func (m *mockRepository) DeleteVote(suggestionID uuid.UUID, voterID string) erro
 	return m.deleteVoteErr
 }
 
+// --- UpdateSuggestion tests ---
+
+func TestUpdateSuggestion_Unauthorized(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+
+	_, err := svc.UpdateSuggestion(nil, uuid.New().String(), "Title", "Desc")
+	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+func TestUpdateSuggestion_InvalidID(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	_, err := svc.UpdateSuggestion(user, "not-a-uuid", "Title", "Desc")
+	require.ErrorIs(t, err, ErrInvalidID)
+}
+
+func TestUpdateSuggestion_NotFound(t *testing.T) {
+	repo := &mockRepository{suggestion: nil}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	_, err := svc.UpdateSuggestion(user, uuid.New().String(), "Title", "Desc")
+	require.ErrorIs(t, err, ErrSuggestionNotFound)
+}
+
+func TestUpdateSuggestion_Forbidden(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{
+			ID:     suggID,
+			UserID: "user-2",
+			Title:  "Old Title",
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	_, err := svc.UpdateSuggestion(user, suggID.String(), "New Title", "New Desc")
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestUpdateSuggestion_InvalidTitle(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{
+			ID:     suggID,
+			UserID: "user-1",
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	_, err := svc.UpdateSuggestion(user, suggID.String(), "", "Desc")
+	require.ErrorIs(t, err, ErrInvalidTitle)
+}
+
+func TestUpdateSuggestion_Success(t *testing.T) {
+	suggID := uuid.New()
+	now := time.Now()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{
+			ID:     suggID,
+			UserID: "user-1",
+			Title:  "Old",
+			Status: "Submitted",
+		},
+		updated: &model.UserSuggestions{
+			ID:          suggID,
+			UserID:      "user-1",
+			Title:       "New Title",
+			Description: "New Desc",
+			Status:      "Submitted",
+			CreatedAt:   now,
+			UpdatedAt:   &now,
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
+
+	result, err := svc.UpdateSuggestion(user, suggID.String(), "New Title", "New Desc")
+	require.NoError(t, err)
+	require.Equal(t, "New Title", result.Title)
+	require.Equal(t, "New Desc", result.Description)
+}
+
+// --- DeleteSuggestion tests ---
+
+func TestDeleteSuggestion_Unauthorized(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+
+	err := svc.DeleteSuggestion(nil, uuid.New().String())
+	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+func TestDeleteSuggestion_InvalidID(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.DeleteSuggestion(user, "not-a-uuid")
+	require.ErrorIs(t, err, ErrInvalidID)
+}
+
+func TestDeleteSuggestion_NotFound(t *testing.T) {
+	repo := &mockRepository{suggestion: nil}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.DeleteSuggestion(user, uuid.New().String())
+	require.ErrorIs(t, err, ErrSuggestionNotFound)
+}
+
+func TestDeleteSuggestion_Forbidden(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{
+			ID:     suggID,
+			UserID: "user-2",
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.DeleteSuggestion(user, suggID.String())
+	require.ErrorIs(t, err, ErrForbidden)
+}
+
+func TestDeleteSuggestion_Success(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion: &model.UserSuggestions{
+			ID:     suggID,
+			UserID: "user-1",
+		},
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.DeleteSuggestion(user, suggID.String())
+	require.NoError(t, err)
+	require.Equal(t, suggID, repo.capturedDeleteID)
+}
+
 // --- CreateSuggestion tests ---
 
 func TestCreateSuggestion_Unauthorized(t *testing.T) {

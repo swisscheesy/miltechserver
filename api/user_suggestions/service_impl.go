@@ -54,11 +54,67 @@ func (s *ServiceImpl) GetAllSuggestions(currentUser *bootstrap.User) ([]Suggesti
 }
 
 func (s *ServiceImpl) UpdateSuggestion(user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
-	return nil, nil
+	if user == nil {
+		return nil, ErrUnauthorized
+	}
+
+	id, err := parseID(suggestionID)
+	if err != nil {
+		return nil, err
+	}
+
+	existing, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, ErrSuggestionNotFound
+	}
+	if existing.UserID != user.UserID {
+		return nil, ErrForbidden
+	}
+
+	trimmedTitle := strings.TrimSpace(title)
+	if len(trimmedTitle) == 0 || len(trimmedTitle) > 200 {
+		return nil, ErrInvalidTitle
+	}
+
+	trimmedDesc := strings.TrimSpace(description)
+	if len(trimmedDesc) == 0 || len(trimmedDesc) > 2000 {
+		return nil, ErrInvalidDescription
+	}
+
+	updated, err := s.repo.Update(id, trimmedTitle, trimmedDesc)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := mapSuggestionToResponse(updated, user.Username, 0, nil)
+	return &resp, nil
 }
 
 func (s *ServiceImpl) DeleteSuggestion(user *bootstrap.User, suggestionID string) error {
-	return nil
+	if user == nil {
+		return ErrUnauthorized
+	}
+
+	id, err := parseID(suggestionID)
+	if err != nil {
+		return err
+	}
+
+	existing, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return ErrSuggestionNotFound
+	}
+	if existing.UserID != user.UserID {
+		return ErrForbidden
+	}
+
+	return s.repo.Delete(id)
 }
 
 func (s *ServiceImpl) Vote(user *bootstrap.User, suggestionID string, direction int16) error {
