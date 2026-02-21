@@ -6,6 +6,7 @@ import (
 	"miltechserver/api/eic"
 	"miltechserver/api/equipment_services"
 	"miltechserver/api/item_comments"
+	"miltechserver/api/user_suggestions"
 	"miltechserver/api/item_lookup"
 	"miltechserver/api/item_query"
 	"miltechserver/api/library"
@@ -25,7 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client, blobCredential *azblob.SharedKeyCredential) {
+func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
 	v1Route := router.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
@@ -56,6 +57,10 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	NewShopsRouter(db, blobClient, env, authRoutes)
 	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
 	item_comments.RegisterRoutes(item_comments.Dependencies{DB: db}, v1Route, authRoutes)
+	user_suggestions.RegisterRoutes(user_suggestions.Dependencies{
+		DB:         db,
+		AuthClient: authClient,
+	}, v1Route, authRoutes)
 
 	// Mixed Routes (both public and authenticated endpoints)
 	material_images.RegisterRoutes(material_images.Dependencies{
@@ -66,11 +71,10 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	}, v1Route, authRoutes)
 	analyticsService := analytics.New(db)
 	library.RegisterRoutes(library.Dependencies{
-		DB:             db,
-		BlobClient:     blobClient,
-		BlobCredential: blobCredential,
-		Env:            env,
-		Analytics:      analyticsService,
+		DB:         db,
+		BlobClient: blobClient,
+		Env:        env,
+		Analytics:  analyticsService,
 	}, v1Route, authRoutes)
 
 	// Serve static assets (CSS, JS, images, etc.)
