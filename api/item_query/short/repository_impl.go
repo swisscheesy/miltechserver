@@ -53,3 +53,24 @@ func (repo *RepositoryImpl) ShortItemSearchPart(part string) ([]model.NiinLookup
 
 	return items, nil
 }
+
+// ShortItemSearchCancelledNiin searches the nsn table for rows where the
+// cancelled_niin column contains the given niin as a substring. The column
+// may store multiple NIINs in a single text field, so a LIKE contains query
+// is used rather than an equality check.
+func (repo *RepositoryImpl) ShortItemSearchCancelledNiin(niin string) ([]model.Nsn, error) {
+	var items []model.Nsn
+
+	stmt := SELECT(
+		Nsn.Niin,
+		Nsn.CancelledNiin,
+	).FROM(Nsn).
+		WHERE(Nsn.CancelledNiin.LIKE(String("%" + niin + "%")))
+
+	err := stmt.Query(repo.Db, &items)
+	if err != nil || len(items) == 0 {
+		return []model.Nsn{}, shared.ErrNoItemsFound
+	}
+
+	return items, nil
+}
