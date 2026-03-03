@@ -3,10 +3,10 @@ package route
 import (
 	"database/sql"
 	"miltechserver/api/analytics"
+	"miltechserver/api/docs_equipment"
 	"miltechserver/api/eic"
 	"miltechserver/api/equipment_services"
 	"miltechserver/api/item_comments"
-	"miltechserver/api/user_suggestions"
 	"miltechserver/api/item_lookup"
 	"miltechserver/api/item_query"
 	"miltechserver/api/library"
@@ -16,6 +16,7 @@ import (
 	"miltechserver/api/quick_lists"
 	"miltechserver/api/user_general"
 	"miltechserver/api/user_saves"
+	"miltechserver/api/user_suggestions"
 	"miltechserver/api/user_vehicles"
 	"miltechserver/bootstrap"
 	"net/http"
@@ -43,6 +44,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	quick_lists.RegisterRoutes(quick_lists.Dependencies{DB: db}, v1Route)
 	pol_products.RegisterRoutes(pol_products.Dependencies{DB: db}, v1Route)
 	eic.RegisterRoutes(eic.Dependencies{DB: db}, v1Route)
+	docs_equipment.RegisterRoutes(docs_equipment.Dependencies{DB: db, BlobClient: blobClient}, v1Route)
 
 	// All Authenticated Routes
 	authRoutes := router.Group("/api/v1/auth")
