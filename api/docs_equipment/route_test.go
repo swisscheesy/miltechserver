@@ -17,6 +17,7 @@ type serviceStub struct {
 	familiesResp FamiliesResponse
 	imgFamilies  *ImageFamiliesResponse
 	imgList      *FamilyImagesResponse
+	imgURLs      *FamilyImageURLsResponse
 	imgDownload  *ImageDownloadResponse
 	err          error
 }
@@ -41,6 +42,9 @@ func (s *serviceStub) ListFamilyImages(family string) (*FamilyImagesResponse, er
 }
 func (s *serviceStub) GenerateImageDownloadURL(_ context.Context, _ string) (*ImageDownloadResponse, error) {
 	return s.imgDownload, s.err
+}
+func (s *serviceStub) GetFamilyImageURLs(_ context.Context, _ string) (*FamilyImageURLsResponse, error) {
+	return s.imgURLs, s.err
 }
 
 func newTestRouter(stub *serviceStub) *gin.Engine {
@@ -142,4 +146,16 @@ func TestGenerateImageDownloadBadRequest(t *testing.T) {
 	stub := &serviceStub{err: ErrEmptyBlobPath}
 	resp := doRequest(newTestRouter(stub), http.MethodGet, "/api/v1/equipment-details/images/download")
 	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestGetFamilyImageURLsSuccess(t *testing.T) {
+	stub := &serviceStub{imgURLs: &FamilyImageURLsResponse{Family: "aircraft", Count: 3, ExpiresAt: "2026-03-03T22:00:00Z"}}
+	resp := doRequest(newTestRouter(stub), http.MethodGet, "/api/v1/equipment-details/images/family/aircraft/urls")
+	require.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestGetFamilyImageURLsError(t *testing.T) {
+	stub := &serviceStub{err: errors.New("azure down")}
+	resp := doRequest(newTestRouter(stub), http.MethodGet, "/api/v1/equipment-details/images/family/aircraft/urls")
+	require.Equal(t, http.StatusInternalServerError, resp.Code)
 }

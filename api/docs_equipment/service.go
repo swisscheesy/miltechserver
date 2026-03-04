@@ -13,5 +13,6 @@ type Service interface {
 	// Blob operations
 	ListImageFamilies() (*ImageFamiliesResponse, error)
 	ListFamilyImages(family string) (*FamilyImagesResponse, error)
+	GetFamilyImageURLs(ctx context.Context, family string) (*FamilyImageURLsResponse, error)
 	GenerateImageDownloadURL(ctx context.Context, blobPath string) (*ImageDownloadResponse, error)
 }

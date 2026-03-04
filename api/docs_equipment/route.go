@@ -46,6 +46,7 @@ func registerHandlers(router *gin.RouterGroup, svc Service) {
 	// Image endpoints
 	router.GET("/equipment-details/images/families", handler.listImageFamilies)
 	router.GET("/equipment-details/images/family/:family", handler.listFamilyImages)
+	router.GET("/equipment-details/images/family/:family/urls", middleware.RateLimiter(), handler.getFamilyImageURLs)
 	router.GET("/equipment-details/images/download", middleware.RateLimiter(), handler.generateImageDownloadURL)
 }
 
@@ -159,6 +160,30 @@ func (h *Handler) listFamilyImages(c *gin.Context) {
 			"error":   "Failed to list images",
 			"details": err.Error(),
 		})
+		return
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+}
+
+func (h *Handler) getFamilyImageURLs(c *gin.Context) {
+	family := c.Param("family")
+	if strings.TrimSpace(family) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+		return
+	}
+
+	data, err := h.service.GetFamilyImageURLs(c.Request.Context(), family)
+	if err != nil {
+		if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+		} else {
+			slog.Error("Failed to get family image URLs", "error", err, "family", family)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "Failed to generate image URLs",
+				"details": err.Error(),
+			})
+		}
 		return
 	}
 

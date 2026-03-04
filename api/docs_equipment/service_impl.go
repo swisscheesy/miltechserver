@@ -10,6 +10,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
 	"miltechserver/api/library/shared"
 )
@@ -138,6 +140,89 @@ func (s *serviceImpl) ListFamilyImages(family string) (*FamilyImagesResponse, er
 		Family: strings.TrimSpace(family),
 		Images: images,
 		Count:  len(images),
+	}, nil
+}
+
+// GetFamilyImageURLs lists all images in a family folder and generates SAS download
+// URLs for every image in a single call. It fetches one User Delegation Key from
+// Azure AD and signs all blob paths locally, avoiding the N+1 credential call that
+// would result from calling GenerateImageDownloadURL per image.
+func (s *serviceImpl) GetFamilyImageURLs(ctx context.Context, family string) (*FamilyImageURLsResponse, error) {
+	family = strings.TrimSpace(family)
+	if family == "" {
+		return nil, ErrEmptyParam
+	}
+
+	// Step 1: List all image blobs in the family folder (one Azure Storage call).
+	imageList, err := s.ListFamilyImages(family)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(imageList.Images) == 0 {
+		return &FamilyImageURLsResponse{
+			Family:    family,
+			Images:    []ImageURLItem{},
+			Count:     0,
+			ExpiresAt: "",
+		}, nil
+	}
+
+	// Step 2: Obtain a single User Delegation Key (one Azure AD call).
+	expiresAt := time.Now().UTC().Add(1 * time.Hour)
+	svcClient := s.blobClient.ServiceClient()
+
+	strPtr := func(s string) *string { return &s }
+	udk, err := svcClient.GetUserDelegationCredential(
+		ctx,
+		service.KeyInfo{
+			Start:  strPtr(time.Now().UTC().Add(-15 * time.Minute).Format(time.RFC3339)),
+			Expiry: strPtr(expiresAt.Format(time.RFC3339)),
+		},
+		nil,
+	)
+	if err != nil {
+		slog.Error("Failed to get user delegation credential for batch signing",
+			"family", family, "error", err)
+		return nil, fmt.Errorf("%w: %v", ErrSASGenFailed, err)
+	}
+
+	// Step 3: Sign each blob path locally (pure CPU, no network calls).
+	permissions := sas.BlobPermissions{Read: true}
+	items := make([]ImageURLItem, 0, len(imageList.Images))
+
+	for _, img := range imageList.Images {
+		bc := svcClient.NewContainerClient(containerName).NewBlobClient(img.BlobPath)
+
+		sasQueryParams, signErr := sas.BlobSignatureValues{
+			Protocol:      sas.ProtocolHTTPS,
+			ExpiryTime:    expiresAt,
+			Permissions:   permissions.String(),
+			ContainerName: containerName,
+			BlobName:      img.BlobPath,
+		}.SignWithUserDelegation(udk)
+		if signErr != nil {
+			slog.Warn("Failed to sign SAS for image, skipping",
+				"blobPath", img.BlobPath, "error", signErr)
+			continue
+		}
+
+		downloadURL := fmt.Sprintf("%s?%s", bc.URL(), sasQueryParams.Encode())
+
+		items = append(items, ImageURLItem{
+			Name:         img.Name,
+			BlobPath:     img.BlobPath,
+			DownloadURL:  downloadURL,
+			SizeBytes:    img.SizeBytes,
+			LastModified: img.LastModified,
+		})
+	}
+
+	return &FamilyImageURLsResponse{
+		Family:    family,
+		Images:    items,
+		Count:     len(items),
+		ExpiresAt: expiresAt.Format(time.RFC3339),
 	}, nil
 }
 

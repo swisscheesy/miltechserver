@@ -51,3 +51,20 @@ type ImageDownloadResponse struct {
 	DownloadURL string `json:"download_url"`
 	ExpiresAt   string `json:"expires_at"`
 }
+
+// ImageURLItem — a single image with its SAS download URL.
+type ImageURLItem struct {
+	Name         string `json:"name"`
+	BlobPath     string `json:"blob_path"`
+	DownloadURL  string `json:"download_url"`
+	SizeBytes    int64  `json:"size_bytes"`
+	LastModified string `json:"last_modified"`
+}
+
+// FamilyImageURLsResponse — all images in a family with pre-generated SAS URLs.
+type FamilyImageURLsResponse struct {
+	Family    string         `json:"family"`
+	Images    []ImageURLItem `json:"images"`
+	Count     int            `json:"count"`
+	ExpiresAt string         `json:"expires_at"`
+}
