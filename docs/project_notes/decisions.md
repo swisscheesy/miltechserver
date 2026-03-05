@@ -317,3 +317,41 @@ Based on the current project setup:
 - API response JSON is unchanged (`LookupLinNiinMat` has identical fields/tags to `LookupLinNiin`); no mobile app changes needed
 - Tests updated to reference `lookup_lin_niin_mat`; existing test behavior preserved
 - OFFSET degradation on later pages remains but is mitigated by querying a small materialized table instead of a 698 MB join
+
+### ADR-013: Equipment Details Public API with Image Browsing (2026-03-02)
+
+**Context:**
+- New `docs_equipment_details` table added to Postgres (488 rows, 12 columns, 16 equipment families)
+- Equipment images stored in Azure Blob Storage at `library/docs_equipment/images/{family}/`
+- Mobile app needs endpoints to browse equipment data, filter by family/search by model or LIN, and view/download associated images
+- All endpoints must be public (no authentication) to support offline-capable mobile workflows
+- Multiple existing patterns to follow: EIC (paginated DB queries), PMCS library (blob folder listing + SAS download)
+
+**Decision:**
+- Create new colocated module `api/docs_equipment` with standard `route → service → repository` architecture
+- **4 data endpoints** querying Postgres:
+  1. `GET /equipment-details?page=N` — paginated list (40/page, ordered by ID)
+  2. `GET /equipment-details/families` — unique family values for filter UI
+  3. `GET /equipment-details/family/:family?page=N` — filter by family (case-insensitive)
+  4. `GET /equipment-details/search?q=term&page=N` — search model or LIN (ILIKE partial match)
+- **3 image endpoints** querying Azure Blob Storage:
+  5. `GET /equipment-details/images/families` — list family image folders via hierarchy pager
+  6. `GET /equipment-details/images/family/:family` — list images in a family folder (flat pager, image-extension whitelist)
+  7. `GET /equipment-details/images/download?blob_path=...` — generate 1-hour SAS read URL (rate-limited)
+- Use raw SQL with `database/sql` for DB queries (not Jet query builder) — consistent with EIC pagination pattern where dynamic WHERE clauses and LIMIT/OFFSET are cleaner in raw SQL
+- Use `shared.GenerateBlobSASURL` for image download — same User Delegation SAS pattern as PMCS and PS Magazine
+- Register as public routes in `api/route/route.go` alongside `eic` and `pol_products`
+
+**Alternatives considered:**
+- Use Jet query builder for DB queries (rejected: raw SQL is simpler for pagination with dynamic filters; EIC set the precedent)
+- Server-side image proxying/streaming instead of SAS URLs (rejected: SAS URLs offload bandwidth to Azure CDN, consistent with all existing download endpoints, and simpler for mobile caching)
+- Single combined endpoint returning equipment data + image URLs together (rejected: not all families have images, images are in blob storage not DB, separate concerns are cleaner)
+- Separate `api/docs_equipment_images` package for image endpoints (rejected: all endpoints share the same domain context and Dependencies struct; splitting would add unnecessary complexity)
+
+**Consequences:**
+- Mobile app can build a complete equipment browser with category filtering, search, and image gallery
+- No authentication overhead — endpoints are immediately accessible
+- Image download URL generation is rate-limited to prevent abuse
+- Image extension whitelist (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) prevents unauthorized file access through the download endpoint
+- Page size of 40 is consistent with EIC but may need tuning based on mobile app UX feedback
+- If equipment data grows significantly, consider adding database indexes on `family`, `model`, and `lin` columns
