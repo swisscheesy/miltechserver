@@ -196,6 +196,11 @@ func (s *ServiceImpl) ListIssues(page int, order string, year *int, issueNumber 
 	}, nil
 }
 
+// SearchSummaries is a placeholder — real implementation added in Task 5.
+func (s *ServiceImpl) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 // GenerateDownloadURL creates a 1-hour SAS URL for a ps-mag blob.
 // ctx should be the request context so Azure calls are cancelled on client disconnect.
 func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error) {

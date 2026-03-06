@@ -13,4 +13,9 @@ type Service interface {
 	// ctx should be the request context so Azure calls are cancelled on client disconnect.
 	// blobPath must start with "ps-mag/" and end with ".pdf".
 	GenerateDownloadURL(ctx context.Context, blobPath string) (*DownloadURLResponse, error)
+
+	// SearchSummaries returns a paginated list of PS Magazine issues whose summaries
+	// contain query. Only the lines matching query are returned per file.
+	// query must be at least 3 characters. page is 1-indexed.
+	SearchSummaries(query string, page int) (*PSMagSearchResponse, error)
 }

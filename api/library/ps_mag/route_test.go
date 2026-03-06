@@ -14,6 +14,8 @@ type serviceStub struct {
 	listResp    *PSMagIssuesResponse
 	listErr     error
 	downloadErr error
+	searchResp  *PSMagSearchResponse
+	searchErr   error
 }
 
 func (s *serviceStub) ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
@@ -25,6 +27,10 @@ func (s *serviceStub) GenerateDownloadURL(_ context.Context, blobPath string) (*
 		return nil, s.downloadErr
 	}
 	return &DownloadURLResponse{BlobPath: blobPath, DownloadURL: "https://example.com/sas", ExpiresAt: "2099-01-01T00:00:00Z"}, nil
+}
+
+func (s *serviceStub) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
+	return s.searchResp, s.searchErr
 }
 
 func TestListIssuesSuccess(t *testing.T) {
