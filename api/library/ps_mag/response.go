@@ -27,3 +27,19 @@ type DownloadURLResponse struct {
 	DownloadURL string `json:"download_url"`
 	ExpiresAt   string `json:"expires_at"` // RFC3339
 }
+
+// PSMagSearchResult is a single file with only its matching summary lines.
+type PSMagSearchResult struct {
+	FileName      string   `json:"file_name"`
+	MatchingLines []string `json:"matching_lines"`
+}
+
+// PSMagSearchResponse is the paginated summary search response.
+type PSMagSearchResponse struct {
+	Results    []PSMagSearchResult `json:"results"`
+	Count      int                 `json:"count"`
+	TotalCount int                 `json:"total_count"`
+	Page       int                 `json:"page"`
+	TotalPages int                 `json:"total_pages"`
+	Query      string              `json:"query"`
+}

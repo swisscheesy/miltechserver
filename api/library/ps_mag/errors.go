@@ -11,4 +11,5 @@ var (
 	ErrSASGenFailed    = errors.New("failed to generate download URL")
 	ErrInvalidPage     = errors.New("page must be greater than 0")
 	ErrInvalidOrder    = errors.New("order must be 'asc' or 'desc'")
+	ErrQueryTooShort   = errors.New("search query must be at least 3 characters")
 )

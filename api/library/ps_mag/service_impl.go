@@ -21,6 +21,7 @@ const (
 	PSMagContainerName = "library"
 	PSMagPrefix        = "ps-mag/"
 	PageSize           = 50
+	SearchPageSize     = 30
 )
 
 var issueRegex = regexp.MustCompile(`^PS_Magazine_Issue_(\d+)_([A-Za-z]+)_(\d{4})\.pdf$`)
