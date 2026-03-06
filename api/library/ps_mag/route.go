@@ -1,6 +1,7 @@
 package ps_mag
 
 import (
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -21,8 +22,8 @@ type Handler struct {
 
 // RegisterHandlers wires ps_mag routes into the public router group.
 // Called from api/library/route.go.
-func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client) {
-	svc := NewService(blobClient)
+func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client, db *sql.DB) {
+	svc := NewService(blobClient, db)
 	registerHandlers(publicGroup, svc)
 }
 

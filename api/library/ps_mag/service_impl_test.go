@@ -164,7 +164,7 @@ func TestPaginateIssuesEmpty(t *testing.T) {
 }
 
 func TestGenerateDownloadURLValidation(t *testing.T) {
-	svc := NewService(nil)
+	svc := NewService(nil, nil)
 
 	_, err := svc.GenerateDownloadURL(context.Background(), "")
 	require.ErrorIs(t, err, ErrEmptyBlobPath)
@@ -184,7 +184,7 @@ func TestGenerateDownloadURLValidation(t *testing.T) {
 }
 
 func TestListIssuesValidation(t *testing.T) {
-	svc := NewService(nil)
+	svc := NewService(nil, nil)
 
 	_, err := svc.ListIssues(0, "asc", nil, nil)
 	require.ErrorIs(t, err, ErrInvalidPage)

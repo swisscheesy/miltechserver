@@ -31,7 +31,7 @@ type Handler struct {
 func RegisterRoutes(deps Dependencies, publicGroup, authGroup *gin.RouterGroup) {
 	svc := NewService(deps.BlobClient, deps.Env, deps.Analytics)
 	registerHandlers(publicGroup, authGroup, svc)
-	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient)
+	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient, deps.DB)
 }
 
 func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {

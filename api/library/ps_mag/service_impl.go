@@ -2,6 +2,7 @@ package ps_mag
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"path"
@@ -31,9 +32,12 @@ type ServiceImpl struct {
 	repo       Repository
 }
 
-func NewService(blobClient *azblob.Client) Service {
+// NewService creates a Service backed by blobClient for blob operations and
+// db for summary search queries.
+func NewService(blobClient *azblob.Client, db *sql.DB) Service {
 	return &ServiceImpl{
 		blobClient: blobClient,
+		repo:       NewRepository(db),
 	}
 }
 
