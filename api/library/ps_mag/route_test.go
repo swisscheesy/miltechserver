@@ -2,6 +2,7 @@ package ps_mag
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -195,6 +196,98 @@ func TestDownloadServerError(t *testing.T) {
 	registerHandlers(router.Group("/api/v1"), stub)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/download?blob_path=ps-mag/test.pdf", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusInternalServerError, resp.Code)
+}
+
+func TestSearchSummariesMissingQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestSearchSummariesQueryTooShort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search?q=ab", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestSearchSummariesInvalidPage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search?q=oil&page=bad", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestSearchSummariesPageZero(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search?q=oil&page=0", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestSearchSummariesSuccess(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{
+		searchResp: &PSMagSearchResponse{
+			Results: []PSMagSearchResult{
+				{
+					FileName:      "PS_Magazine_Issue_495_February_1994.pdf",
+					MatchingLines: []string{"Check the oil level."},
+				},
+			},
+			Count:      1,
+			TotalCount: 1,
+			Page:       1,
+			TotalPages: 1,
+			Query:      "oil",
+		},
+	}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search?q=oil", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestSearchSummariesServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{searchErr: errors.New("db failure")}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/search?q=oil", nil)
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 

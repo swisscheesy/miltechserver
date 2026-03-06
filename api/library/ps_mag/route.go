@@ -30,6 +30,7 @@ func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client) {
 func registerHandlers(publicGroup *gin.RouterGroup, svc Service) {
 	handler := Handler{service: svc}
 	publicGroup.GET("/library/ps-mag/issues", handler.listIssues)
+	publicGroup.GET("/library/ps-mag/search", handler.searchSummaries)
 	// Rate-limited: each IP is allowed a burst of 10 requests, sustained at 2 req/s.
 	publicGroup.GET("/library/ps-mag/download", middleware.RateLimiter(), handler.generateDownloadURL)
 }
@@ -98,6 +99,47 @@ func (h *Handler) listIssues(c *gin.Context) {
 
 	slog.Info("Successfully listed PS Magazine issues",
 		"count", result.Count, "totalCount", result.TotalCount, "page", result.Page)
+
+	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
+}
+
+// searchSummaries returns PS Magazine issues whose summary contains the query phrase.
+// Only the lines from each summary that contain the phrase are returned.
+// GET /library/ps-mag/search?q=phrase&page=1
+func (h *Handler) searchSummaries(c *gin.Context) {
+	q := strings.TrimSpace(c.Query("q"))
+	if len(q) < 3 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": ErrQueryTooShort.Error(),
+		})
+		return
+	}
+
+	pageStr := c.DefaultQuery("page", "1")
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": ErrInvalidPage.Error(),
+		})
+		return
+	}
+
+	slog.Info("SearchPSMagSummaries endpoint called", "query", q, "page", page)
+
+	result, err := h.service.SearchSummaries(q, page)
+	if err != nil {
+		slog.Error("Failed to search PS Magazine summaries", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to search summaries",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	slog.Info("Successfully searched PS Magazine summaries",
+		"query", q, "totalCount", result.TotalCount, "page", result.Page)
 
 	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
 }
