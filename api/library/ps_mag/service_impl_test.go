@@ -2,6 +2,7 @@ package ps_mag
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -190,4 +191,120 @@ func TestListIssuesValidation(t *testing.T) {
 
 	_, err = svc.ListIssues(1, "sideways", nil, nil)
 	require.ErrorIs(t, err, ErrInvalidOrder)
+}
+
+func TestFilterMatchingLines_SingleMatch(t *testing.T) {
+	summary := "Line one\nlubrication point A\nLine three"
+	got := filterMatchingLines(summary, "lubrication")
+	require.Equal(t, []string{"lubrication point A"}, got)
+}
+
+func TestFilterMatchingLines_MultipleMatches(t *testing.T) {
+	summary := "lubrication A\nno match\nlubrication B"
+	got := filterMatchingLines(summary, "lubrication")
+	require.Equal(t, []string{"lubrication A", "lubrication B"}, got)
+}
+
+func TestFilterMatchingLines_NoMatch(t *testing.T) {
+	summary := "Line one\nLine two"
+	got := filterMatchingLines(summary, "xyz")
+	require.Nil(t, got)
+}
+
+func TestFilterMatchingLines_CaseInsensitive(t *testing.T) {
+	summary := "Check LUBRICATION schedule"
+	got := filterMatchingLines(summary, "lubrication")
+	require.Equal(t, []string{"Check LUBRICATION schedule"}, got)
+}
+
+func TestFilterMatchingLines_EmptyLinesSkipped(t *testing.T) {
+	summary := "\n  \nlubrication note\n\n"
+	got := filterMatchingLines(summary, "lubrication")
+	require.Equal(t, []string{"lubrication note"}, got)
+}
+
+func TestFilterMatchingLines_EmptySummary(t *testing.T) {
+	got := filterMatchingLines("", "lubrication")
+	require.Nil(t, got)
+}
+
+// repoStub satisfies Repository for unit testing.
+type repoStub struct {
+	rows  []summaryRow
+	total int
+	err   error
+}
+
+func (r *repoStub) SearchSummaries(_ string, _, _ int) ([]summaryRow, int, error) {
+	return r.rows, r.total, r.err
+}
+
+func TestServiceSearchSummaries_ReturnsMatchingLines(t *testing.T) {
+	stub := &repoStub{
+		rows: []summaryRow{
+			{FileName: "PS_Magazine_Issue_495_February_1994.pdf", Summary: "Check oil.\nOil level low.\nNo match here."},
+		},
+		total: 1,
+	}
+	svc := &ServiceImpl{repo: stub}
+
+	resp, err := svc.SearchSummaries("oil", 1)
+
+	require.NoError(t, err)
+	require.Equal(t, 1, resp.TotalCount)
+	require.Equal(t, 1, len(resp.Results))
+	require.Equal(t, []string{"Check oil.", "Oil level low."}, resp.Results[0].MatchingLines)
+	require.Equal(t, "oil", resp.Query)
+}
+
+func TestServiceSearchSummaries_EmptyResults(t *testing.T) {
+	stub := &repoStub{rows: nil, total: 0}
+	svc := &ServiceImpl{repo: stub}
+
+	resp, err := svc.SearchSummaries("oil", 1)
+
+	require.NoError(t, err)
+	require.Equal(t, 0, resp.TotalCount)
+	require.Empty(t, resp.Results)
+}
+
+func TestServiceSearchSummaries_QueryTooShort(t *testing.T) {
+	svc := &ServiceImpl{repo: &repoStub{}}
+
+	_, err := svc.SearchSummaries("ab", 1)
+
+	require.ErrorIs(t, err, ErrQueryTooShort)
+}
+
+func TestServiceSearchSummaries_InvalidPage(t *testing.T) {
+	svc := &ServiceImpl{repo: &repoStub{}}
+
+	_, err := svc.SearchSummaries("oil", 0)
+
+	require.ErrorIs(t, err, ErrInvalidPage)
+}
+
+func TestServiceSearchSummaries_RepoError(t *testing.T) {
+	stub := &repoStub{err: errors.New("db down")}
+	svc := &ServiceImpl{repo: stub}
+
+	_, err := svc.SearchSummaries("oil", 1)
+
+	require.Error(t, err)
+}
+
+func TestServiceSearchSummaries_Pagination(t *testing.T) {
+	// 35 total results, page size 30 → 2 total pages
+	stub := &repoStub{rows: make([]summaryRow, 5), total: 35}
+	for i := range stub.rows {
+		stub.rows[i] = summaryRow{FileName: "file.pdf", Summary: "oil note"}
+	}
+	svc := &ServiceImpl{repo: stub}
+
+	resp, err := svc.SearchSummaries("oil", 2)
+
+	require.NoError(t, err)
+	require.Equal(t, 35, resp.TotalCount)
+	require.Equal(t, 2, resp.TotalPages)
+	require.Equal(t, 2, resp.Page)
 }

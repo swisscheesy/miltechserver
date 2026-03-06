@@ -28,6 +28,7 @@ var issueRegex = regexp.MustCompile(`^PS_Magazine_Issue_(\d+)_([A-Za-z]+)_(\d{4}
 
 type ServiceImpl struct {
 	blobClient *azblob.Client
+	repo       Repository
 }
 
 func NewService(blobClient *azblob.Client) Service {
@@ -196,9 +197,60 @@ func (s *ServiceImpl) ListIssues(page int, order string, year *int, issueNumber 
 	}, nil
 }
 
-// SearchSummaries is a placeholder — real implementation added in Task 5.
+// SearchSummaries returns a paginated list of PS Magazine issues whose summaries
+// contain query. Only the lines matching query are returned per file.
 func (s *ServiceImpl) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+	if len(strings.TrimSpace(query)) < 3 {
+		return nil, ErrQueryTooShort
+	}
+	if page < 1 {
+		return nil, ErrInvalidPage
+	}
+
+	rows, totalCount, err := s.repo.SearchSummaries(query, page, SearchPageSize)
+	if err != nil {
+		return nil, fmt.Errorf("search summaries: %w", err)
+	}
+
+	results := make([]PSMagSearchResult, 0, len(rows))
+	for _, row := range rows {
+		lines := filterMatchingLines(row.Summary, query)
+		if len(lines) == 0 {
+			continue
+		}
+		results = append(results, PSMagSearchResult{
+			FileName:      row.FileName,
+			MatchingLines: lines,
+		})
+	}
+
+	totalPages := (totalCount + SearchPageSize - 1) / SearchPageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	return &PSMagSearchResponse{
+		Results:    results,
+		Count:      len(results),
+		TotalCount: totalCount,
+		Page:       page,
+		TotalPages: totalPages,
+		Query:      query,
+	}, nil
+}
+
+// filterMatchingLines splits summary by newline and returns only the trimmed,
+// non-empty lines that contain query (case-insensitive).
+func filterMatchingLines(summary, query string) []string {
+	lowerQuery := strings.ToLower(query)
+	var matches []string
+	for _, line := range strings.Split(summary, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" && strings.Contains(strings.ToLower(trimmed), lowerQuery) {
+			matches = append(matches, trimmed)
+		}
+	}
+	return matches
 }
 
 // GenerateDownloadURL creates a 1-hour SAS URL for a ps-mag blob.
