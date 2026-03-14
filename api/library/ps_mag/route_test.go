@@ -293,3 +293,23 @@ func TestSearchSummariesServiceError(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, resp.Code)
 }
+
+func TestListIssuesResponseHasCacheControlHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	stub := &serviceStub{
+		listResp: &PSMagIssuesResponse{
+			Issues:     []PSMagIssueResponse{},
+			TotalPages: 1,
+			Order:      "asc",
+		},
+	}
+	registerHandlers(router.Group("/api/v1"), stub)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/library/ps-mag/issues", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "public, max-age=300", resp.Header().Get("Cache-Control"))
+}

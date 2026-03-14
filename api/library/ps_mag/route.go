@@ -101,6 +101,7 @@ func (h *Handler) listIssues(c *gin.Context) {
 	slog.Info("Successfully listed PS Magazine issues",
 		"count", result.Count, "totalCount", result.TotalCount, "page", result.Page)
 
+	c.Header("Cache-Control", "public, max-age=300")
 	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
 }
 
