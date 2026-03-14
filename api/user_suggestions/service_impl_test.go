@@ -21,6 +21,8 @@ type mockRepository struct {
 	updated          *model.UserSuggestions
 	updateErr        error
 	deleteErr        error
+	existingVote     *int16
+	existingVoteErr  error
 	upsertVoteErr    error
 	deleteVoteErr    error
 
@@ -29,6 +31,8 @@ type mockRepository struct {
 	capturedSuggestionID uuid.UUID
 	capturedDirection    int16
 	capturedDeleteID     uuid.UUID
+	upsertVoteCalled     bool
+	deleteVoteCalled     bool
 }
 
 func (m *mockRepository) GetAllWithScores(voterID string) ([]SuggestionWithScore, error) {
@@ -58,14 +62,20 @@ func (m *mockRepository) Delete(id uuid.UUID) error {
 	return m.deleteErr
 }
 
+func (m *mockRepository) GetVote(suggestionID uuid.UUID, voterID string) (*int16, error) {
+	return m.existingVote, m.existingVoteErr
+}
+
 func (m *mockRepository) UpsertVote(suggestionID uuid.UUID, voterID string, direction int16) error {
 	m.capturedSuggestionID = suggestionID
 	m.capturedDirection = direction
+	m.upsertVoteCalled = true
 	return m.upsertVoteErr
 }
 
 func (m *mockRepository) DeleteVote(suggestionID uuid.UUID, voterID string) error {
 	m.capturedSuggestionID = suggestionID
+	m.deleteVoteCalled = true
 	return m.deleteVoteErr
 }
 
@@ -431,4 +441,71 @@ func TestGetAllSuggestions_Empty(t *testing.T) {
 	results, err := svc.GetAllSuggestions(nil)
 	require.NoError(t, err)
 	require.Empty(t, results)
+}
+
+// --- Vote toggle behavior tests ---
+
+func int16Ptr(v int16) *int16 {
+	return &v
+}
+
+func TestVote_AddsVote_WhenNoExistingVote(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion:   &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+		existingVote: nil,
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), 1)
+	require.NoError(t, err)
+	require.True(t, repo.upsertVoteCalled, "UpsertVote should be called for new vote")
+	require.False(t, repo.deleteVoteCalled, "DeleteVote should not be called for new vote")
+	require.Equal(t, int16(1), repo.capturedDirection)
+}
+
+func TestVote_TogglesOff_WhenExistingVoteSameDirection(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion:   &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+		existingVote: int16Ptr(1),
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), 1)
+	require.NoError(t, err)
+	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called to toggle off")
+	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when toggling off")
+}
+
+func TestVote_TogglesOff_WhenExistingVoteOppositeDirection(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion:   &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+		existingVote: int16Ptr(1),
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), -1)
+	require.NoError(t, err)
+	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called when switching direction")
+	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when switching direction")
+}
+
+func TestVote_TogglesOff_WhenExistingDownvoteAndUpvoteRequested(t *testing.T) {
+	suggID := uuid.New()
+	repo := &mockRepository{
+		suggestion:   &model.UserSuggestions{ID: suggID, UserID: "user-2"},
+		existingVote: int16Ptr(-1),
+	}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "test"}
+
+	err := svc.Vote(user, suggID.String(), 1)
+	require.NoError(t, err)
+	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called when switching from downvote to upvote")
+	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when switching direction")
 }

@@ -177,6 +177,24 @@ func (r *RepositoryImpl) Delete(id uuid.UUID) error {
 	return nil
 }
 
+func (r *RepositoryImpl) GetVote(suggestionID uuid.UUID, voterID string) (*int16, error) {
+	rawSQL := `
+		SELECT direction FROM user_suggestion_votes
+		WHERE suggestion_id = $1 AND voter_id = $2
+	`
+
+	var direction int16
+	err := r.db.QueryRow(rawSQL, suggestionID, voterID).Scan(&direction)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vote: %w", err)
+	}
+
+	return &direction, nil
+}
+
 func (r *RepositoryImpl) UpsertVote(suggestionID uuid.UUID, voterID string, direction int16) error {
 	rawSQL := `
 		INSERT INTO user_suggestion_votes (suggestion_id, voter_id, direction)

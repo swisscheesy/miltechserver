@@ -12,6 +12,7 @@ type Repository interface {
 	Create(suggestion model.UserSuggestions) (*model.UserSuggestions, error)
 	Update(id uuid.UUID, title, description string) (*model.UserSuggestions, error)
 	Delete(id uuid.UUID) error
+	GetVote(suggestionID uuid.UUID, voterID string) (*int16, error)
 	UpsertVote(suggestionID uuid.UUID, voterID string, direction int16) error
 	DeleteVote(suggestionID uuid.UUID, voterID string) error
 }

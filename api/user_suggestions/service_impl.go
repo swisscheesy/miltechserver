@@ -180,6 +180,17 @@ func (s *ServiceImpl) Vote(user *bootstrap.User, suggestionID string, direction 
 		return ErrSuggestionNotFound
 	}
 
+	// Check if the user already has a vote on this suggestion.
+	// If they do, remove it (toggle off) to prevent ±2 score jumps
+	// when switching vote directions.
+	existingVote, err := s.repo.GetVote(id, user.UserID)
+	if err != nil {
+		return err
+	}
+	if existingVote != nil {
+		return s.repo.DeleteVote(id, user.UserID)
+	}
+
 	return s.repo.UpsertVote(id, user.UserID, direction)
 }
 
