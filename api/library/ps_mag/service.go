@@ -7,7 +7,7 @@ type Service interface {
 	// ListIssues returns a paginated, optionally filtered list of PS Magazine issues.
 	// page is 1-indexed. order must be "asc" or "desc".
 	// year and issueNumber are optional — pass nil to skip the filter.
-	ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error)
+	ListIssues(ctx context.Context, page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error)
 
 	// GenerateDownloadURL creates a 1-hour SAS URL for a ps-mag blob.
 	// ctx should be the request context so Azure calls are cancelled on client disconnect.

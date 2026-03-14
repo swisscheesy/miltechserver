@@ -88,7 +88,7 @@ func (h *Handler) listIssues(c *gin.Context) {
 	slog.Info("ListPSMagIssues endpoint called",
 		"page", page, "order", order, "year", year, "issueNumber", issueNumber)
 
-	result, err := h.service.ListIssues(page, order, year, issueNumber)
+	result, err := h.service.ListIssues(c.Request.Context(), page, order, year, issueNumber)
 	if err != nil {
 		slog.Error("Failed to list PS Magazine issues", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{

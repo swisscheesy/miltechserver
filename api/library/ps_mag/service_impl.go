@@ -30,6 +30,7 @@ var issueRegex = regexp.MustCompile(`^PS_Magazine_Issue_(\d+)_([A-Za-z]+)_(\d{4}
 type ServiceImpl struct {
 	blobClient *azblob.Client
 	repo       Repository
+	cache      *issueCache
 }
 
 // NewService creates a Service backed by blobClient for blob operations and
@@ -38,6 +39,7 @@ func NewService(blobClient *azblob.Client, db *sql.DB) Service {
 	return &ServiceImpl{
 		blobClient: blobClient,
 		repo:       NewRepository(db),
+		cache:      newIssueCache(10 * time.Minute),
 	}
 }
 
@@ -112,16 +114,20 @@ func paginateIssues(issues []PSMagIssueResponse, page, pageSize int) (pageItems 
 }
 
 // listAllIssues fetches every blob under ps-mag/ and parses metadata from filenames.
+// Results are cached for 10 minutes; the cache is shared across all requests.
 // Blobs that do not match the filename convention are silently skipped.
-func (s *ServiceImpl) listAllIssues() ([]PSMagIssueResponse, error) {
-	ctx := context.Background()
+func (s *ServiceImpl) listAllIssues(ctx context.Context) ([]PSMagIssueResponse, error) {
+	if cached, ok := s.cache.get(); ok {
+		return cached, nil
+	}
+
 	containerClient := s.blobClient.ServiceClient().NewContainerClient(PSMagContainerName)
 	prefix := PSMagPrefix
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
 		Prefix: &prefix,
 	})
 
-	var issues []PSMagIssueResponse
+	issues := make([]PSMagIssueResponse, 0, 512)
 
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
@@ -162,11 +168,13 @@ func (s *ServiceImpl) listAllIssues() ([]PSMagIssueResponse, error) {
 			})
 		}
 	}
+
+	s.cache.set(issues)
 	return issues, nil
 }
 
 // ListIssues returns a paginated, optionally filtered list of PS Magazine issues.
-func (s *ServiceImpl) ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
+func (s *ServiceImpl) ListIssues(ctx context.Context, page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
 	if page < 1 {
 		return nil, ErrInvalidPage
 	}
@@ -175,7 +183,7 @@ func (s *ServiceImpl) ListIssues(page int, order string, year *int, issueNumber 
 		return nil, ErrInvalidOrder
 	}
 
-	issues, err := s.listAllIssues()
+	issues, err := s.listAllIssues(ctx)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -184,12 +185,12 @@ func TestGenerateDownloadURLValidation(t *testing.T) {
 }
 
 func TestListIssuesValidation(t *testing.T) {
-	svc := NewService(nil, nil)
+	svc := &ServiceImpl{repo: &repoStub{}, cache: newIssueCache(5 * time.Minute)}
 
-	_, err := svc.ListIssues(0, "asc", nil, nil)
+	_, err := svc.ListIssues(context.Background(), 0, "asc", nil, nil)
 	require.ErrorIs(t, err, ErrInvalidPage)
 
-	_, err = svc.ListIssues(1, "sideways", nil, nil)
+	_, err = svc.ListIssues(context.Background(), 1, "sideways", nil, nil)
 	require.ErrorIs(t, err, ErrInvalidOrder)
 }
 
@@ -307,4 +308,26 @@ func TestServiceSearchSummaries_Pagination(t *testing.T) {
 	require.Equal(t, 35, resp.TotalCount)
 	require.Equal(t, 2, resp.TotalPages)
 	require.Equal(t, 2, resp.Page)
+}
+
+func TestListIssues_UsesCacheOnSecondCall(t *testing.T) {
+	// Build a ServiceImpl with a warm cache and a nil blobClient.
+	// If listAllIssues tries to use blobClient it will panic — proving the cache
+	// was bypassed. If it succeeds the cache was used.
+	cached := []PSMagIssueResponse{
+		{Name: "PS_Magazine_Issue_1_January_1951.pdf", IssueNumber: 1, Month: "January", Year: 1951},
+	}
+	c := newIssueCache(5 * time.Minute)
+	c.set(cached)
+
+	svc := &ServiceImpl{
+		blobClient: nil, // panics if called
+		repo:       &repoStub{},
+		cache:      c,
+	}
+
+	result, err := svc.ListIssues(context.Background(), 1, "asc", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.TotalCount)
+	require.Equal(t, "PS_Magazine_Issue_1_January_1951.pdf", result.Issues[0].Name)
 }

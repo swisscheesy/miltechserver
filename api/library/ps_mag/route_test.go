@@ -19,7 +19,7 @@ type serviceStub struct {
 	searchErr   error
 }
 
-func (s *serviceStub) ListIssues(page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
+func (s *serviceStub) ListIssues(_ context.Context, page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error) {
 	return s.listResp, s.listErr
 }
 
