@@ -64,6 +64,8 @@ func TestEscapeLIKEPattern(t *testing.T) {
 		{"_bolt", `\_bolt`},
 		{"100% oil_level", `100\% oil\_level`},
 		{`back\slash`, `back\\slash`},
+		{`50\%`, `50\\\%`},
+		{`a\_b`, `a\\\_b`},
 	}
 
 	for _, tc := range tests {
