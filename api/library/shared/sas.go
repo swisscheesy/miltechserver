@@ -34,13 +34,12 @@ func strPtr(s string) *string { return &s }
 
 // getOrRefreshUDK returns a cached User Delegation Key if still valid, or fetches
 // a new one from Azure AD and caches it for 45 minutes.
-// expiresAt is the expiry of the SAS token being signed — the UDK must cover it.
-func getOrRefreshUDK(ctx context.Context, svcClient *service.Client, expiresAt time.Time) (*service.UserDelegationCredential, error) {
+func getOrRefreshUDK(ctx context.Context, svcClient *service.Client) (*service.UserDelegationCredential, error) {
 	packageUDKCache.mu.Lock()
 	defer packageUDKCache.mu.Unlock()
 
-	// Reuse the cached key if it covers the requested expiry with 5 minutes of margin.
-	if packageUDKCache.key != nil && packageUDKCache.expiresAt.After(expiresAt.Add(5*time.Minute)) {
+	// Reuse the cached key if it has more than 5 minutes of validity remaining.
+	if packageUDKCache.key != nil && packageUDKCache.expiresAt.After(time.Now().Add(5*time.Minute)) {
 		return packageUDKCache.key, nil
 	}
 
@@ -49,7 +48,7 @@ func getOrRefreshUDK(ctx context.Context, svcClient *service.Client, expiresAt t
 	udk, err := svcClient.GetUserDelegationCredential(
 		ctx,
 		service.KeyInfo{
-			Start:  strPtr(time.Now().UTC().Add(-15 * time.Minute).Format(time.RFC3339)),
+			Start:  strPtr(time.Now().UTC().Add(-15 * time.Minute).Format(time.RFC3339)), // -15min absorbs clock skew between client and Azure AD
 			Expiry: strPtr(keyExpiry.Format(time.RFC3339)),
 		},
 		nil,
@@ -85,7 +84,7 @@ func GenerateBlobSASURL(
 	expiresAt := time.Now().UTC().Add(1 * time.Hour)
 
 	svcClient := blobClient.ServiceClient()
-	udk, err := getOrRefreshUDK(ctx, svcClient, expiresAt)
+	udk, err := getOrRefreshUDK(ctx, svcClient)
 	if err != nil {
 		return nil, err
 	}
