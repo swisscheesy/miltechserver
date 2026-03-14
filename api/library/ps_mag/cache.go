@@ -32,10 +32,13 @@ func (c *issueCache) get() ([]PSMagIssueResponse, bool) {
 	return cp, true
 }
 
-// set stores issues in the cache and resets the expiry clock.
+// set stores a defensive copy of issues in the cache and resets the expiry clock.
+// The copy is made before acquiring the lock to keep the critical section minimal.
 func (c *issueCache) set(issues []PSMagIssueResponse) {
+	cp := make([]PSMagIssueResponse, len(issues))
+	copy(cp, issues)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.issues = issues
+	c.issues = cp
 	c.expiresAt = time.Now().Add(c.ttl)
 }

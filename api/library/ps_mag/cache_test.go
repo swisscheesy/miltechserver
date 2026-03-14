@@ -56,3 +56,17 @@ func TestIssueCache_GetReturnsCopy(t *testing.T) {
 	got2, _ := c.get()
 	require.Equal(t, "original.pdf", got2[0].Name)
 }
+
+func TestIssueCache_SetDoesNotAliasCallerSlice(t *testing.T) {
+	// Mutating the slice passed to set() must not corrupt the cache.
+	c := newIssueCache(5 * time.Minute)
+	issues := []PSMagIssueResponse{{Name: "original.pdf"}}
+	c.set(issues)
+
+	// Mutate the original slice after set.
+	issues[0].Name = "mutated.pdf"
+
+	got, ok := c.get()
+	require.True(t, ok)
+	require.Equal(t, "original.pdf", got[0].Name)
+}
