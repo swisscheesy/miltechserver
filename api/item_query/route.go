@@ -7,6 +7,7 @@ import (
 
 	"miltechserver/api/analytics"
 	"miltechserver/api/item_query/detailed"
+	"miltechserver/api/item_query/help"
 	"miltechserver/api/item_query/short"
 )
 
@@ -24,4 +25,8 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	detailedRepo := detailed.NewRepository(deps.DB)
 	detailedService := detailed.NewService(detailedRepo)
 	detailed.RegisterRoutes(router, detailedService)
+
+	helpRepo := help.NewRepository(deps.DB)
+	helpService := help.NewService(helpRepo)
+	help.RegisterRoutes(router, helpService)
 }
