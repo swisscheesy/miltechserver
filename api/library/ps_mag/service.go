@@ -5,6 +5,7 @@ import "context"
 // Service provides methods for accessing PS Magazine issues from Azure Blob Storage.
 type Service interface {
 	// ListIssues returns a paginated, optionally filtered list of PS Magazine issues.
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
 	// page is 1-indexed. order must be "asc" or "desc".
 	// year and issueNumber are optional — pass nil to skip the filter.
 	ListIssues(ctx context.Context, page int, order string, year *int, issueNumber *int) (*PSMagIssuesResponse, error)
