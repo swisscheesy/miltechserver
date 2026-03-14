@@ -3,6 +3,7 @@ package ps_mag
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // RepositoryImpl implements Repository using a PostgreSQL database.
@@ -15,11 +16,21 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
+// escapeLIKEPattern escapes special LIKE/ILIKE metacharacters %, _, and \ in s
+// so they are treated as literals. Uses \ as the escape character, which is the
+// PostgreSQL default for LIKE patterns.
+func escapeLIKEPattern(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "%", `\%`)
+	s = strings.ReplaceAll(s, "_", `\_`)
+	return s
+}
+
 // SearchSummaries returns rows from ps_mag_summaries whose summary contains
 // phrase (ILIKE, case-insensitive), paginated by page/pageSize.
 // Also returns the total count of matching rows for pagination metadata.
 func (r *RepositoryImpl) SearchSummaries(phrase string, page, pageSize int) ([]summaryRow, int, error) {
-	pattern := "%" + phrase + "%"
+	pattern := "%" + escapeLIKEPattern(phrase) + "%"
 	offset := (page - 1) * pageSize
 
 	var total int

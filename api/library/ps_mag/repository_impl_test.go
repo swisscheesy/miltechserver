@@ -53,3 +53,23 @@ func TestRepositorySearchSummaries_PageTwo(t *testing.T) {
 	_, _, err := repo.SearchSummaries("the", 2, 1)
 	require.NoError(t, err)
 }
+
+func TestEscapeLIKEPattern(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"oil", "oil"},
+		{"100%", `100\%`},
+		{"_bolt", `\_bolt`},
+		{"100% oil_level", `100\% oil\_level`},
+		{`back\slash`, `back\\slash`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got := escapeLIKEPattern(tc.input)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
