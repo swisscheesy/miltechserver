@@ -33,11 +33,13 @@ func (s *ServiceImpl) CreateSuggestion(user *bootstrap.User, title, description 
 		return nil, ErrInvalidDescription
 	}
 
+	showFalse := false
 	suggestion := model.UserSuggestions{
 		UserID:      user.UserID,
 		Title:       trimmedTitle,
 		Description: trimmedDesc,
 		Status:      "Submitted",
+		Show:        &showFalse,
 	}
 
 	created, err := s.repo.Create(suggestion)

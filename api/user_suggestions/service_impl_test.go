@@ -27,12 +27,13 @@ type mockRepository struct {
 	deleteVoteErr    error
 
 	// Capture calls
-	capturedVoterID      string
-	capturedSuggestionID uuid.UUID
-	capturedDirection    int16
-	capturedDeleteID     uuid.UUID
-	upsertVoteCalled     bool
-	deleteVoteCalled     bool
+	capturedVoterID          string
+	capturedSuggestionID     uuid.UUID
+	capturedDirection        int16
+	capturedDeleteID         uuid.UUID
+	capturedCreateSuggestion model.UserSuggestions
+	upsertVoteCalled         bool
+	deleteVoteCalled         bool
 }
 
 func (m *mockRepository) GetAllWithScores(voterID string) ([]SuggestionWithScore, error) {
@@ -45,6 +46,7 @@ func (m *mockRepository) GetByID(id uuid.UUID) (*model.UserSuggestions, error) {
 }
 
 func (m *mockRepository) Create(suggestion model.UserSuggestions) (*model.UserSuggestions, error) {
+	m.capturedCreateSuggestion = suggestion
 	if m.created != nil {
 		return m.created, m.createErr
 	}
@@ -493,6 +495,17 @@ func TestVote_TogglesOff_WhenExistingVoteOppositeDirection(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called when switching direction")
 	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when switching direction")
+}
+
+func TestCreateSuggestion_SetsShowFalse(t *testing.T) {
+	repo := &mockRepository{}
+	svc := NewService(repo)
+	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
+
+	_, err := svc.CreateSuggestion(user, "My Feature", "A great feature")
+	require.NoError(t, err)
+	require.NotNil(t, repo.capturedCreateSuggestion.Show, "Show must be explicitly set, not nil")
+	require.False(t, *repo.capturedCreateSuggestion.Show, "newly created suggestions must have show=false")
 }
 
 func TestVote_TogglesOff_WhenExistingDownvoteAndUpvoteRequested(t *testing.T) {

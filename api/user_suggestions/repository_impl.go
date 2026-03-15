@@ -33,6 +33,7 @@ func (r *RepositoryImpl) GetAllWithScores(voterID string) ([]SuggestionWithScore
 		LEFT JOIN users u ON s.user_id = u.uid
 		LEFT JOIN user_suggestion_votes v ON s.id = v.suggestion_id
 		LEFT JOIN user_suggestion_votes uv ON s.id = uv.suggestion_id AND uv.voter_id = $1
+		WHERE s.show IS TRUE
 		GROUP BY s.id, s.user_id, s.title, s.description, s.status,
 		         s.created_at, s.updated_at, u.username, uv.direction
 		ORDER BY score DESC, s.created_at DESC
