@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"miltechserver/api/analytics"
 )
 
 func TestParseIssueFilename(t *testing.T) {
@@ -165,7 +167,7 @@ func TestPaginateIssuesEmpty(t *testing.T) {
 }
 
 func TestGenerateDownloadURLValidation(t *testing.T) {
-	svc := NewService(nil, nil)
+	svc := NewService(nil, nil, nil)
 
 	_, err := svc.GenerateDownloadURL(context.Background(), "")
 	require.ErrorIs(t, err, ErrEmptyBlobPath)
@@ -330,4 +332,56 @@ func TestListIssues_UsesCacheOnSecondCall(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.TotalCount)
 	require.Equal(t, "PS_Magazine_Issue_1_January_1951.pdf", result.Issues[0].Name)
+}
+
+// analyticsStub satisfies analytics.Service for ps_mag unit testing.
+type analyticsStub struct {
+	capturedFilename string
+	err              error
+}
+
+func (a *analyticsStub) IncrementItemSearchSuccess(_, _ string) error  { return nil }
+func (a *analyticsStub) IncrementPMCSManualDownload(_, _ string) error { return nil }
+func (a *analyticsStub) IncrementCounter(_, _, _ string) error         { return nil }
+func (a *analyticsStub) IncrementPSMagDownload(filename string) error {
+	a.capturedFilename = filename
+	return a.err
+}
+
+// Compile-time check: analyticsStub must satisfy analytics.Service.
+var _ analytics.Service = (*analyticsStub)(nil)
+
+func TestTrackPSMagDownload_CallsAnalytics(t *testing.T) {
+	stub := &analyticsStub{}
+	svc := &ServiceImpl{
+		analytics: stub,
+		cache:     newIssueCache(5 * time.Minute),
+	}
+
+	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+
+	require.NoError(t, err)
+	require.Equal(t, "PS_Magazine_Issue_004_September_1951.pdf", stub.capturedFilename)
+}
+
+func TestTrackPSMagDownload_NilAnalytics(t *testing.T) {
+	svc := &ServiceImpl{cache: newIssueCache(5 * time.Minute)}
+
+	// Must not panic when analytics is nil.
+	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+
+	require.NoError(t, err)
+}
+
+func TestTrackPSMagDownload_AnalyticsReturnsError(t *testing.T) {
+	stub := &analyticsStub{err: errors.New("db down")}
+	svc := &ServiceImpl{
+		analytics: stub,
+		cache:     newIssueCache(5 * time.Minute),
+	}
+
+	// trackPSMagDownload surfaces the error so GenerateDownloadURL can log it.
+	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+
+	require.Error(t, err)
 }

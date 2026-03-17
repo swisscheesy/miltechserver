@@ -11,6 +11,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 
+	"miltechserver/api/analytics"
 	"miltechserver/api/middleware"
 	"miltechserver/api/response"
 )
@@ -22,8 +23,8 @@ type Handler struct {
 
 // RegisterHandlers wires ps_mag routes into the public router group.
 // Called from api/library/route.go.
-func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client, db *sql.DB) {
-	svc := NewService(blobClient, db)
+func RegisterHandlers(publicGroup *gin.RouterGroup, blobClient *azblob.Client, db *sql.DB, analyticsService analytics.Service) {
+	svc := NewService(blobClient, db, analyticsService)
 	registerHandlers(publicGroup, svc)
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 
+	"miltechserver/api/analytics"
 	"miltechserver/api/library/shared"
 )
 
@@ -31,15 +32,17 @@ type ServiceImpl struct {
 	blobClient *azblob.Client
 	repo       Repository
 	cache      *issueCache
+	analytics  analytics.Service
 }
 
 // NewService creates a Service backed by blobClient for blob operations and
 // db for summary search queries.
-func NewService(blobClient *azblob.Client, db *sql.DB) Service {
+func NewService(blobClient *azblob.Client, db *sql.DB, analyticsService analytics.Service) Service {
 	return &ServiceImpl{
 		blobClient: blobClient,
 		repo:       NewRepository(db),
 		cache:      newIssueCache(10 * time.Minute),
+		analytics:  analyticsService,
 	}
 }
 
@@ -298,9 +301,29 @@ func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) 
 		"blobPath", blobPath,
 		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
+	if trackErr := s.trackPSMagDownload(blobPath); trackErr != nil {
+		slog.Warn("Failed to track PS Mag download analytics",
+			"blobPath", blobPath,
+			"error", trackErr)
+	}
+
 	return &DownloadURLResponse{
 		BlobPath:    blobPath,
 		DownloadURL: sasResult.URL,
 		ExpiresAt:   sasResult.ExpiresAt.Format(time.RFC3339),
 	}, nil
+}
+
+// trackPSMagDownload extracts the filename from blobPath and records a download
+// event via the analytics service. It is a no-op when analytics is nil.
+func (s *ServiceImpl) trackPSMagDownload(blobPath string) error {
+	if s.analytics == nil {
+		return nil
+	}
+	parts := strings.Split(blobPath, "/")
+	filename := parts[len(parts)-1]
+	if strings.TrimSpace(filename) == "" {
+		return nil
+	}
+	return s.analytics.IncrementPSMagDownload(filename)
 }
