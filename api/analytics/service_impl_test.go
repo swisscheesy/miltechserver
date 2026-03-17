@@ -44,6 +44,11 @@ func TestFormatPSMagLabel(t *testing.T) {
 			want:  "",
 		},
 		{
+			name:  "whitespace only",
+			input: "   ",
+			want:  "",
+		},
+		{
 			name:  "filename without extension",
 			input: "PS_Magazine_Issue_001_January_1951",
 			want:  "Issue 001 January 1951",
@@ -76,6 +81,16 @@ func TestIncrementPSMagDownload_EmptyFilename(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Empty(t, repo.capturedEventType) // repo must not be called for empty input
+}
+
+func TestIncrementPSMagDownload_WhitespaceOnlyFilename(t *testing.T) {
+	repo := &repoStub{}
+	svc := NewService(repo)
+
+	err := svc.IncrementPSMagDownload("   ")
+
+	require.NoError(t, err)
+	require.Empty(t, repo.capturedEventType) // repo must not be called for whitespace-only input
 }
 
 func TestIncrementPSMagDownload_RepoError(t *testing.T) {
