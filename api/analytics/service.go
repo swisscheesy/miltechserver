@@ -5,6 +5,7 @@ import "database/sql"
 type Service interface {
 	IncrementItemSearchSuccess(niin string, nomenclature string) error
 	IncrementPMCSManualDownload(entityKey string, entityLabel string) error
+	IncrementPSMagDownload(filename string) error
 	IncrementCounter(eventType string, entityKey string, entityLabel string) error
 }
 

@@ -5,6 +5,7 @@ import "strings"
 const (
 	analyticsEventItemSearchSuccess  = "item_search_success"
 	analyticsEventPMCSManualDownload = "pmcs_manual_download"
+	analyticsEventPSMagDownload      = "ps_mag_download"
 )
 
 type ServiceImpl struct {
@@ -48,6 +49,29 @@ func normalizeAnalyticsKey(value string) string {
 		return ""
 	}
 	return strings.ToUpper(trimmed)
+}
+
+// formatPSMagLabel derives a human-readable label from a PS Magazine filename.
+// Example: "PS_Magazine_Issue_004_September_1951.pdf" → "Issue 004 September 1951"
+func formatPSMagLabel(filename string) string {
+	label := strings.TrimPrefix(filename, "PS_Magazine_")
+	if idx := strings.LastIndex(label, "."); idx != -1 {
+		label = label[:idx]
+	}
+	label = strings.ReplaceAll(label, "_", " ")
+	return strings.TrimSpace(label)
+}
+
+func (service *ServiceImpl) IncrementPSMagDownload(filename string) error {
+	normalizedKey := normalizeAnalyticsKey(filename)
+	if normalizedKey == "" {
+		return nil
+	}
+	label := normalizeAnalyticsKey(formatPSMagLabel(filename))
+	if label == "" {
+		label = normalizedKey
+	}
+	return service.IncrementCounter(analyticsEventPSMagDownload, normalizedKey, label)
 }
 
 func sanitizePMCSKey(value string) string {
