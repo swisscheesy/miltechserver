@@ -62,6 +62,10 @@ func formatPSMagLabel(filename string) string {
 	return strings.TrimSpace(label)
 }
 
+// IncrementPSMagDownload records a PS Magazine download event for the given
+// filename. The raw filename is uppercased and used as the entity key; the
+// entity label is derived by stripping the "PS_Magazine_" prefix and file
+// extension, replacing underscores with spaces, and uppercasing the result.
 func (service *ServiceImpl) IncrementPSMagDownload(filename string) error {
 	normalizedKey := normalizeAnalyticsKey(filename)
 	if normalizedKey == "" {
