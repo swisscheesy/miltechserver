@@ -373,6 +373,19 @@ func TestTrackPSMagDownload_NilAnalytics(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestTrackPSMagDownload_EmptyFilename(t *testing.T) {
+	stub := &analyticsStub{}
+	svc := &ServiceImpl{
+		analytics: stub,
+		cache:     newIssueCache(5 * time.Minute),
+	}
+
+	err := svc.trackPSMagDownload("ps-mag/")
+
+	require.NoError(t, err)
+	require.Empty(t, stub.capturedFilename) // analytics must not be called for empty filename
+}
+
 func TestTrackPSMagDownload_AnalyticsReturnsError(t *testing.T) {
 	stub := &analyticsStub{err: errors.New("db down")}
 	svc := &ServiceImpl{
