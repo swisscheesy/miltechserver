@@ -100,6 +100,9 @@ func TestMessageParentIDInGetMessages(t *testing.T) {
 			require.Equal(t, parentID, msg["parent_id"], "reply message should have parent_id set")
 			foundReply = true
 		}
+		if msg["message"] == "Parent message" {
+			require.Nil(t, msg["parent_id"], "top-level message should have nil parent_id")
+		}
 	}
 	require.True(t, foundReply, "reply message should be present in get response")
 }
