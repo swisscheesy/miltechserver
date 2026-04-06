@@ -36,8 +36,9 @@ func (handler *Handler) CreateShopMessage(c *gin.Context) {
 	}
 
 	message := model.ShopMessages{
-		ShopID:  req.ShopID,
-		Message: req.Message,
+		ShopID:   req.ShopID,
+		Message:  req.Message,
+		ParentID: req.ParentID,
 	}
 
 	service := handler.service
