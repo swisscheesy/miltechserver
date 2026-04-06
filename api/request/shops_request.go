@@ -28,8 +28,9 @@ type PromoteMemberRequest struct {
 }
 
 type CreateShopMessageRequest struct {
-	ShopID  string `json:"shop_id" binding:"required"`
-	Message string `json:"message" binding:"required"`
+	ShopID   string  `json:"shop_id" binding:"required"`
+	Message  string  `json:"message" binding:"required"`
+	ParentID *string `json:"parent_id"`
 }
 
 type UpdateShopMessageRequest struct {
