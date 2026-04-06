@@ -50,6 +50,7 @@ func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message mode
 		ShopMessages.CreatedAt,
 		ShopMessages.UpdatedAt,
 		ShopMessages.IsEdited,
+		ShopMessages.ParentID,
 	).MODEL(message).RETURNING(ShopMessages.AllColumns)
 
 	var createdMessage model.ShopMessages
