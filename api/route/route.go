@@ -84,6 +84,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	router.Static("/assets", "./static/assets")
 	router.StaticFile("/favicon.ico", "./static/favicon.ico")
 	router.StaticFile("/favicon.svg", "./static/favicon.svg")
+	router.StaticFile("/app-ads.txt", "./static/app-ads.txt")
 
 	// Explicitly serve the frontend at root path
 	router.GET("/", func(c *gin.Context) {
