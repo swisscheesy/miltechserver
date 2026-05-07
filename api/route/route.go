@@ -14,6 +14,7 @@ import (
 	"miltechserver/api/middleware"
 	"miltechserver/api/pol_products"
 	"miltechserver/api/quick_lists"
+	"miltechserver/api/tmde"
 	"miltechserver/api/user_general"
 	"miltechserver/api/user_saves"
 	"miltechserver/api/user_suggestions"
@@ -44,6 +45,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	quick_lists.RegisterRoutes(quick_lists.Dependencies{DB: db}, v1Route)
 	pol_products.RegisterRoutes(pol_products.Dependencies{DB: db}, v1Route)
 	eic.RegisterRoutes(eic.Dependencies{DB: db}, v1Route)
+	tmde.RegisterRoutes(tmde.Dependencies{DB: db}, v1Route)
 	docs_equipment.RegisterRoutes(docs_equipment.Dependencies{DB: db, BlobClient: blobClient}, v1Route)
 
 	// All Authenticated Routes
