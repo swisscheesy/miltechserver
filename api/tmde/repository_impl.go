@@ -52,6 +52,7 @@ func (r *repository) GetAllPaginated(page int) (TmdePageResponse, error) {
 	var items []model.TmdeRequirements
 	stmt := SELECT(table.TmdeRequirements.AllColumns).
 		FROM(table.TmdeRequirements).
+		ORDER_BY(table.TmdeRequirements.Niin.ASC()).
 		LIMIT(pageSize).
 		OFFSET(offset)
 
@@ -63,10 +64,14 @@ func (r *repository) GetAllPaginated(page int) (TmdePageResponse, error) {
 		return TmdePageResponse{}, ErrNotFound
 	}
 
-	var totalCount int
-	if err := r.db.QueryRow("SELECT COUNT(*) FROM tmde_requirements").Scan(&totalCount); err != nil {
+	var dest struct {
+		Count int64
+	}
+	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.TmdeRequirements)
+	if err := countStmt.Query(r.db, &dest); err != nil {
 		return TmdePageResponse{}, err
 	}
+	totalCount := int(dest.Count)
 
 	totalPages := int(math.Ceil(float64(totalCount) / float64(pageSize)))
 
