@@ -1,4 +1,3 @@
-// api/tmde/errors.go
 package tmde
 
 import "errors"

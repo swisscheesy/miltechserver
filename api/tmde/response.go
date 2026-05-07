@@ -1,4 +1,3 @@
-// api/tmde/response.go
 package tmde
 
 import "miltechserver/.gen/miltech_ng/public/model"
