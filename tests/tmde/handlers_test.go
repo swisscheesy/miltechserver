@@ -19,6 +19,11 @@ func TestTmdeBlankParams(t *testing.T) {
 
 	blankNiinResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/niin/%20%20")
 	require.Equal(t, http.StatusBadRequest, blankNiinResp.Code)
+	var niinErrBody struct {
+		Error string `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(blankNiinResp.Body.Bytes(), &niinErrBody))
+	require.NotEmpty(t, niinErrBody.Error)
 
 	invalidPageResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/requirements?page=bad")
 	require.Equal(t, http.StatusBadRequest, invalidPageResp.Code)
