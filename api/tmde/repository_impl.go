@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"miltechserver/.gen/miltech_ng/public/model"
-	"miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/.gen/miltech_ng/public/view"
 
 	. "github.com/go-jet/jet/v2/postgres"
 )
@@ -21,22 +21,22 @@ func NewRepository(db *sql.DB) Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) GetByNIIN(niin string) (model.TmdeRequirements, error) {
+func (r *repository) GetByNIIN(niin string) (model.TmdeIntervalMat, error) {
 	if strings.TrimSpace(niin) == "" {
-		return model.TmdeRequirements{}, ErrEmptyParam
+		return model.TmdeIntervalMat{}, ErrEmptyParam
 	}
 
-	var results []model.TmdeRequirements
-	stmt := SELECT(table.TmdeRequirements.AllColumns).
-		FROM(table.TmdeRequirements).
-		WHERE(table.TmdeRequirements.Niin.EQ(String(niin)))
+	var results []model.TmdeIntervalMat
+	stmt := SELECT(view.TmdeIntervalMat.AllColumns).
+		FROM(view.TmdeIntervalMat).
+		WHERE(view.TmdeIntervalMat.Niin.EQ(String(niin)))
 
 	if err := stmt.Query(r.db, &results); err != nil {
-		return model.TmdeRequirements{}, err
+		return model.TmdeIntervalMat{}, err
 	}
 
 	if len(results) == 0 {
-		return model.TmdeRequirements{}, ErrNotFound
+		return model.TmdeIntervalMat{}, ErrNotFound
 	}
 
 	return results[0], nil
@@ -49,10 +49,10 @@ func (r *repository) GetAllPaginated(page int) (TmdePageResponse, error) {
 
 	offset := pageSize * int64(page-1)
 
-	var items []model.TmdeRequirements
-	stmt := SELECT(table.TmdeRequirements.AllColumns).
-		FROM(table.TmdeRequirements).
-		ORDER_BY(table.TmdeRequirements.Niin.ASC()).
+	var items []model.TmdeIntervalMat
+	stmt := SELECT(view.TmdeIntervalMat.AllColumns).
+		FROM(view.TmdeIntervalMat).
+		ORDER_BY(view.TmdeIntervalMat.Niin.ASC()).
 		LIMIT(pageSize).
 		OFFSET(offset)
 
@@ -67,7 +67,7 @@ func (r *repository) GetAllPaginated(page int) (TmdePageResponse, error) {
 	var dest struct {
 		Count int64
 	}
-	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.TmdeRequirements)
+	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(view.TmdeIntervalMat)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return TmdePageResponse{}, err
 	}

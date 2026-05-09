@@ -14,7 +14,7 @@ func NewService(repo Repository) Service {
 	return &service{repository: repo}
 }
 
-func (s *service) LookupByNIIN(niin string) (model.TmdeRequirements, error) {
+func (s *service) LookupByNIIN(niin string) (model.TmdeIntervalMat, error) {
 	normalized := strings.TrimSpace(strings.ToUpper(niin))
 	return s.repository.GetByNIIN(normalized)
 }
