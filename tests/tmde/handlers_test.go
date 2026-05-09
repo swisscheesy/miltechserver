@@ -35,11 +35,11 @@ func TestTmdeBlankParams(t *testing.T) {
 func TestTmdeLookupByNIIN(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "tmde_requirements") {
-		t.Skip("tmde_requirements table missing in test DB")
+	if !hasRelation(t, testDB, "tmde_interval_mat") {
+		t.Skip("tmde_interval_mat view missing in test DB")
 	}
 
-	rowCount := countRows(t, testDB, "tmde_requirements")
+	rowCount := countRows(t, testDB, "tmde_interval_mat")
 	niinValue, ok := fetchTmdeSample(t, testDB)
 
 	if ok {
@@ -49,9 +49,10 @@ func TestTmdeLookupByNIIN(t *testing.T) {
 		var payload standardResponse
 		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
 
-		var data model.TmdeRequirements
+		var data model.TmdeIntervalMat
 		require.NoError(t, json.Unmarshal(payload.Data, &data))
-		require.Equal(t, niinValue, data.Niin)
+		require.NotNil(t, data.Niin)
+		require.Equal(t, niinValue, *data.Niin)
 	} else if rowCount == 0 {
 		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/niin/TEST")
 		require.Equal(t, http.StatusNotFound, resp.Code)
@@ -61,8 +62,8 @@ func TestTmdeLookupByNIIN(t *testing.T) {
 func TestTmdeNiinNotFound(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "tmde_requirements") {
-		t.Skip("tmde_requirements table missing in test DB")
+	if !hasRelation(t, testDB, "tmde_interval_mat") {
+		t.Skip("tmde_interval_mat view missing in test DB")
 	}
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/niin/000000000NOTREAL")
@@ -76,11 +77,11 @@ func TestTmdeNiinNotFound(t *testing.T) {
 func TestTmdeListPaginated(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "tmde_requirements") {
-		t.Skip("tmde_requirements table missing in test DB")
+	if !hasRelation(t, testDB, "tmde_interval_mat") {
+		t.Skip("tmde_interval_mat view missing in test DB")
 	}
 
-	rowCount := countRows(t, testDB, "tmde_requirements")
+	rowCount := countRows(t, testDB, "tmde_interval_mat")
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/requirements?page=1")
 
 	if rowCount == 0 {
@@ -106,11 +107,11 @@ func TestTmdeListPaginated(t *testing.T) {
 func TestTmdeListDefaultPage(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "tmde_requirements") {
-		t.Skip("tmde_requirements table missing in test DB")
+	if !hasRelation(t, testDB, "tmde_interval_mat") {
+		t.Skip("tmde_interval_mat view missing in test DB")
 	}
 
-	rowCount := countRows(t, testDB, "tmde_requirements")
+	rowCount := countRows(t, testDB, "tmde_interval_mat")
 
 	// omitting ?page should default to page 1
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/requirements")
@@ -124,8 +125,8 @@ func TestTmdeListDefaultPage(t *testing.T) {
 func TestTmdeListBeyondLastPage(t *testing.T) {
 	router := newTestRouter(t)
 
-	if !hasRelation(t, testDB, "tmde_requirements") {
-		t.Skip("tmde_requirements table missing in test DB")
+	if !hasRelation(t, testDB, "tmde_interval_mat") {
+		t.Skip("tmde_interval_mat view missing in test DB")
 	}
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/tmde/requirements?page=999999")
