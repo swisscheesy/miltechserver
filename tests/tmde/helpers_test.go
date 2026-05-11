@@ -64,11 +64,11 @@ func countRows(t *testing.T, db *sql.DB, relation string) int {
 
 func fetchTmdeSample(t *testing.T, db *sql.DB) (string, bool) {
 	t.Helper()
-	if !hasRelation(t, db, "tmde_requirements") {
+	if !hasRelation(t, db, "tmde_interval_mat") {
 		return "", false
 	}
 	var niin sql.NullString
-	err := db.QueryRow("SELECT niin FROM tmde_requirements LIMIT 1").Scan(&niin)
+	err := db.QueryRow("SELECT niin FROM tmde_interval_mat LIMIT 1").Scan(&niin)
 	if err == sql.ErrNoRows {
 		return "", false
 	}
