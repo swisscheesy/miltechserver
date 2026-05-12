@@ -22,6 +22,8 @@ func (h *Handler) listChp4(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -40,6 +42,8 @@ func (h *Handler) searchChp4(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -59,6 +63,8 @@ func (h *Handler) listChp6(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -77,6 +83,8 @@ func (h *Handler) searchChp6(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -96,6 +104,8 @@ func (h *Handler) listChp8(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -114,6 +124,8 @@ func (h *Handler) searchChp8(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}

@@ -22,6 +22,8 @@ func (h *Handler) listAppB(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -40,6 +42,8 @@ func (h *Handler) searchAppB(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -59,6 +63,8 @@ func (h *Handler) listAppC(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -77,6 +83,8 @@ func (h *Handler) searchAppC(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -96,6 +104,8 @@ func (h *Handler) listAppD(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -114,6 +124,8 @@ func (h *Handler) searchAppD(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -133,6 +145,8 @@ func (h *Handler) listAppE(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -151,6 +165,8 @@ func (h *Handler) searchAppE(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -170,6 +186,8 @@ func (h *Handler) listAppF(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -188,6 +206,8 @@ func (h *Handler) searchAppF(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -207,6 +227,8 @@ func (h *Handler) listAppG(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -225,6 +247,8 @@ func (h *Handler) searchAppG(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -244,6 +268,8 @@ func (h *Handler) listAppH1(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -262,6 +288,8 @@ func (h *Handler) searchAppH1(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -281,6 +309,8 @@ func (h *Handler) listAppH2(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -299,6 +329,8 @@ func (h *Handler) searchAppH2(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -318,6 +350,8 @@ func (h *Handler) listAppI(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -336,6 +370,8 @@ func (h *Handler) searchAppI(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -355,6 +391,8 @@ func (h *Handler) listAppJ(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrInvalidPage) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
@@ -373,6 +411,8 @@ func (h *Handler) searchAppJ(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
