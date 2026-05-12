@@ -69,10 +69,13 @@ func fetchSampleLIN(t *testing.T, db *sql.DB, tableName string) (string, bool) {
 	}
 	var lin sql.NullString
 	err := db.QueryRow("SELECT lin FROM " + tableName + " LIMIT 1").Scan(&lin)
-	if err == sql.ErrNoRows || !lin.Valid {
+	if err == sql.ErrNoRows {
 		return "", false
 	}
 	require.NoError(t, err)
+	if !lin.Valid {
+		return "", false
+	}
 	return lin.String, true
 }
 
@@ -83,9 +86,12 @@ func fetchSampleLinZmmLin(t *testing.T, db *sql.DB, tableName string) (string, b
 	}
 	var lin sql.NullString
 	err := db.QueryRow("SELECT lin_zmm_lin FROM " + tableName + " LIMIT 1").Scan(&lin)
-	if err == sql.ErrNoRows || !lin.Valid {
+	if err == sql.ErrNoRows {
 		return "", false
 	}
 	require.NoError(t, err)
+	if !lin.Valid {
+		return "", false
+	}
 	return lin.String, true
 }
