@@ -1,0 +1,32 @@
+package sb_700_20
+
+import "miltechserver/.gen/miltech_ng/public/model"
+
+type Repository interface {
+	GetAppBByLIN(lin string) ([]model.Sb70020AppB, error)
+	GetAppBPaginated(page int) (PageResponse[model.Sb70020AppB], error)
+	GetAppCByLIN(lin string) (model.Sb70020AppC, error)
+	GetAppCPaginated(page int) (PageResponse[model.Sb70020AppC], error)
+	GetAppDByLIN(lin string) ([]model.Sb70020AppD, error)
+	GetAppDPaginated(page int) (PageResponse[model.Sb70020AppD], error)
+	GetAppEByLIN(lin string) ([]model.Sb70020AppE, error)
+	GetAppEPaginated(page int) (PageResponse[model.Sb70020AppE], error)
+	GetAppFByLIN(lin string) (model.Sb70020AppF, error)
+	GetAppFPaginated(page int) (PageResponse[model.Sb70020AppF], error)
+	GetAppGByLIN(lin string) (model.Sb70020AppG, error)
+	GetAppGPaginated(page int) (PageResponse[model.Sb70020AppG], error)
+	GetAppH1ByLIN(lin string) ([]model.Sb70020AppH1, error)
+	GetAppH1Paginated(page int) (PageResponse[model.Sb70020AppH1], error)
+	GetAppH2ByLIN(lin string) ([]model.Sb70020AppH2, error)
+	GetAppH2Paginated(page int) (PageResponse[model.Sb70020AppH2], error)
+	GetAppIByLIN(lin string) (model.Sb70020AppI, error)
+	GetAppIPaginated(page int) (PageResponse[model.Sb70020AppI], error)
+	GetAppJByLIN(lin string) (model.Sb70020AppJ, error)
+	GetAppJPaginated(page int) (PageResponse[model.Sb70020AppJ], error)
+	GetChp4ByLIN(lin string) (model.Sb70020Chp4, error)
+	GetChp4Paginated(page int) (PageResponse[model.Sb70020Chp4], error)
+	GetChp6ByLIN(lin string) ([]model.Sb70020Chp6, error)
+	GetChp6Paginated(page int) (PageResponse[model.Sb70020Chp6], error)
+	GetChp8ByLIN(lin string) ([]model.Sb70020Chp8, error)
+	GetChp8Paginated(page int) (PageResponse[model.Sb70020Chp8], error)
+}
