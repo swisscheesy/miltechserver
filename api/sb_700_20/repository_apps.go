@@ -1,7 +1,6 @@
 package sb_700_20
 
 import (
-	"math"
 	"strings"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -11,7 +10,8 @@ import (
 )
 
 func (r *repository) GetAppBByLIN(lin string) ([]model.Sb70020AppB, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return nil, ErrEmptyParam
 	}
 	var results []model.Sb70020AppB
@@ -44,12 +44,14 @@ func (r *repository) GetAppBPaginated(page int) (PageResponse[model.Sb70020AppB]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppB]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppB)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppB]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppB]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -57,7 +59,8 @@ func (r *repository) GetAppBPaginated(page int) (PageResponse[model.Sb70020AppB]
 }
 
 func (r *repository) GetAppCByLIN(lin string) (model.Sb70020AppC, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return model.Sb70020AppC{}, ErrEmptyParam
 	}
 	var results []model.Sb70020AppC
@@ -90,12 +93,14 @@ func (r *repository) GetAppCPaginated(page int) (PageResponse[model.Sb70020AppC]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppC]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppC)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppC]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppC]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -103,7 +108,8 @@ func (r *repository) GetAppCPaginated(page int) (PageResponse[model.Sb70020AppC]
 }
 
 func (r *repository) GetAppDByLIN(lin string) ([]model.Sb70020AppD, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return nil, ErrEmptyParam
 	}
 	var results []model.Sb70020AppD
@@ -136,12 +142,14 @@ func (r *repository) GetAppDPaginated(page int) (PageResponse[model.Sb70020AppD]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppD]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppD)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppD]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppD]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -149,7 +157,8 @@ func (r *repository) GetAppDPaginated(page int) (PageResponse[model.Sb70020AppD]
 }
 
 func (r *repository) GetAppEByLIN(lin string) ([]model.Sb70020AppE, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return nil, ErrEmptyParam
 	}
 	var results []model.Sb70020AppE
@@ -182,12 +191,14 @@ func (r *repository) GetAppEPaginated(page int) (PageResponse[model.Sb70020AppE]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppE]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppE)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppE]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppE]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -195,7 +206,8 @@ func (r *repository) GetAppEPaginated(page int) (PageResponse[model.Sb70020AppE]
 }
 
 func (r *repository) GetAppFByLIN(lin string) (model.Sb70020AppF, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return model.Sb70020AppF{}, ErrEmptyParam
 	}
 	var results []model.Sb70020AppF
@@ -228,12 +240,14 @@ func (r *repository) GetAppFPaginated(page int) (PageResponse[model.Sb70020AppF]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppF]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppF)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppF]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppF]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -241,7 +255,8 @@ func (r *repository) GetAppFPaginated(page int) (PageResponse[model.Sb70020AppF]
 }
 
 func (r *repository) GetAppGByLIN(lin string) (model.Sb70020AppG, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return model.Sb70020AppG{}, ErrEmptyParam
 	}
 	var results []model.Sb70020AppG
@@ -274,12 +289,14 @@ func (r *repository) GetAppGPaginated(page int) (PageResponse[model.Sb70020AppG]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppG]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppG)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppG]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppG]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -288,7 +305,8 @@ func (r *repository) GetAppGPaginated(page int) (PageResponse[model.Sb70020AppG]
 
 // app_h1 and app_h2 search by lin_zmm_lin, not lin
 func (r *repository) GetAppH1ByLIN(lin string) ([]model.Sb70020AppH1, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return nil, ErrEmptyParam
 	}
 	var results []model.Sb70020AppH1
@@ -321,12 +339,14 @@ func (r *repository) GetAppH1Paginated(page int) (PageResponse[model.Sb70020AppH
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppH1]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppH1)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppH1]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppH1]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -334,7 +354,8 @@ func (r *repository) GetAppH1Paginated(page int) (PageResponse[model.Sb70020AppH
 }
 
 func (r *repository) GetAppH2ByLIN(lin string) ([]model.Sb70020AppH2, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return nil, ErrEmptyParam
 	}
 	var results []model.Sb70020AppH2
@@ -367,12 +388,14 @@ func (r *repository) GetAppH2Paginated(page int) (PageResponse[model.Sb70020AppH
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppH2]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppH2)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppH2]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppH2]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -380,7 +403,8 @@ func (r *repository) GetAppH2Paginated(page int) (PageResponse[model.Sb70020AppH
 }
 
 func (r *repository) GetAppIByLIN(lin string) (model.Sb70020AppI, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return model.Sb70020AppI{}, ErrEmptyParam
 	}
 	var results []model.Sb70020AppI
@@ -413,12 +437,14 @@ func (r *repository) GetAppIPaginated(page int) (PageResponse[model.Sb70020AppI]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppI]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppI)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppI]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppI]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
@@ -426,7 +452,8 @@ func (r *repository) GetAppIPaginated(page int) (PageResponse[model.Sb70020AppI]
 }
 
 func (r *repository) GetAppJByLIN(lin string) (model.Sb70020AppJ, error) {
-	if strings.TrimSpace(lin) == "" {
+	lin = strings.TrimSpace(lin)
+	if lin == "" {
 		return model.Sb70020AppJ{}, ErrEmptyParam
 	}
 	var results []model.Sb70020AppJ
@@ -459,12 +486,14 @@ func (r *repository) GetAppJPaginated(page int) (PageResponse[model.Sb70020AppJ]
 	if len(items) == 0 {
 		return PageResponse[model.Sb70020AppJ]{}, ErrNotFound
 	}
-	var dest struct{ Count int64 }
+	var dest struct {
+		Count int64 `sql:"count"`
+	}
 	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(table.Sb70020AppJ)
 	if err := countStmt.Query(r.db, &dest); err != nil {
 		return PageResponse[model.Sb70020AppJ]{}, err
 	}
-	totalPages := int(math.Ceil(float64(dest.Count) / float64(pageSize)))
+	totalPages := int((dest.Count + pageSize - 1) / pageSize)
 	return PageResponse[model.Sb70020AppJ]{
 		Items: items, Count: len(items), Page: page,
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
