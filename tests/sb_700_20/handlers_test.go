@@ -30,6 +30,13 @@ func TestBlankSearchParams(t *testing.T) {
 		"/api/v1/sb700-20/chp-4/search/%20%20",
 		"/api/v1/sb700-20/chp-6/search/%20%20",
 		"/api/v1/sb700-20/chp-8/search/%20%20",
+		"/api/v1/sb700-20/app-e/search-new-lin/%20%20",
+		"/api/v1/sb700-20/app-g/search-new-lin/%20%20",
+		"/api/v1/sb700-20/app-h1/search-sublin/%20%20",
+		"/api/v1/sb700-20/app-h2/search-sublin/%20%20",
+		"/api/v1/sb700-20/chp-4/search-ric/%20%20",
+		"/api/v1/sb700-20/chp-6/search-ric/%20%20",
+		"/api/v1/sb700-20/chp-8/search-ric/%20%20",
 	}
 	for _, ep := range endpoints {
 		resp := doJSONRequest(t, router, http.MethodGet, ep)
@@ -502,4 +509,123 @@ func TestInternalError(t *testing.T) {
 		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
 		require.Equal(t, http.StatusInternalServerError, payload.Status)
 	}
+}
+
+func TestAppEByNewLINEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_app_e") {
+		t.Skip("sb_700_20_app_e missing in test DB")
+	}
+	if val, ok := fetchSampleNewLIN(t, testDB, "sb_700_20_app_e"); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-e/search-new-lin/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020AppE
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-e/search-new-lin/NOTREAL999").Code)
+}
+
+func TestAppGByNewLINEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_app_g") {
+		t.Skip("sb_700_20_app_g missing in test DB")
+	}
+	if val, ok := fetchSampleNewLIN(t, testDB, "sb_700_20_app_g"); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-g/search-new-lin/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020AppG
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-g/search-new-lin/NOTREAL999").Code)
+}
+
+func TestAppH1BySubLINEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_app_h1") {
+		t.Skip("sb_700_20_app_h1 missing in test DB")
+	}
+	if val, ok := fetchSampleSubLINAppH1(t, testDB); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-h1/search-sublin/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020AppH1
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-h1/search-sublin/NOTREAL999").Code)
+}
+
+func TestAppH2BySubLINEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_app_h2") {
+		t.Skip("sb_700_20_app_h2 missing in test DB")
+	}
+	if val, ok := fetchSampleSubLINAppH2(t, testDB); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-h2/search-sublin/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020AppH2
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/app-h2/search-sublin/NOTREAL999").Code)
+}
+
+func TestChp4ByRICEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_chp_4") {
+		t.Skip("sb_700_20_chp_4 missing in test DB")
+	}
+	if val, ok := fetchSampleRIC(t, testDB, "sb_700_20_chp_4"); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-4/search-ric/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020Chp4
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-4/search-ric/NOTREAL999").Code)
+}
+
+func TestChp6ByRICEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_chp_6") {
+		t.Skip("sb_700_20_chp_6 missing in test DB")
+	}
+	if val, ok := fetchSampleRIC(t, testDB, "sb_700_20_chp_6"); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-6/search-ric/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020Chp6
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-6/search-ric/NOTREAL999").Code)
+}
+
+func TestChp8ByRICEndpoint(t *testing.T) {
+	router := newTestRouter(t)
+	if !hasRelation(t, testDB, "sb_700_20_chp_8") {
+		t.Skip("sb_700_20_chp_8 missing in test DB")
+	}
+	if val, ok := fetchSampleRIC(t, testDB, "sb_700_20_chp_8"); ok {
+		resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-8/search-ric/"+val)
+		require.Equal(t, http.StatusOK, resp.Code)
+		var payload standardResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &payload))
+		var data []model.Sb70020Chp8
+		require.NoError(t, json.Unmarshal(payload.Data, &data))
+		require.NotEmpty(t, data)
+	}
+	require.Equal(t, http.StatusNotFound, doJSONRequest(t, router, http.MethodGet, "/api/v1/sb700-20/chp-8/search-ric/NOTREAL999").Code)
 }

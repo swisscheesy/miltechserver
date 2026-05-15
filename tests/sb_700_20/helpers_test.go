@@ -95,3 +95,76 @@ func fetchSampleLinZmmLin(t *testing.T, db *sql.DB, tableName string) (string, b
 	}
 	return lin.String, true
 }
+
+func fetchSampleNewLIN(t *testing.T, db *sql.DB, tableName string) (string, bool) {
+	t.Helper()
+	if !hasRelation(t, db, tableName) {
+		return "", false
+	}
+	var val sql.NullString
+	// Exclude values containing URL-special characters (e.g. '#') that cannot
+	// be safely embedded in a path segment without percent-encoding.
+	err := db.QueryRow(
+		"SELECT new_lin FROM "+tableName+
+			" WHERE new_lin IS NOT NULL AND new_lin ~ '^[A-Za-z0-9_=-]+$' LIMIT 1",
+	).Scan(&val)
+	if err == sql.ErrNoRows {
+		return "", false
+	}
+	require.NoError(t, err)
+	if !val.Valid {
+		return "", false
+	}
+	return val.String, true
+}
+
+func fetchSampleSubLINAppH1(t *testing.T, db *sql.DB) (string, bool) {
+	t.Helper()
+	if !hasRelation(t, db, "sb_700_20_app_h1") {
+		return "", false
+	}
+	var val sql.NullString
+	err := db.QueryRow("SELECT lin_zmm_sublin FROM sb_700_20_app_h1 LIMIT 1").Scan(&val)
+	if err == sql.ErrNoRows {
+		return "", false
+	}
+	require.NoError(t, err)
+	if !val.Valid {
+		return "", false
+	}
+	return val.String, true
+}
+
+func fetchSampleSubLINAppH2(t *testing.T, db *sql.DB) (string, bool) {
+	t.Helper()
+	if !hasRelation(t, db, "sb_700_20_app_h2") {
+		return "", false
+	}
+	var val sql.NullString
+	err := db.QueryRow("SELECT lin_zmmsublin FROM sb_700_20_app_h2 LIMIT 1").Scan(&val)
+	if err == sql.ErrNoRows {
+		return "", false
+	}
+	require.NoError(t, err)
+	if !val.Valid {
+		return "", false
+	}
+	return val.String, true
+}
+
+func fetchSampleRIC(t *testing.T, db *sql.DB, tableName string) (string, bool) {
+	t.Helper()
+	if !hasRelation(t, db, tableName) {
+		return "", false
+	}
+	var val sql.NullString
+	err := db.QueryRow("SELECT ric FROM " + tableName + " WHERE ric IS NOT NULL LIMIT 1").Scan(&val)
+	if err == sql.ErrNoRows {
+		return "", false
+	}
+	require.NoError(t, err)
+	if !val.Valid {
+		return "", false
+	}
+	return val.String, true
+}

@@ -44,6 +44,13 @@ func TestRepositoryValidationErrors(t *testing.T) {
 		{"GetChp6Paginated zero", func() error { _, err := repo.GetChp6Paginated(0); return err }},
 		{"GetChp8ByLIN blank", func() error { _, err := repo.GetChp8ByLIN("  "); return err }},
 		{"GetChp8Paginated zero", func() error { _, err := repo.GetChp8Paginated(0); return err }},
+		{"GetAppEByNewLIN blank", func() error { _, err := repo.GetAppEByNewLIN("  "); return err }},
+		{"GetAppGByNewLIN blank", func() error { _, err := repo.GetAppGByNewLIN("  "); return err }},
+		{"GetAppH1BySubLIN blank", func() error { _, err := repo.GetAppH1BySubLIN("  "); return err }},
+		{"GetAppH2BySubLIN blank", func() error { _, err := repo.GetAppH2BySubLIN("  "); return err }},
+		{"GetChp4ByRIC blank", func() error { _, err := repo.GetChp4ByRIC("  "); return err }},
+		{"GetChp6ByRIC blank", func() error { _, err := repo.GetChp6ByRIC("  "); return err }},
+		{"GetChp8ByRIC blank", func() error { _, err := repo.GetChp8ByRIC("  "); return err }},
 	}
 
 	for _, tc := range cases {
