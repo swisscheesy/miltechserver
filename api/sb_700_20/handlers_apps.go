@@ -420,3 +420,83 @@ func (h *Handler) searchAppJ(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: item})
 }
+
+func (h *Handler) searchAppEByNewLIN(c *gin.Context) {
+	newLin := c.Param("new_lin")
+	if strings.TrimSpace(newLin) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_lin parameter is required"})
+		return
+	}
+	items, err := h.service.GetAppEByNewLIN(newLin)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "new_lin parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}
+
+func (h *Handler) searchAppGByNewLIN(c *gin.Context) {
+	newLin := c.Param("new_lin")
+	if strings.TrimSpace(newLin) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "new_lin parameter is required"})
+		return
+	}
+	items, err := h.service.GetAppGByNewLIN(newLin)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "new_lin parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}
+
+func (h *Handler) searchAppH1BySubLIN(c *gin.Context) {
+	sublin := c.Param("sublin")
+	if strings.TrimSpace(sublin) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sublin parameter is required"})
+		return
+	}
+	items, err := h.service.GetAppH1BySubLIN(sublin)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sublin parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}
+
+func (h *Handler) searchAppH2BySubLIN(c *gin.Context) {
+	sublin := c.Param("sublin")
+	if strings.TrimSpace(sublin) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "sublin parameter is required"})
+		return
+	}
+	items, err := h.service.GetAppH2BySubLIN(sublin)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "sublin parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}

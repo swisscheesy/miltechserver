@@ -133,3 +133,63 @@ func (h *Handler) searchChp8(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
 }
+
+func (h *Handler) searchChp4ByRIC(c *gin.Context) {
+	ric := c.Param("ric")
+	if strings.TrimSpace(ric) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		return
+	}
+	items, err := h.service.GetChp4ByRIC(ric)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}
+
+func (h *Handler) searchChp6ByRIC(c *gin.Context) {
+	ric := c.Param("ric")
+	if strings.TrimSpace(ric) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		return
+	}
+	items, err := h.service.GetChp6ByRIC(ric)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}
+
+func (h *Handler) searchChp8ByRIC(c *gin.Context) {
+	ric := c.Param("ric")
+	if strings.TrimSpace(ric) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		return
+	}
+	items, err := h.service.GetChp8ByRIC(ric)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
+		} else if errors.Is(err, ErrEmptyParam) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		} else {
+			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+		}
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+}

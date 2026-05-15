@@ -155,3 +155,57 @@ func (r *repository) GetChp8Paginated(page int) (PageResponse[model.Sb70020Chp8]
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
 	}, nil
 }
+
+func (r *repository) GetChp4ByRIC(ric string) ([]model.Sb70020Chp4, error) {
+	ric = strings.TrimSpace(ric)
+	if ric == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020Chp4
+	stmt := SELECT(table.Sb70020Chp4.AllColumns).
+		FROM(table.Sb70020Chp4).
+		WHERE(table.Sb70020Chp4.Ric.EQ(String(ric)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (r *repository) GetChp6ByRIC(ric string) ([]model.Sb70020Chp6, error) {
+	ric = strings.TrimSpace(ric)
+	if ric == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020Chp6
+	stmt := SELECT(table.Sb70020Chp6.AllColumns).
+		FROM(table.Sb70020Chp6).
+		WHERE(table.Sb70020Chp6.Ric.EQ(String(ric)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (r *repository) GetChp8ByRIC(ric string) ([]model.Sb70020Chp8, error) {
+	ric = strings.TrimSpace(ric)
+	if ric == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020Chp8
+	stmt := SELECT(table.Sb70020Chp8.AllColumns).
+		FROM(table.Sb70020Chp8).
+		WHERE(table.Sb70020Chp8.Ric.EQ(String(ric)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}

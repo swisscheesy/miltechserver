@@ -29,4 +29,11 @@ type Service interface {
 	GetChp6Paginated(page int) (PageResponse[model.Sb70020Chp6], error)
 	GetChp8ByLIN(lin string) ([]model.Sb70020Chp8, error)
 	GetChp8Paginated(page int) (PageResponse[model.Sb70020Chp8], error)
+	GetAppEByNewLIN(newLin string) ([]model.Sb70020AppE, error)
+	GetAppGByNewLIN(newLin string) ([]model.Sb70020AppG, error)
+	GetAppH1BySubLIN(sublin string) ([]model.Sb70020AppH1, error)
+	GetAppH2BySubLIN(sublin string) ([]model.Sb70020AppH2, error)
+	GetChp4ByRIC(ric string) ([]model.Sb70020Chp4, error)
+	GetChp6ByRIC(ric string) ([]model.Sb70020Chp6, error)
+	GetChp8ByRIC(ric string) ([]model.Sb70020Chp8, error)
 }

@@ -92,3 +92,24 @@ func (s *service) GetChp8ByLIN(lin string) ([]model.Sb70020Chp8, error) {
 func (s *service) GetChp8Paginated(page int) (PageResponse[model.Sb70020Chp8], error) {
 	return s.repository.GetChp8Paginated(page)
 }
+func (s *service) GetAppEByNewLIN(newLin string) ([]model.Sb70020AppE, error) {
+	return s.repository.GetAppEByNewLIN(strings.TrimSpace(strings.ToUpper(newLin)))
+}
+func (s *service) GetAppGByNewLIN(newLin string) ([]model.Sb70020AppG, error) {
+	return s.repository.GetAppGByNewLIN(strings.TrimSpace(strings.ToUpper(newLin)))
+}
+func (s *service) GetAppH1BySubLIN(sublin string) ([]model.Sb70020AppH1, error) {
+	return s.repository.GetAppH1BySubLIN(strings.TrimSpace(strings.ToUpper(sublin)))
+}
+func (s *service) GetAppH2BySubLIN(sublin string) ([]model.Sb70020AppH2, error) {
+	return s.repository.GetAppH2BySubLIN(strings.TrimSpace(strings.ToUpper(sublin)))
+}
+func (s *service) GetChp4ByRIC(ric string) ([]model.Sb70020Chp4, error) {
+	return s.repository.GetChp4ByRIC(strings.TrimSpace(strings.ToUpper(ric)))
+}
+func (s *service) GetChp6ByRIC(ric string) ([]model.Sb70020Chp6, error) {
+	return s.repository.GetChp6ByRIC(strings.TrimSpace(strings.ToUpper(ric)))
+}
+func (s *service) GetChp8ByRIC(ric string) ([]model.Sb70020Chp8, error) {
+	return s.repository.GetChp8ByRIC(strings.TrimSpace(strings.ToUpper(ric)))
+}

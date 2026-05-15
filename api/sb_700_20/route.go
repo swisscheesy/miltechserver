@@ -48,4 +48,11 @@ func RegisterHandlers(router *gin.RouterGroup, svc Service) {
 	router.GET("/sb700-20/chp-6/search/:lin", h.searchChp6)
 	router.GET("/sb700-20/chp-8/list", h.listChp8)
 	router.GET("/sb700-20/chp-8/search/:lin", h.searchChp8)
+	router.GET("/sb700-20/app-e/search-new-lin/:new_lin", h.searchAppEByNewLIN)
+	router.GET("/sb700-20/app-g/search-new-lin/:new_lin", h.searchAppGByNewLIN)
+	router.GET("/sb700-20/app-h1/search-sublin/:sublin", h.searchAppH1BySubLIN)
+	router.GET("/sb700-20/app-h2/search-sublin/:sublin", h.searchAppH2BySubLIN)
+	router.GET("/sb700-20/chp-4/search-ric/:ric", h.searchChp4ByRIC)
+	router.GET("/sb700-20/chp-6/search-ric/:ric", h.searchChp6ByRIC)
+	router.GET("/sb700-20/chp-8/search-ric/:ric", h.searchChp8ByRIC)
 }

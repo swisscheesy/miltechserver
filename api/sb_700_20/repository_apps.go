@@ -499,3 +499,75 @@ func (r *repository) GetAppJPaginated(page int) (PageResponse[model.Sb70020AppJ]
 		TotalPages: totalPages, IsLastPage: page >= totalPages,
 	}, nil
 }
+
+func (r *repository) GetAppEByNewLIN(newLin string) ([]model.Sb70020AppE, error) {
+	newLin = strings.TrimSpace(newLin)
+	if newLin == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020AppE
+	stmt := SELECT(table.Sb70020AppE.AllColumns).
+		FROM(table.Sb70020AppE).
+		WHERE(table.Sb70020AppE.NewLin.EQ(String(newLin)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (r *repository) GetAppGByNewLIN(newLin string) ([]model.Sb70020AppG, error) {
+	newLin = strings.TrimSpace(newLin)
+	if newLin == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020AppG
+	stmt := SELECT(table.Sb70020AppG.AllColumns).
+		FROM(table.Sb70020AppG).
+		WHERE(table.Sb70020AppG.NewLin.EQ(String(newLin)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (r *repository) GetAppH1BySubLIN(sublin string) ([]model.Sb70020AppH1, error) {
+	sublin = strings.TrimSpace(sublin)
+	if sublin == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020AppH1
+	stmt := SELECT(table.Sb70020AppH1.AllColumns).
+		FROM(table.Sb70020AppH1).
+		WHERE(table.Sb70020AppH1.LinZmmSublin.EQ(String(sublin)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
+
+func (r *repository) GetAppH2BySubLIN(sublin string) ([]model.Sb70020AppH2, error) {
+	sublin = strings.TrimSpace(sublin)
+	if sublin == "" {
+		return nil, ErrEmptyParam
+	}
+	var results []model.Sb70020AppH2
+	stmt := SELECT(table.Sb70020AppH2.AllColumns).
+		FROM(table.Sb70020AppH2).
+		WHERE(table.Sb70020AppH2.LinZmmsublin.EQ(String(sublin)))
+	if err := stmt.Query(r.db, &results); err != nil {
+		return nil, err
+	}
+	if len(results) == 0 {
+		return nil, ErrNotFound
+	}
+	return results, nil
+}
