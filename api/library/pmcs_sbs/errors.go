@@ -11,4 +11,5 @@ var (
 	ErrBlobListFailed  = errors.New("failed to list blobs")
 	ErrBlobReadFailed  = errors.New("failed to read blob content")
 	ErrInvalidJSON     = errors.New("blob content is not valid JSON")
+	ErrBlobTooLarge    = errors.New("blob content exceeds maximum allowed size")
 )

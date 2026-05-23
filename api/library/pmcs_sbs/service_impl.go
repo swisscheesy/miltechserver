@@ -17,6 +17,7 @@ import (
 const (
 	LibraryContainerName = "library"
 	PMCSSBSPrefix        = "pmcs_sbs/"
+	maxBlobBytes         = 10 << 20 // 10 MB
 )
 
 // ServiceImpl holds the Azure blob client for all blob operations.
@@ -82,6 +83,9 @@ func (s *ServiceImpl) GetFolders(ctx context.Context) (*FoldersListResponse, err
 func (s *ServiceImpl) GetFiles(ctx context.Context, folderName string) (*FilesListResponse, error) {
 	if strings.TrimSpace(folderName) == "" {
 		return nil, ErrEmptyFolderName
+	}
+	if strings.ContainsAny(folderName, "./\\") {
+		return nil, ErrInvalidBlobPath
 	}
 
 	folderPrefix := fmt.Sprintf("%s%s/", PMCSSBSPrefix, folderName)
@@ -172,7 +176,11 @@ func (s *ServiceImpl) GetFileContent(ctx context.Context, blobPath string) (json
 	}
 	defer downloadResponse.Body.Close()
 
-	data, err := io.ReadAll(downloadResponse.Body)
+	data, err := io.ReadAll(io.LimitReader(downloadResponse.Body, maxBlobBytes+1))
+	if err == nil && len(data) > maxBlobBytes {
+		slog.Error("PMCS SBS blob exceeds maximum size", "blobPath", blobPath, "size", len(data))
+		return nil, ErrBlobTooLarge
+	}
 	if err != nil {
 		slog.Error("Failed to read PMCS SBS file content", "error", err, "blobPath", blobPath)
 		return nil, fmt.Errorf("%w: %v", ErrBlobReadFailed, err)
@@ -203,8 +211,5 @@ func formatDisplayName(name string) string {
 // Example: "pmcs_sbs/hmmwv/file.json" -> "file.json"
 func extractFileName(blobPath string) string {
 	parts := strings.Split(blobPath, "/")
-	if len(parts) == 0 {
-		return blobPath
-	}
 	return parts[len(parts)-1]
 }
