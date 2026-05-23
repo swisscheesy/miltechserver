@@ -65,8 +65,7 @@ func (handler *Handler) getPMCSVehicles(c *gin.Context) {
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS vehicles", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve PMCS vehicles",
-			"details": err.Error(),
+			"error": "Failed to retrieve PMCS vehicles",
 		})
 		return
 	}
@@ -96,8 +95,7 @@ func (handler *Handler) getPMCSDocuments(c *gin.Context) {
 			"error", err,
 			"vehicle", vehicleName)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve PMCS documents",
-			"details": err.Error(),
+			"error": "Failed to retrieve PMCS documents",
 		})
 		return
 	}
@@ -148,8 +146,7 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 				"error", err,
 				"blobPath", blobPath)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to generate download URL",
-				"details": err.Error(),
+				"error": "Failed to generate download URL",
 			})
 		}
 		return

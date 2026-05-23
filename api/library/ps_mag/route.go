@@ -93,8 +93,7 @@ func (h *Handler) listIssues(c *gin.Context) {
 	if err != nil {
 		slog.Error("Failed to list PS Magazine issues", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to list issues",
-			"details": err.Error(),
+			"error": "Failed to list issues",
 		})
 		return
 	}
@@ -135,8 +134,7 @@ func (h *Handler) searchSummaries(c *gin.Context) {
 	if err != nil {
 		slog.Error("Failed to search PS Magazine summaries", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to search summaries",
-			"details": err.Error(),
+			"error": "Failed to search summaries",
 		})
 		return
 	}
@@ -172,8 +170,7 @@ func (h *Handler) generateDownloadURL(c *gin.Context) {
 		default:
 			slog.Error("Failed to generate PS Magazine download URL", "error", err, "blobPath", blobPath)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to generate download URL",
-				"details": err.Error(),
+				"error": "Failed to generate download URL",
 			})
 		}
 		return

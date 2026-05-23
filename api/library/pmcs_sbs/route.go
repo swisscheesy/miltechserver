@@ -43,8 +43,7 @@ func (h *Handler) getFolders(c *gin.Context) {
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS SBS folders", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve PMCS SBS folders",
-			"details": err.Error(),
+			"error": "Failed to retrieve PMCS SBS folders",
 		})
 		return
 	}
@@ -72,8 +71,7 @@ func (h *Handler) getFiles(c *gin.Context) {
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS SBS files", "error", err, "folder", folderName)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to retrieve PMCS SBS files",
-			"details": err.Error(),
+			"error": "Failed to retrieve PMCS SBS files",
 		})
 		return
 	}
@@ -115,8 +113,7 @@ func (h *Handler) getFileContent(c *gin.Context) {
 		default:
 			slog.Error("Failed to retrieve PMCS SBS file content", "error", err, "blobPath", blobPath)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":   "Failed to retrieve file content",
-				"details": err.Error(),
+				"error": "Failed to retrieve file content",
 			})
 		}
 		return
