@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"miltechserver/api/analytics"
+	"miltechserver/api/library/pmcs_sbs"
 	"miltechserver/api/library/ps_mag"
 	"miltechserver/api/middleware"
 	"miltechserver/api/response"
@@ -32,6 +33,7 @@ func RegisterRoutes(deps Dependencies, publicGroup, authGroup *gin.RouterGroup) 
 	svc := NewService(deps.BlobClient, deps.Env, deps.Analytics)
 	registerHandlers(publicGroup, authGroup, svc)
 	ps_mag.RegisterHandlers(publicGroup, deps.BlobClient, deps.DB, deps.Analytics)
+	pmcs_sbs.RegisterHandlers(publicGroup, deps.BlobClient)
 }
 
 func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
