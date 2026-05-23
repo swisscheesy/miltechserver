@@ -355,3 +355,40 @@ Based on the current project setup:
 - Image extension whitelist (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) prevents unauthorized file access through the download endpoint
 - Page size of 40 is consistent with EIC but may need tuning based on mobile app UX feedback
 - If equipment data grows significantly, consider adding database indexes on `family`, `model`, and `lin` columns
+
+### ADR-014: PMCS Step-by-Step JSON API as Library Sub-Package (2026-05-22)
+
+**Context:**
+- PMCS Step-by-Step (SBS) files are structured JSON documents stored in Azure Blob Storage under `pmcs_sbs/<vehicle>/` prefixes
+- Mobile app needs to browse available vehicle folders, list JSON files within a folder, and fetch raw JSON content for offline use
+- The `api/library/ps_mag` sub-package already demonstrated a viable pattern for blob-backed library content with its own handler, service interface, service implementation, and tests colocated under `api/library/`
+- Content proxy endpoint carries non-trivial bandwidth cost, warranting rate limiting
+- Blob content must be validated as JSON before being forwarded to clients — corrupt blobs should fail loudly, not silently return garbage
+
+**Decision:**
+- Create `api/library/pmcs_sbs/` as a new sub-package following the exact `ps_mag` pattern: `errors.go`, `response.go`, `service.go`, `service_impl.go`, `route.go`, and tests colocated in the package
+- Expose three public endpoints registered via `api/library/route.go`:
+  1. `GET /library/pmcs-sbs/folders` — list top-level folders via Azure hierarchy pager
+  2. `GET /library/pmcs-sbs/:folder/files` — list `.json` files in a folder via Azure flat pager
+  3. `GET /library/pmcs-sbs/content?blob_path=...` — proxy raw JSON content (rate-limited)
+- Use a `Service` interface with all three methods accepting `context.Context` so Azure SDK calls respect HTTP request cancellation — the original plan omitted context on `GetFolders`/`GetFiles` and was corrected before implementation
+- Apply `path.Clean` + `pmcs_sbs/` prefix check in `GetFileContent` to prevent directory traversal attacks; apply `strings.ContainsAny(folderName, "./\\")` guard in `GetFiles` for the same reason
+- Cap `io.ReadAll` at 10 MB via `io.LimitReader` to prevent memory exhaustion from oversized or adversarial blobs
+- Validate blob content with `json.Valid` before returning it; return `ErrInvalidJSON` on failure
+- Return `json.RawMessage` from `GetFileContent` so JSON is proxied inline without double-encoding in `StandardResponse.Data`
+- Strip internal error details from all 500 responses across `pmcs_sbs`, `ps_mag`, and the parent `library` package — Azure SDK error strings (containing account names, endpoint URLs, and request IDs) should log to slog but never reach clients
+
+**Alternatives considered:**
+- SAS URL redirect instead of content proxy (rejected: JSON files are small text, not large binaries; proxying avoids exposing Azure storage account details to clients and is consistent with how the mobile app expects to receive structured content)
+- Adding DB/analytics dependency like `ps_mag` (rejected: pmcs_sbs is blob-only with no search index or download tracking requirement at this time)
+- Single flat endpoint returning all folders and files together (rejected: folder list and file list serve different UI states; separating them avoids over-fetching)
+- Skipping `json.Valid` check and trusting blob content (rejected: a corrupted or replaced blob would silently propagate invalid JSON to clients; the check is O(n) and inexpensive for the expected file sizes)
+
+**Consequences:**
+- Three new public endpoints are live with no authentication requirement
+- Rate limiting on the content proxy endpoint prevents bandwidth abuse; folder/file listing endpoints are not rate-limited (consistent with `ps_mag`)
+- Path traversal attacks are blocked at both the folder-listing and content-download layers
+- Memory per content request is bounded at 10 MB regardless of blob size
+- Context propagation ensures all Azure calls cancel immediately when a client disconnects
+- 500 error responses across all library handlers no longer expose Azure internals (this fix applied retroactively to `ps_mag` and the parent `library` package as part of this work)
+- `ps_mag` and `pmcs_sbs` now share the same security posture on error responses; future library sub-packages should follow the same pattern
