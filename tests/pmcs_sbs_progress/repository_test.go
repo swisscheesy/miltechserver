@@ -70,3 +70,71 @@ func TestRepositoryEquipmentUserIsolation(t *testing.T) {
 	err = repo.DeleteEquipment(other, equipment.ID.String())
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
 }
+
+func TestRepositoryCompletionLifecycle(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-completion-user")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+
+	completion := sampleCompletion(equipment.ID)
+	saved, err := repo.UpsertCompletion(user, completion)
+	require.NoError(t, err)
+	require.True(t, saved.IsComplete)
+
+	aggregate, err := repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Len(t, aggregate.Completions, 1)
+
+	require.NoError(t, repo.DeleteCompletion(user, equipment.ID.String(), completion.SectionID, completion.ItemIndex, completion.StepID))
+	aggregate, err = repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Empty(t, aggregate.Completions)
+}
+
+func TestRepositoryFaultLifecycle(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-fault-user")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+
+	fault := sampleFault(equipment.ID)
+	saved, err := repo.UpsertFault(user, fault)
+	require.NoError(t, err)
+	require.Equal(t, "leak", saved.FaultText)
+
+	fault.FaultText = "updated leak"
+	updated, err := repo.UpsertFault(user, fault)
+	require.NoError(t, err)
+	require.Equal(t, "updated leak", updated.FaultText)
+	require.Equal(t, saved.CreatedAt, updated.CreatedAt)
+
+	aggregate, err := repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Len(t, aggregate.Faults, 1)
+
+	require.NoError(t, repo.DeleteFault(user, equipment.ID.String(), fault.SectionID, fault.ItemIndex))
+	aggregate, err = repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Empty(t, aggregate.Faults)
+}
+
+func TestRepositoryChildWritesRequireOwnedEquipment(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	owner := testUser("pmcs-child-owner")
+	other := testUser("pmcs-child-other")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(owner)
+	_, err := repo.UpsertEquipment(owner, equipment)
+	require.NoError(t, err)
+
+	_, err = repo.UpsertCompletion(other, sampleCompletion(equipment.ID))
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+
+	_, err = repo.UpsertFault(other, sampleFault(equipment.ID))
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+}

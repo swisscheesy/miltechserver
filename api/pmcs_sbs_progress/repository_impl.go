@@ -218,20 +218,134 @@ func (repo *RepositoryImpl) getFaults(db qrm.Queryable, equipmentID string) ([]m
 	return rows, nil
 }
 
-func (repo *RepositoryImpl) UpsertCompletion(_ *bootstrap.User, _ model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
-	return nil, errors.New("completion persistence starts in task 4")
+func (repo *RepositoryImpl) UpsertCompletion(user *bootstrap.User, completion model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
+	if _, err := repo.getEquipmentByID(repo.db, user, completion.EquipmentID.String()); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	completion.IsComplete = true
+	completion.UpdatedAt = now
+
+	stmt := PmcsSbsCompletions.INSERT(
+		PmcsSbsCompletions.EquipmentID,
+		PmcsSbsCompletions.SectionID,
+		PmcsSbsCompletions.ItemIndex,
+		PmcsSbsCompletions.ItemNo,
+		PmcsSbsCompletions.StepID,
+		PmcsSbsCompletions.IsComplete,
+		PmcsSbsCompletions.UpdatedAt,
+	).VALUES(
+		String(completion.EquipmentID.String()),
+		String(completion.SectionID),
+		Int32(completion.ItemIndex),
+		String(completion.ItemNo),
+		String(completion.StepID),
+		Bool(true),
+		TimestampzT(now),
+	).ON_CONFLICT(
+		PmcsSbsCompletions.EquipmentID,
+		PmcsSbsCompletions.SectionID,
+		PmcsSbsCompletions.ItemIndex,
+		PmcsSbsCompletions.StepID,
+	).DO_UPDATE(SET(
+		PmcsSbsCompletions.ItemNo.SET(String(completion.ItemNo)),
+		PmcsSbsCompletions.IsComplete.SET(Bool(true)),
+		PmcsSbsCompletions.UpdatedAt.SET(TimestampzT(now)),
+	)).RETURNING(PmcsSbsCompletions.AllColumns)
+
+	var saved model.PmcsSbsCompletions
+	if err := stmt.Query(repo.db, &saved); err != nil {
+		return nil, fmt.Errorf("upsert pmcs sbs completion: %w", err)
+	}
+	return &saved, nil
 }
 
-func (repo *RepositoryImpl) DeleteCompletion(_ *bootstrap.User, _ string, _ string, _ int32, _ string) error {
-	return errors.New("completion delete persistence starts in task 4")
+func (repo *RepositoryImpl) DeleteCompletion(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32, stepID string) error {
+	if _, err := repo.getEquipmentByID(repo.db, user, equipmentID); err != nil {
+		return err
+	}
+
+	_, err := PmcsSbsCompletions.DELETE().
+		WHERE(
+			PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID)).
+				AND(PmcsSbsCompletions.SectionID.EQ(String(sectionID))).
+				AND(PmcsSbsCompletions.ItemIndex.EQ(Int32(itemIndex))).
+				AND(PmcsSbsCompletions.StepID.EQ(String(stepID))),
+		).
+		Exec(repo.db)
+	if err != nil {
+		return fmt.Errorf("delete pmcs sbs completion: %w", err)
+	}
+	return nil
 }
 
-func (repo *RepositoryImpl) UpsertFault(_ *bootstrap.User, _ model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
-	return nil, errors.New("fault persistence starts in task 4")
+func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
+	if _, err := repo.getEquipmentByID(repo.db, user, fault.EquipmentID.String()); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	if fault.CreatedAt.IsZero() {
+		fault.CreatedAt = now
+	}
+	fault.UpdatedAt = now
+
+	stmt := PmcsSbsFaults.INSERT(
+		PmcsSbsFaults.EquipmentID,
+		PmcsSbsFaults.SectionID,
+		PmcsSbsFaults.ItemIndex,
+		PmcsSbsFaults.ItemNo,
+		PmcsSbsFaults.Status,
+		PmcsSbsFaults.FaultText,
+		PmcsSbsFaults.CorrectiveAction,
+		PmcsSbsFaults.CreatedAt,
+		PmcsSbsFaults.UpdatedAt,
+	).VALUES(
+		String(fault.EquipmentID.String()),
+		String(fault.SectionID),
+		Int32(fault.ItemIndex),
+		String(fault.ItemNo),
+		String(fault.Status),
+		String(fault.FaultText),
+		String(fault.CorrectiveAction),
+		TimestampzT(fault.CreatedAt),
+		TimestampzT(now),
+	).ON_CONFLICT(
+		PmcsSbsFaults.EquipmentID,
+		PmcsSbsFaults.SectionID,
+		PmcsSbsFaults.ItemIndex,
+	).DO_UPDATE(SET(
+		PmcsSbsFaults.ItemNo.SET(String(fault.ItemNo)),
+		PmcsSbsFaults.Status.SET(String(fault.Status)),
+		PmcsSbsFaults.FaultText.SET(String(fault.FaultText)),
+		PmcsSbsFaults.CorrectiveAction.SET(String(fault.CorrectiveAction)),
+		PmcsSbsFaults.UpdatedAt.SET(TimestampzT(now)),
+	)).RETURNING(PmcsSbsFaults.AllColumns)
+
+	var saved model.PmcsSbsFaults
+	if err := stmt.Query(repo.db, &saved); err != nil {
+		return nil, fmt.Errorf("upsert pmcs sbs fault: %w", err)
+	}
+	return &saved, nil
 }
 
-func (repo *RepositoryImpl) DeleteFault(_ *bootstrap.User, _ string, _ string, _ int32) error {
-	return errors.New("fault delete persistence starts in task 4")
+func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32) error {
+	if _, err := repo.getEquipmentByID(repo.db, user, equipmentID); err != nil {
+		return err
+	}
+
+	_, err := PmcsSbsFaults.DELETE().
+		WHERE(
+			PmcsSbsFaults.EquipmentID.EQ(String(equipmentID)).
+				AND(PmcsSbsFaults.SectionID.EQ(String(sectionID))).
+				AND(PmcsSbsFaults.ItemIndex.EQ(Int32(itemIndex))),
+		).
+		Exec(repo.db)
+	if err != nil {
+		return fmt.Errorf("delete pmcs sbs fault: %w", err)
+	}
+	return nil
 }
 
 func (repo *RepositoryImpl) Sync(_ *bootstrap.User, _ SyncChangeSet) (*SyncResult, error) {
