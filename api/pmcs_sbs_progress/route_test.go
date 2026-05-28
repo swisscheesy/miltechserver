@@ -236,6 +236,20 @@ func TestRouteTestRouterUsesAuthGroupAndInjectsRouteUser(t *testing.T) {
 	require.Equal(t, routeUser(), stub.capturedUser)
 }
 
+func TestRegisterRoutesUsesAuthGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	group := router.Group("/api/v1/auth")
+	group.Use(func(c *gin.Context) {
+		c.Set("user", routeUser())
+		c.Next()
+	})
+	registerHandlers(group, &serviceStub{listResp: &EquipmentListResponse{Equipment: []EquipmentResponse{}, Count: 0}})
+
+	resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment", nil, routeUser())
+	require.Equal(t, http.StatusOK, resp.Code)
+}
+
 func newRouteTestRouter(svc Service) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

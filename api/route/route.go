@@ -12,6 +12,7 @@ import (
 	"miltechserver/api/library"
 	"miltechserver/api/material_images"
 	"miltechserver/api/middleware"
+	"miltechserver/api/pmcs_sbs_progress"
 	"miltechserver/api/pol_products"
 	"miltechserver/api/quick_lists"
 	"miltechserver/api/sb_700_20"
@@ -62,6 +63,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
 	NewShopsRouter(db, blobClient, env, authRoutes)
 	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
+	pmcs_sbs_progress.RegisterRoutes(pmcs_sbs_progress.Dependencies{DB: db}, authRoutes)
 	item_comments.RegisterRoutes(item_comments.Dependencies{DB: db}, v1Route, authRoutes)
 	user_suggestions.RegisterRoutes(user_suggestions.Dependencies{
 		DB:         db,
