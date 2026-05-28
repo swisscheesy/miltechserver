@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 
@@ -241,49 +240,4 @@ func respondServiceError(c *gin.Context, err error) {
 		slog.Error("PMCS SBS progress handler failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 	}
-}
-
-var errRepositoryNotImplemented = errors.New("pmcs sbs progress repository not implemented")
-
-// NewRepository is a compile-only placeholder until Task 3 adds the Jet-backed repository.
-func NewRepository(_ *sql.DB) Repository {
-	return unimplementedRepository{}
-}
-
-type unimplementedRepository struct{}
-
-func (unimplementedRepository) ListEquipment(_ *bootstrap.User) ([]model.PmcsSbsEquipment, error) {
-	return nil, errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) GetEquipmentAggregate(_ *bootstrap.User, _ string) (*EquipmentAggregate, error) {
-	return nil, errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) UpsertEquipment(_ *bootstrap.User, _ model.PmcsSbsEquipment) (*model.PmcsSbsEquipment, error) {
-	return nil, errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) DeleteEquipment(_ *bootstrap.User, _ string) error {
-	return errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) UpsertCompletion(_ *bootstrap.User, _ model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
-	return nil, errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) DeleteCompletion(_ *bootstrap.User, _ string, _ string, _ int32, _ string) error {
-	return errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) UpsertFault(_ *bootstrap.User, _ model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
-	return nil, errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) DeleteFault(_ *bootstrap.User, _ string, _ string, _ int32) error {
-	return errRepositoryNotImplemented
-}
-
-func (unimplementedRepository) Sync(_ *bootstrap.User, _ SyncChangeSet) (*SyncResult, error) {
-	return nil, errRepositoryNotImplemented
 }
