@@ -3,6 +3,7 @@ package pmcs_sbs_progress_test
 import (
 	"testing"
 
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/pmcs_sbs_progress"
 
 	"github.com/stretchr/testify/require"
@@ -137,4 +138,79 @@ func TestRepositoryChildWritesRequireOwnedEquipment(t *testing.T) {
 
 	_, err = repo.UpsertFault(other, sampleFault(equipment.ID))
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+}
+
+func TestRepositorySyncAppliesChangeSet(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-sync-user")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	completion := sampleCompletion(equipment.ID)
+	fault := sampleFault(equipment.ID)
+
+	result, err := repo.Sync(user, pmcs_sbs_progress.SyncChangeSet{
+		UpsertEquipment:   []model.PmcsSbsEquipment{equipment},
+		UpsertCompletions: []model.PmcsSbsCompletions{completion},
+		UpsertFaults:      []model.PmcsSbsFaults{fault},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Equipment, 1)
+	require.Len(t, result.Equipment[0].Completions, 1)
+	require.Len(t, result.Equipment[0].Faults, 1)
+}
+
+func TestRepositorySyncDeletesRows(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-sync-delete")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+	_, err = repo.UpsertCompletion(user, sampleCompletion(equipment.ID))
+	require.NoError(t, err)
+	_, err = repo.UpsertFault(user, sampleFault(equipment.ID))
+	require.NoError(t, err)
+
+	result, err := repo.Sync(user, pmcs_sbs_progress.SyncChangeSet{
+		DeleteCompletions: []pmcs_sbs_progress.CompletionKey{{
+			EquipmentID: equipment.ID.String(),
+			SectionID:   "before",
+			ItemIndex:   0,
+			StepID:      "1-a",
+		}},
+		DeleteFaults: []pmcs_sbs_progress.FaultKey{{
+			EquipmentID: equipment.ID.String(),
+			SectionID:   "before",
+			ItemIndex:   0,
+		}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Equipment, 1)
+	require.Empty(t, result.Equipment[0].Completions)
+	require.Empty(t, result.Equipment[0].Faults)
+}
+
+func TestRepositorySyncDeletesEquipment(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-sync-delete-equipment")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+	_, err = repo.UpsertCompletion(user, sampleCompletion(equipment.ID))
+	require.NoError(t, err)
+
+	result, err := repo.Sync(user, pmcs_sbs_progress.SyncChangeSet{
+		DeleteEquipmentIDs: []string{equipment.ID.String()},
+	})
+
+	require.NoError(t, err)
+	require.Empty(t, result.Equipment)
+	require.Equal(t, []string{equipment.ID.String()}, result.DeletedEquipmentIDs)
+
+	list, err := repo.ListEquipment(user)
+	require.NoError(t, err)
+	require.Empty(t, list)
 }

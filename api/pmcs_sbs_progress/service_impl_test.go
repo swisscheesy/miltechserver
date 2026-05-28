@@ -344,6 +344,40 @@ func TestValidateSyncRequestRejectsContradictions(t *testing.T) {
 	requireServiceError(t, err, ErrInvalidSyncRequest)
 }
 
+func TestBuildSyncChangeSet(t *testing.T) {
+	svc := NewService(&repoStub{})
+	user := requireUser()
+
+	changeSet, err := svc.buildSyncChangeSet(user, SyncRequest{
+		UpsertEquipment: []SyncEquipmentRequest{{
+			ID:              "550e8400-e29b-41d4-a716-446655440000",
+			EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
+			Admin:           "A12",
+		}},
+		UpsertCompletions: []SyncCompletionRequest{{
+			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
+			SectionID:   "before",
+			ItemIndex:   0,
+			ItemNo:      "1",
+			StepID:      "1-a",
+		}},
+		UpsertFaults: []SyncFaultRequest{{
+			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
+			SectionID:   "before",
+			ItemIndex:   0,
+			ItemNo:      "1",
+			Status:      "X",
+			FaultText:   "leak",
+		}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, changeSet.UpsertEquipment, 1)
+	require.Len(t, changeSet.UpsertCompletions, 1)
+	require.Len(t, changeSet.UpsertFaults, 1)
+	require.Equal(t, user.UserID, changeSet.UpsertEquipment[0].UserUID)
+}
+
 func requireUser() *bootstrap.User {
 	return &bootstrap.User{UserID: "user-1", Username: "tester", Email: "user-1@example.com"}
 }

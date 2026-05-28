@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -41,26 +42,7 @@ func (repo *RepositoryImpl) ListEquipment(user *bootstrap.User) ([]model.PmcsSbs
 }
 
 func (repo *RepositoryImpl) GetEquipmentAggregate(user *bootstrap.User, equipmentID string) (*EquipmentAggregate, error) {
-	equipment, err := repo.getEquipmentByID(repo.db, user, equipmentID)
-	if err != nil {
-		return nil, err
-	}
-
-	completions, err := repo.getCompletions(repo.db, equipmentID)
-	if err != nil {
-		return nil, err
-	}
-
-	faults, err := repo.getFaults(repo.db, equipmentID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &EquipmentAggregate{
-		Equipment:   *equipment,
-		Completions: completions,
-		Faults:      faults,
-	}, nil
+	return repo.getEquipmentAggregateWithExecutor(repo.db, user, equipmentID)
 }
 
 func (repo *RepositoryImpl) UpsertEquipment(user *bootstrap.User, equipment model.PmcsSbsEquipment) (*model.PmcsSbsEquipment, error) {
@@ -68,6 +50,10 @@ func (repo *RepositoryImpl) UpsertEquipment(user *bootstrap.User, equipment mode
 		return nil, ErrUnauthorized
 	}
 
+	return repo.upsertEquipmentWithExecutor(repo.db, user, equipment)
+}
+
+func (repo *RepositoryImpl) upsertEquipmentWithExecutor(db qrm.Queryable, user *bootstrap.User, equipment model.PmcsSbsEquipment) (*model.PmcsSbsEquipment, error) {
 	now := time.Now().UTC()
 	equipment.UserUID = user.UserID
 	equipment.UpdatedAt = now
@@ -98,7 +84,7 @@ func (repo *RepositoryImpl) UpsertEquipment(user *bootstrap.User, equipment mode
 		RETURNING(PmcsSbsEquipment.AllColumns)
 
 	var saved model.PmcsSbsEquipment
-	if err := stmt.Query(repo.db, &saved); err != nil {
+	if err := stmt.Query(db, &saved); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -185,6 +171,29 @@ func (repo *RepositoryImpl) getEquipmentByID(db qrm.Queryable, user *bootstrap.U
 	return &row, nil
 }
 
+func (repo *RepositoryImpl) getEquipmentAggregateWithExecutor(db qrm.Queryable, user *bootstrap.User, equipmentID string) (*EquipmentAggregate, error) {
+	equipment, err := repo.getEquipmentByID(db, user, equipmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	completions, err := repo.getCompletions(db, equipmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	faults, err := repo.getFaults(db, equipmentID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &EquipmentAggregate{
+		Equipment:   *equipment,
+		Completions: completions,
+		Faults:      faults,
+	}, nil
+}
+
 func (repo *RepositoryImpl) getCompletions(db qrm.Queryable, equipmentID string) ([]model.PmcsSbsCompletions, error) {
 	var rows []model.PmcsSbsCompletions
 	stmt := SELECT(PmcsSbsCompletions.AllColumns).
@@ -223,6 +232,10 @@ func (repo *RepositoryImpl) UpsertCompletion(user *bootstrap.User, completion mo
 		return nil, err
 	}
 
+	return repo.upsertCompletionWithExecutor(repo.db, completion)
+}
+
+func (repo *RepositoryImpl) upsertCompletionWithExecutor(db qrm.Queryable, completion model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
 	now := time.Now().UTC()
 	completion.IsComplete = true
 	completion.UpdatedAt = now
@@ -255,7 +268,7 @@ func (repo *RepositoryImpl) UpsertCompletion(user *bootstrap.User, completion mo
 	)).RETURNING(PmcsSbsCompletions.AllColumns)
 
 	var saved model.PmcsSbsCompletions
-	if err := stmt.Query(repo.db, &saved); err != nil {
+	if err := stmt.Query(db, &saved); err != nil {
 		return nil, fmt.Errorf("upsert pmcs sbs completion: %w", err)
 	}
 	return &saved, nil
@@ -285,6 +298,10 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSb
 		return nil, err
 	}
 
+	return repo.upsertFaultWithExecutor(repo.db, fault)
+}
+
+func (repo *RepositoryImpl) upsertFaultWithExecutor(db qrm.Queryable, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
 	now := time.Now().UTC()
 	if fault.CreatedAt.IsZero() {
 		fault.CreatedAt = now
@@ -324,7 +341,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSb
 	)).RETURNING(PmcsSbsFaults.AllColumns)
 
 	var saved model.PmcsSbsFaults
-	if err := stmt.Query(repo.db, &saved); err != nil {
+	if err := stmt.Query(db, &saved); err != nil {
 		return nil, fmt.Errorf("upsert pmcs sbs fault: %w", err)
 	}
 	return &saved, nil
@@ -348,6 +365,133 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, equipmentID string
 	return nil
 }
 
-func (repo *RepositoryImpl) Sync(_ *bootstrap.User, _ SyncChangeSet) (*SyncResult, error) {
-	return nil, errors.New("batch sync persistence starts in task 5")
+func (repo *RepositoryImpl) Sync(user *bootstrap.User, changeSet SyncChangeSet) (*SyncResult, error) {
+	if user == nil {
+		return nil, ErrUnauthorized
+	}
+
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin pmcs sbs sync: %w", err)
+	}
+	defer tx.Rollback()
+
+	touched := map[string]struct{}{}
+	deleted := map[string]struct{}{}
+
+	for _, equipment := range changeSet.UpsertEquipment {
+		saved, err := repo.upsertEquipmentWithExecutor(tx, user, equipment)
+		if err != nil {
+			return nil, err
+		}
+		touched[saved.ID.String()] = struct{}{}
+	}
+
+	for _, completion := range changeSet.UpsertCompletions {
+		equipmentID := completion.EquipmentID.String()
+		if _, err := repo.getEquipmentByID(tx, user, equipmentID); err != nil {
+			return nil, err
+		}
+		if _, err := repo.upsertCompletionWithExecutor(tx, completion); err != nil {
+			return nil, err
+		}
+		touched[equipmentID] = struct{}{}
+	}
+
+	for _, fault := range changeSet.UpsertFaults {
+		equipmentID := fault.EquipmentID.String()
+		if _, err := repo.getEquipmentByID(tx, user, equipmentID); err != nil {
+			return nil, err
+		}
+		if _, err := repo.upsertFaultWithExecutor(tx, fault); err != nil {
+			return nil, err
+		}
+		touched[equipmentID] = struct{}{}
+	}
+
+	for _, key := range changeSet.DeleteCompletions {
+		if _, err := repo.getEquipmentByID(tx, user, key.EquipmentID); err != nil {
+			return nil, err
+		}
+		if _, err := PmcsSbsCompletions.DELETE().
+			WHERE(
+				PmcsSbsCompletions.EquipmentID.EQ(String(key.EquipmentID)).
+					AND(PmcsSbsCompletions.SectionID.EQ(String(key.SectionID))).
+					AND(PmcsSbsCompletions.ItemIndex.EQ(Int32(key.ItemIndex))).
+					AND(PmcsSbsCompletions.StepID.EQ(String(key.StepID))),
+			).
+			Exec(tx); err != nil {
+			return nil, fmt.Errorf("sync delete pmcs sbs completion: %w", err)
+		}
+		touched[key.EquipmentID] = struct{}{}
+	}
+
+	for _, key := range changeSet.DeleteFaults {
+		if _, err := repo.getEquipmentByID(tx, user, key.EquipmentID); err != nil {
+			return nil, err
+		}
+		if _, err := PmcsSbsFaults.DELETE().
+			WHERE(
+				PmcsSbsFaults.EquipmentID.EQ(String(key.EquipmentID)).
+					AND(PmcsSbsFaults.SectionID.EQ(String(key.SectionID))).
+					AND(PmcsSbsFaults.ItemIndex.EQ(Int32(key.ItemIndex))),
+			).
+			Exec(tx); err != nil {
+			return nil, fmt.Errorf("sync delete pmcs sbs fault: %w", err)
+		}
+		touched[key.EquipmentID] = struct{}{}
+	}
+
+	for _, equipmentID := range changeSet.DeleteEquipmentIDs {
+		if _, err := repo.getEquipmentByID(tx, user, equipmentID); err != nil {
+			return nil, err
+		}
+		if _, err := PmcsSbsFaults.DELETE().
+			WHERE(PmcsSbsFaults.EquipmentID.EQ(String(equipmentID))).
+			Exec(tx); err != nil {
+			return nil, fmt.Errorf("sync delete pmcs sbs equipment faults: %w", err)
+		}
+		if _, err := PmcsSbsCompletions.DELETE().
+			WHERE(PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID))).
+			Exec(tx); err != nil {
+			return nil, fmt.Errorf("sync delete pmcs sbs equipment completions: %w", err)
+		}
+		if _, err := PmcsSbsEquipment.DELETE().
+			WHERE(
+				PmcsSbsEquipment.ID.EQ(String(equipmentID)).
+					AND(PmcsSbsEquipment.UserUID.EQ(String(user.UserID))),
+			).
+			Exec(tx); err != nil {
+			return nil, fmt.Errorf("sync delete pmcs sbs equipment: %w", err)
+		}
+		delete(touched, equipmentID)
+		deleted[equipmentID] = struct{}{}
+	}
+
+	result := &SyncResult{
+		Equipment:           make([]EquipmentAggregate, 0, len(touched)),
+		DeletedEquipmentIDs: make([]string, 0, len(deleted)),
+	}
+	touchedIDs := make([]string, 0, len(touched))
+	for equipmentID := range touched {
+		touchedIDs = append(touchedIDs, equipmentID)
+	}
+	sort.Strings(touchedIDs)
+	for _, equipmentID := range touchedIDs {
+		aggregate, err := repo.getEquipmentAggregateWithExecutor(tx, user, equipmentID)
+		if err != nil {
+			return nil, err
+		}
+		result.Equipment = append(result.Equipment, *aggregate)
+	}
+
+	for equipmentID := range deleted {
+		result.DeletedEquipmentIDs = append(result.DeletedEquipmentIDs, equipmentID)
+	}
+	sort.Strings(result.DeletedEquipmentIDs)
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit pmcs sbs sync: %w", err)
+	}
+	return result, nil
 }
