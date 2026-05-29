@@ -169,7 +169,7 @@ func TestValidateFaultRequest(t *testing.T) {
 	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", fault.EquipmentID.String())
 	require.Equal(t, "before", fault.SectionID)
 	require.Equal(t, "1", fault.ItemNo)
-	require.Equal(t, "X", fault.Status)
+	require.Equal(t, "x", fault.Status)
 	require.Equal(t, "leak", fault.FaultText)
 	require.Equal(t, "tighten", fault.CorrectiveAction)
 	require.False(t, fault.CreatedAt.IsZero())
@@ -179,9 +179,17 @@ func TestValidateFaultRequest(t *testing.T) {
 func TestValidateFaultRequestAcceptsAllowedStatuses(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	for _, status := range []string{"X", "/", "-"} {
+	testCases := map[string]string{
+		"X":     "x",
+		"x":     "x",
+		"/":     "slash",
+		"slash": "slash",
+		"-":     "dash",
+		"dash":  "dash",
+	}
+	for status, expected := range testCases {
 		t.Run(status, func(t *testing.T) {
-			_, err := svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{
+			fault, err := svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{
 				SectionID: "before",
 				ItemIndex: 0,
 				ItemNo:    "1",
@@ -189,6 +197,7 @@ func TestValidateFaultRequestAcceptsAllowedStatuses(t *testing.T) {
 				FaultText: "leak",
 			})
 			require.NoError(t, err)
+			require.Equal(t, expected, fault.Status)
 		})
 	}
 }

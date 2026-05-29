@@ -16,6 +16,23 @@ func testUser(id string) *bootstrap.User {
 	return &bootstrap.User{UserID: id, Username: id, Email: id + "@example.com"}
 }
 
+func ensureUser(t *testing.T, db *sql.DB, user *bootstrap.User) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	_, err := db.Exec(
+		`INSERT INTO users (uid, email, username, created_at, is_enabled)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (uid) DO NOTHING`,
+		user.UserID,
+		user.Email,
+		user.Username,
+		now,
+		true,
+	)
+	require.NoError(t, err)
+}
+
 func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 	t.Helper()
 	_, err := db.Exec(`TRUNCATE TABLE pmcs_sbs_faults, pmcs_sbs_completions, pmcs_sbs_equipment RESTART IDENTITY CASCADE`)
@@ -55,7 +72,7 @@ func sampleFault(equipmentID uuid.UUID) model.PmcsSbsFaults {
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",
-		Status:           "X",
+		Status:           "x",
 		FaultText:        "leak",
 		CorrectiveAction: "",
 		CreatedAt:        now,

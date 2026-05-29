@@ -14,6 +14,7 @@ import (
 
 	. "github.com/go-jet/jet/v2/postgres"
 	"github.com/go-jet/jet/v2/qrm"
+	"github.com/google/uuid"
 )
 
 type RepositoryImpl struct {
@@ -22,6 +23,14 @@ type RepositoryImpl struct {
 
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
+}
+
+func parseEquipmentID(equipmentID string) (uuid.UUID, error) {
+	id, err := uuid.Parse(equipmentID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid pmcs sbs equipment id: %w", err)
+	}
+	return id, nil
 }
 
 func (repo *RepositoryImpl) ListEquipment(user *bootstrap.User) ([]model.PmcsSbsEquipment, error) {
@@ -97,6 +106,10 @@ func (repo *RepositoryImpl) DeleteEquipment(user *bootstrap.User, equipmentID st
 	if user == nil {
 		return ErrUnauthorized
 	}
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return err
+	}
 
 	tx, err := repo.db.Begin()
 	if err != nil {
@@ -109,20 +122,20 @@ func (repo *RepositoryImpl) DeleteEquipment(user *bootstrap.User, equipmentID st
 	}
 
 	if _, err := PmcsSbsFaults.DELETE().
-		WHERE(PmcsSbsFaults.EquipmentID.EQ(String(equipmentID))).
+		WHERE(PmcsSbsFaults.EquipmentID.EQ(UUID(parsedEquipmentID))).
 		Exec(tx); err != nil {
 		return fmt.Errorf("delete pmcs sbs faults: %w", err)
 	}
 
 	if _, err := PmcsSbsCompletions.DELETE().
-		WHERE(PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID))).
+		WHERE(PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID))).
 		Exec(tx); err != nil {
 		return fmt.Errorf("delete pmcs sbs completions: %w", err)
 	}
 
 	result, err := PmcsSbsEquipment.DELETE().
 		WHERE(
-			PmcsSbsEquipment.ID.EQ(String(equipmentID)).
+			PmcsSbsEquipment.ID.EQ(UUID(parsedEquipmentID)).
 				AND(PmcsSbsEquipment.UserUID.EQ(String(user.UserID))),
 		).
 		Exec(tx)
@@ -149,12 +162,16 @@ func (repo *RepositoryImpl) getEquipmentByID(db qrm.Queryable, user *bootstrap.U
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
 
 	var row model.PmcsSbsEquipment
 	stmt := SELECT(PmcsSbsEquipment.AllColumns).
 		FROM(PmcsSbsEquipment).
 		WHERE(
-			PmcsSbsEquipment.ID.EQ(String(equipmentID)).
+			PmcsSbsEquipment.ID.EQ(UUID(parsedEquipmentID)).
 				AND(PmcsSbsEquipment.UserUID.EQ(String(user.UserID))),
 		)
 
@@ -195,10 +212,15 @@ func (repo *RepositoryImpl) getEquipmentAggregateWithExecutor(db qrm.Queryable, 
 }
 
 func (repo *RepositoryImpl) getCompletions(db qrm.Queryable, equipmentID string) ([]model.PmcsSbsCompletions, error) {
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
+
 	var rows []model.PmcsSbsCompletions
 	stmt := SELECT(PmcsSbsCompletions.AllColumns).
 		FROM(PmcsSbsCompletions).
-		WHERE(PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID))).
+		WHERE(PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID))).
 		ORDER_BY(
 			PmcsSbsCompletions.SectionID.ASC(),
 			PmcsSbsCompletions.ItemIndex.ASC(),
@@ -212,10 +234,15 @@ func (repo *RepositoryImpl) getCompletions(db qrm.Queryable, equipmentID string)
 }
 
 func (repo *RepositoryImpl) getFaults(db qrm.Queryable, equipmentID string) ([]model.PmcsSbsFaults, error) {
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
+
 	var rows []model.PmcsSbsFaults
 	stmt := SELECT(PmcsSbsFaults.AllColumns).
 		FROM(PmcsSbsFaults).
-		WHERE(PmcsSbsFaults.EquipmentID.EQ(String(equipmentID))).
+		WHERE(PmcsSbsFaults.EquipmentID.EQ(UUID(parsedEquipmentID))).
 		ORDER_BY(
 			PmcsSbsFaults.SectionID.ASC(),
 			PmcsSbsFaults.ItemIndex.ASC(),
@@ -249,7 +276,7 @@ func (repo *RepositoryImpl) upsertCompletionWithExecutor(db qrm.Queryable, compl
 		PmcsSbsCompletions.IsComplete,
 		PmcsSbsCompletions.UpdatedAt,
 	).VALUES(
-		String(completion.EquipmentID.String()),
+		UUID(completion.EquipmentID),
 		String(completion.SectionID),
 		Int32(completion.ItemIndex),
 		String(completion.ItemNo),
@@ -278,10 +305,14 @@ func (repo *RepositoryImpl) DeleteCompletion(user *bootstrap.User, equipmentID s
 	if _, err := repo.getEquipmentByID(repo.db, user, equipmentID); err != nil {
 		return err
 	}
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return err
+	}
 
-	_, err := PmcsSbsCompletions.DELETE().
+	_, err = PmcsSbsCompletions.DELETE().
 		WHERE(
-			PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID)).
+			PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID)).
 				AND(PmcsSbsCompletions.SectionID.EQ(String(sectionID))).
 				AND(PmcsSbsCompletions.ItemIndex.EQ(Int32(itemIndex))).
 				AND(PmcsSbsCompletions.StepID.EQ(String(stepID))),
@@ -319,7 +350,7 @@ func (repo *RepositoryImpl) upsertFaultWithExecutor(db qrm.Queryable, fault mode
 		PmcsSbsFaults.CreatedAt,
 		PmcsSbsFaults.UpdatedAt,
 	).VALUES(
-		String(fault.EquipmentID.String()),
+		UUID(fault.EquipmentID),
 		String(fault.SectionID),
 		Int32(fault.ItemIndex),
 		String(fault.ItemNo),
@@ -351,10 +382,14 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, equipmentID string
 	if _, err := repo.getEquipmentByID(repo.db, user, equipmentID); err != nil {
 		return err
 	}
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return err
+	}
 
-	_, err := PmcsSbsFaults.DELETE().
+	_, err = PmcsSbsFaults.DELETE().
 		WHERE(
-			PmcsSbsFaults.EquipmentID.EQ(String(equipmentID)).
+			PmcsSbsFaults.EquipmentID.EQ(UUID(parsedEquipmentID)).
 				AND(PmcsSbsFaults.SectionID.EQ(String(sectionID))).
 				AND(PmcsSbsFaults.ItemIndex.EQ(Int32(itemIndex))),
 		).
@@ -413,9 +448,13 @@ func (repo *RepositoryImpl) Sync(user *bootstrap.User, changeSet SyncChangeSet) 
 		if _, err := repo.getEquipmentByID(tx, user, key.EquipmentID); err != nil {
 			return nil, err
 		}
+		parsedEquipmentID, err := parseEquipmentID(key.EquipmentID)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := PmcsSbsCompletions.DELETE().
 			WHERE(
-				PmcsSbsCompletions.EquipmentID.EQ(String(key.EquipmentID)).
+				PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID)).
 					AND(PmcsSbsCompletions.SectionID.EQ(String(key.SectionID))).
 					AND(PmcsSbsCompletions.ItemIndex.EQ(Int32(key.ItemIndex))).
 					AND(PmcsSbsCompletions.StepID.EQ(String(key.StepID))),
@@ -430,9 +469,13 @@ func (repo *RepositoryImpl) Sync(user *bootstrap.User, changeSet SyncChangeSet) 
 		if _, err := repo.getEquipmentByID(tx, user, key.EquipmentID); err != nil {
 			return nil, err
 		}
+		parsedEquipmentID, err := parseEquipmentID(key.EquipmentID)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := PmcsSbsFaults.DELETE().
 			WHERE(
-				PmcsSbsFaults.EquipmentID.EQ(String(key.EquipmentID)).
+				PmcsSbsFaults.EquipmentID.EQ(UUID(parsedEquipmentID)).
 					AND(PmcsSbsFaults.SectionID.EQ(String(key.SectionID))).
 					AND(PmcsSbsFaults.ItemIndex.EQ(Int32(key.ItemIndex))),
 			).
@@ -446,19 +489,23 @@ func (repo *RepositoryImpl) Sync(user *bootstrap.User, changeSet SyncChangeSet) 
 		if _, err := repo.getEquipmentByID(tx, user, equipmentID); err != nil {
 			return nil, err
 		}
+		parsedEquipmentID, err := parseEquipmentID(equipmentID)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := PmcsSbsFaults.DELETE().
-			WHERE(PmcsSbsFaults.EquipmentID.EQ(String(equipmentID))).
+			WHERE(PmcsSbsFaults.EquipmentID.EQ(UUID(parsedEquipmentID))).
 			Exec(tx); err != nil {
 			return nil, fmt.Errorf("sync delete pmcs sbs equipment faults: %w", err)
 		}
 		if _, err := PmcsSbsCompletions.DELETE().
-			WHERE(PmcsSbsCompletions.EquipmentID.EQ(String(equipmentID))).
+			WHERE(PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID))).
 			Exec(tx); err != nil {
 			return nil, fmt.Errorf("sync delete pmcs sbs equipment completions: %w", err)
 		}
 		if _, err := PmcsSbsEquipment.DELETE().
 			WHERE(
-				PmcsSbsEquipment.ID.EQ(String(equipmentID)).
+				PmcsSbsEquipment.ID.EQ(UUID(parsedEquipmentID)).
 					AND(PmcsSbsEquipment.UserUID.EQ(String(user.UserID))),
 			).
 			Exec(tx); err != nil {

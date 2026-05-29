@@ -240,12 +240,12 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRe
 	}
 	sectionID := strings.TrimSpace(req.SectionID)
 	itemNo := strings.TrimSpace(req.ItemNo)
-	status := strings.TrimSpace(req.Status)
+	status, validStatus := normalizeFaultStatus(req.Status)
 	faultText := strings.TrimSpace(req.FaultText)
 	if sectionID == "" || itemNo == "" || req.ItemIndex < 0 || faultText == "" {
 		return model.PmcsSbsFaults{}, ErrInvalidRequest
 	}
-	if !isValidFaultStatus(status) {
+	if !validStatus {
 		return model.PmcsSbsFaults{}, ErrInvalidStatus
 	}
 	now := time.Now().UTC()
@@ -429,8 +429,17 @@ func isValidEquipmentManual(blobPath string) bool {
 		strings.HasSuffix(strings.ToLower(cleaned), ".json")
 }
 
-func isValidFaultStatus(status string) bool {
-	return status == "X" || status == "/" || status == "-"
+func normalizeFaultStatus(status string) (string, bool) {
+	switch strings.TrimSpace(status) {
+	case "X", "x":
+		return "x", true
+	case "/", "slash":
+		return "slash", true
+	case "-", "dash":
+		return "dash", true
+	default:
+		return "", false
+	}
 }
 
 func canonicalSyncID(equipmentID string) (string, error) {

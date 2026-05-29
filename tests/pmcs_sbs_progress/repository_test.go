@@ -12,6 +12,7 @@ import (
 func TestRepositoryEquipmentLifecycle(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-equipment-user")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 
@@ -39,6 +40,7 @@ func TestRepositoryEquipmentLifecycle(t *testing.T) {
 func TestRepositoryGetEquipmentAggregateIncludesChildren(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-equipment-aggregate")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 
@@ -59,6 +61,8 @@ func TestRepositoryEquipmentUserIsolation(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	owner := testUser("pmcs-owner")
 	other := testUser("pmcs-other")
+	ensureUser(t, testDB, owner)
+	ensureUser(t, testDB, other)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(owner)
 
@@ -75,6 +79,7 @@ func TestRepositoryEquipmentUserIsolation(t *testing.T) {
 func TestRepositoryCompletionLifecycle(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-completion-user")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 	_, err := repo.UpsertEquipment(user, equipment)
@@ -98,6 +103,7 @@ func TestRepositoryCompletionLifecycle(t *testing.T) {
 func TestRepositoryFaultLifecycle(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-fault-user")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 	_, err := repo.UpsertEquipment(user, equipment)
@@ -128,6 +134,8 @@ func TestRepositoryChildWritesRequireOwnedEquipment(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	owner := testUser("pmcs-child-owner")
 	other := testUser("pmcs-child-other")
+	ensureUser(t, testDB, owner)
+	ensureUser(t, testDB, other)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(owner)
 	_, err := repo.UpsertEquipment(owner, equipment)
@@ -143,6 +151,7 @@ func TestRepositoryChildWritesRequireOwnedEquipment(t *testing.T) {
 func TestRepositorySyncAppliesChangeSet(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-sync-user")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 	completion := sampleCompletion(equipment.ID)
@@ -163,6 +172,7 @@ func TestRepositorySyncAppliesChangeSet(t *testing.T) {
 func TestRepositorySyncDeletesRows(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-sync-delete")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 	_, err := repo.UpsertEquipment(user, equipment)
@@ -194,7 +204,8 @@ func TestRepositorySyncDeletesRows(t *testing.T) {
 
 func TestRepositorySyncDeletesEquipment(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-sync-delete-equipment")
+	user := testUser("pmcs-sync-del-equip")
+	ensureUser(t, testDB, user)
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 	equipment := sampleEquipment(user)
 	_, err := repo.UpsertEquipment(user, equipment)
