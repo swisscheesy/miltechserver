@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/joho/godotenv"
@@ -20,6 +21,7 @@ func TestMain(m *testing.M) {
 	if dsn == "" {
 		log.Fatal("TEST_DATABASE_URL is not set")
 	}
+	dsn = withDefaultSSLMode(dsn)
 
 	var err error
 	testDB, err = sql.Open("postgres", dsn)
@@ -34,6 +36,19 @@ func TestMain(m *testing.M) {
 	exitCode := m.Run()
 	_ = testDB.Close()
 	os.Exit(exitCode)
+}
+
+func withDefaultSSLMode(dsn string) string {
+	if strings.Contains(dsn, "sslmode=") {
+		return dsn
+	}
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		if strings.Contains(dsn, "?") {
+			return dsn + "&sslmode=disable"
+		}
+		return dsn + "?sslmode=disable"
+	}
+	return dsn + " sslmode=disable"
 }
 
 func loadEnv() error {
