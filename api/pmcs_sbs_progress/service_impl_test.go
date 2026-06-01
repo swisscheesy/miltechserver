@@ -32,6 +32,10 @@ func (repo *repoStub) UpsertCompletion(user *bootstrap.User, completion model.Pm
 	return &completion, nil
 }
 
+func (repo *repoStub) BatchCompletions(user *bootstrap.User, equipmentID string, upserts []model.PmcsSbsCompletions, deletes []CompletionKey) (*BatchCompletionsResult, error) {
+	return &BatchCompletionsResult{UpsertedCount: int64(len(upserts)), DeletedCount: int64(len(deletes))}, nil
+}
+
 func (repo *repoStub) DeleteCompletion(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32, stepID string) error {
 	return nil
 }
@@ -151,6 +155,97 @@ func TestValidateCompletionRequestRejectsInvalidValues(t *testing.T) {
 
 	_, err = svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{SectionID: "before", ItemIndex: -1, ItemNo: "1", StepID: "1-a"})
 	requireServiceError(t, err, ErrInvalidRequest)
+}
+
+func TestBuildBatchCompletionsChangeSet(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	upserts, deletes, err := svc.buildBatchCompletionsChangeSet("550E8400-E29B-41D4-A716-446655440000", BatchCompletionsRequest{
+		UpsertCompletions: []CompletionRequest{{
+			SectionID: " before ",
+			ItemIndex: 0,
+			ItemNo:    " 1 ",
+			StepID:    " 1-a ",
+		}},
+		DeleteCompletions: []DeleteCompletionRequest{{
+			SectionID: " before ",
+			ItemIndex: 0,
+			StepID:    " 1-b ",
+		}},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, upserts, 1)
+	require.Len(t, deletes, 1)
+	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", upserts[0].EquipmentID.String())
+	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", deletes[0].EquipmentID)
+	require.Equal(t, "before", upserts[0].SectionID)
+	require.Equal(t, "before", deletes[0].SectionID)
+}
+
+func TestBuildBatchCompletionsChangeSetAllowsNoOp(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	upserts, deletes, err := svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{})
+
+	require.NoError(t, err)
+	require.Empty(t, upserts)
+	require.Empty(t, deletes)
+}
+
+func TestBuildBatchCompletionsChangeSetRejectsInvalidValues(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, _, err := svc.buildBatchCompletionsChangeSet("bad", BatchCompletionsRequest{})
+	requireServiceError(t, err, ErrInvalidID)
+
+	tooMany := BatchCompletionsRequest{UpsertCompletions: make([]CompletionRequest, maxBatchCompletionChanges+1)}
+	for i := range tooMany.UpsertCompletions {
+		tooMany.UpsertCompletions[i] = CompletionRequest{SectionID: "before", ItemIndex: int32(i), ItemNo: "1", StepID: "a"}
+	}
+	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", tooMany)
+	requireServiceError(t, err, ErrInvalidRequest)
+
+	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
+		UpsertCompletions: []CompletionRequest{{
+			SectionID: "before",
+			ItemIndex: 0,
+			ItemNo:    "1",
+			StepID:    "1-a",
+		}},
+		DeleteCompletions: []DeleteCompletionRequest{{
+			SectionID: "before",
+			ItemIndex: 0,
+			StepID:    "1-a",
+		}},
+	})
+	requireServiceError(t, err, ErrInvalidSyncRequest)
+
+	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
+		UpsertCompletions: []CompletionRequest{
+			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"},
+			{SectionID: " before ", ItemIndex: 0, ItemNo: "1", StepID: " 1-a "},
+		},
+	})
+	requireServiceError(t, err, ErrInvalidSyncRequest)
+}
+
+func TestBatchCompletionsReturnsCounts(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	resp, err := svc.BatchCompletions(requireUser(), "550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
+		UpsertCompletions: []CompletionRequest{
+			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"},
+			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-b"},
+		},
+		DeleteCompletions: []DeleteCompletionRequest{
+			{SectionID: "before", ItemIndex: 0, StepID: "1-c"},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), resp.UpsertedCount)
+	require.Equal(t, int64(1), resp.DeletedCount)
 }
 
 func TestValidateFaultRequest(t *testing.T) {

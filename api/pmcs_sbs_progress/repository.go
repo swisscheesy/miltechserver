@@ -11,6 +11,7 @@ type Repository interface {
 	UpsertEquipment(user *bootstrap.User, equipment model.PmcsSbsEquipment) (*model.PmcsSbsEquipment, error)
 	DeleteEquipment(user *bootstrap.User, equipmentID string) error
 	UpsertCompletion(user *bootstrap.User, completion model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error)
+	BatchCompletions(user *bootstrap.User, equipmentID string, upserts []model.PmcsSbsCompletions, deletes []CompletionKey) (*BatchCompletionsResult, error)
 	DeleteCompletion(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32, stepID string) error
 	UpsertFault(user *bootstrap.User, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error)
 	DeleteFault(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32) error
@@ -37,6 +38,11 @@ type CompletionKey struct {
 	SectionID   string
 	ItemIndex   int32
 	StepID      string
+}
+
+type BatchCompletionsResult struct {
+	UpsertedCount int64
+	DeletedCount  int64
 }
 
 type FaultKey struct {

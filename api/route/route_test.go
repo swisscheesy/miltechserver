@@ -15,6 +15,7 @@ func TestSetupRegistersPmcsSbsProgressRoutesUnderAuth(t *testing.T) {
 	Setup(nil, router, nil, nil, nil)
 
 	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment")
+	requireRouteRegistered(t, router, http.MethodPatch, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/completions/batch")
 	requireRouteRegistered(t, router, http.MethodPost, "/api/v1/auth/pmcs-sbs/sync")
 }
 

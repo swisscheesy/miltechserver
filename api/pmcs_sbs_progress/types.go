@@ -22,6 +22,11 @@ type DeleteCompletionRequest struct {
 	StepID    string `json:"step_id"`
 }
 
+type BatchCompletionsRequest struct {
+	UpsertCompletions []CompletionRequest       `json:"upsert_completions"`
+	DeleteCompletions []DeleteCompletionRequest `json:"delete_completions"`
+}
+
 type FaultRequest struct {
 	SectionID        string `json:"section_id"`
 	ItemIndex        int32  `json:"item_index"`
@@ -102,6 +107,11 @@ type CompletionResponse struct {
 	StepID      string    `json:"step_id"`
 	IsComplete  bool      `json:"is_complete"`
 	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type BatchCompletionsResponse struct {
+	UpsertedCount int64 `json:"upserted_count"`
+	DeletedCount  int64 `json:"deleted_count"`
 }
 
 type FaultResponse struct {

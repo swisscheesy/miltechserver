@@ -100,6 +100,60 @@ func TestRepositoryCompletionLifecycle(t *testing.T) {
 	require.Empty(t, aggregate.Completions)
 }
 
+func TestRepositoryBatchCompletions(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-batch-completions")
+	ensureUser(t, testDB, user)
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+
+	first := sampleCompletion(equipment.ID)
+	second := sampleCompletion(equipment.ID)
+	second.StepID = "1-b"
+	result, err := repo.BatchCompletions(user, equipment.ID.String(), []model.PmcsSbsCompletions{first, second}, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), result.UpsertedCount)
+	require.Equal(t, int64(0), result.DeletedCount)
+
+	aggregate, err := repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Len(t, aggregate.Completions, 2)
+
+	second.ItemNo = "1 updated"
+	result, err = repo.BatchCompletions(user, equipment.ID.String(), []model.PmcsSbsCompletions{second}, []pmcs_sbs_progress.CompletionKey{{
+		EquipmentID: equipment.ID.String(),
+		SectionID:   first.SectionID,
+		ItemIndex:   first.ItemIndex,
+		StepID:      first.StepID,
+	}})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), result.UpsertedCount)
+	require.Equal(t, int64(1), result.DeletedCount)
+
+	aggregate, err = repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Len(t, aggregate.Completions, 1)
+	require.Equal(t, "1 updated", aggregate.Completions[0].ItemNo)
+	require.Equal(t, "1-b", aggregate.Completions[0].StepID)
+}
+
+func TestRepositoryBatchCompletionsRequiresOwnedEquipment(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	owner := testUser("pmcs-batch-owner")
+	other := testUser("pmcs-batch-other")
+	ensureUser(t, testDB, owner)
+	ensureUser(t, testDB, other)
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(owner)
+	_, err := repo.UpsertEquipment(owner, equipment)
+	require.NoError(t, err)
+
+	_, err = repo.BatchCompletions(other, equipment.ID.String(), []model.PmcsSbsCompletions{sampleCompletion(equipment.ID)}, nil)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+}
+
 func TestRepositoryFaultLifecycle(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-fault-user")

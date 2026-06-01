@@ -262,6 +262,44 @@ func (repo *RepositoryImpl) UpsertCompletion(user *bootstrap.User, completion mo
 	return repo.upsertCompletionWithExecutor(repo.db, completion)
 }
 
+func (repo *RepositoryImpl) BatchCompletions(user *bootstrap.User, equipmentID string, upserts []model.PmcsSbsCompletions, deletes []CompletionKey) (*BatchCompletionsResult, error) {
+	if user == nil {
+		return nil, ErrUnauthorized
+	}
+
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin batch pmcs sbs completions: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := repo.getEquipmentByID(tx, user, equipmentID); err != nil {
+		return nil, err
+	}
+
+	result := &BatchCompletionsResult{}
+	if len(upserts) > 0 {
+		rows, err := repo.upsertCompletionsWithExecutor(tx, upserts)
+		if err != nil {
+			return nil, err
+		}
+		result.UpsertedCount = rows
+	}
+
+	for _, key := range deletes {
+		rows, err := repo.deleteCompletionWithExecutor(tx, key.EquipmentID, key.SectionID, key.ItemIndex, key.StepID)
+		if err != nil {
+			return nil, err
+		}
+		result.DeletedCount += rows
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit batch pmcs sbs completions: %w", err)
+	}
+	return result, nil
+}
+
 func (repo *RepositoryImpl) upsertCompletionWithExecutor(db qrm.Queryable, completion model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
 	now := time.Now().UTC()
 	completion.IsComplete = true
@@ -301,27 +339,82 @@ func (repo *RepositoryImpl) upsertCompletionWithExecutor(db qrm.Queryable, compl
 	return &saved, nil
 }
 
+func (repo *RepositoryImpl) upsertCompletionsWithExecutor(db qrm.Executable, completions []model.PmcsSbsCompletions) (int64, error) {
+	now := time.Now().UTC()
+	stmt := PmcsSbsCompletions.INSERT(
+		PmcsSbsCompletions.EquipmentID,
+		PmcsSbsCompletions.SectionID,
+		PmcsSbsCompletions.ItemIndex,
+		PmcsSbsCompletions.ItemNo,
+		PmcsSbsCompletions.StepID,
+		PmcsSbsCompletions.IsComplete,
+		PmcsSbsCompletions.UpdatedAt,
+	)
+	for _, completion := range completions {
+		stmt = stmt.VALUES(
+			UUID(completion.EquipmentID),
+			String(completion.SectionID),
+			Int32(completion.ItemIndex),
+			String(completion.ItemNo),
+			String(completion.StepID),
+			Bool(true),
+			TimestampzT(now),
+		)
+	}
+	stmt = stmt.ON_CONFLICT(
+		PmcsSbsCompletions.EquipmentID,
+		PmcsSbsCompletions.SectionID,
+		PmcsSbsCompletions.ItemIndex,
+		PmcsSbsCompletions.StepID,
+	).DO_UPDATE(SET(
+		PmcsSbsCompletions.ItemNo.SET(PmcsSbsCompletions.EXCLUDED.ItemNo),
+		PmcsSbsCompletions.IsComplete.SET(Bool(true)),
+		PmcsSbsCompletions.UpdatedAt.SET(TimestampzT(now)),
+	))
+
+	result, err := stmt.Exec(db)
+	if err != nil {
+		return 0, fmt.Errorf("batch upsert pmcs sbs completions: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("batch upsert pmcs sbs completions rows affected: %w", err)
+	}
+	return rows, nil
+}
+
 func (repo *RepositoryImpl) DeleteCompletion(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32, stepID string) error {
 	if _, err := repo.getEquipmentByID(repo.db, user, equipmentID); err != nil {
 		return err
 	}
-	parsedEquipmentID, err := parseEquipmentID(equipmentID)
-	if err != nil {
+	if _, err := repo.deleteCompletionWithExecutor(repo.db, equipmentID, sectionID, itemIndex, stepID); err != nil {
 		return err
 	}
+	return nil
+}
 
-	_, err = PmcsSbsCompletions.DELETE().
+func (repo *RepositoryImpl) deleteCompletionWithExecutor(db qrm.Executable, equipmentID string, sectionID string, itemIndex int32, stepID string) (int64, error) {
+	parsedEquipmentID, err := parseEquipmentID(equipmentID)
+	if err != nil {
+		return 0, err
+	}
+
+	result, err := PmcsSbsCompletions.DELETE().
 		WHERE(
 			PmcsSbsCompletions.EquipmentID.EQ(UUID(parsedEquipmentID)).
 				AND(PmcsSbsCompletions.SectionID.EQ(String(sectionID))).
 				AND(PmcsSbsCompletions.ItemIndex.EQ(Int32(itemIndex))).
 				AND(PmcsSbsCompletions.StepID.EQ(String(stepID))),
 		).
-		Exec(repo.db)
+		Exec(db)
 	if err != nil {
-		return fmt.Errorf("delete pmcs sbs completion: %w", err)
+		return 0, fmt.Errorf("delete pmcs sbs completion: %w", err)
 	}
-	return nil
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("delete pmcs sbs completion rows affected: %w", err)
+	}
+	return rows, nil
 }
 
 func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {

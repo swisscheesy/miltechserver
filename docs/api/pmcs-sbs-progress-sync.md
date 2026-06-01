@@ -65,7 +65,42 @@ Deletes equipment and child completion/fault rows.
   "section_id": "before",
   "item_index": 0,
   "item_no": "1",
-  "step_id": "1-a"
+  "step_id": "1-a" 
+}
+```
+
+### Batch Completions
+
+`PATCH /pmcs-sbs/equipment/:equipment_id/completions/batch`
+
+Applies up to 100 completion changes for one equipment row in one transaction. Empty or omitted arrays are accepted as a no-op.
+
+```json
+{
+  "upsert_completions": [
+    {
+      "section_id": "during",
+      "item_index": 0,
+      "item_no": "1",
+      "step_id": "c"
+    }
+  ],
+  "delete_completions": [
+    {
+      "section_id": "during",
+      "item_index": 0,
+      "step_id": "d"
+    }
+  ]
+}
+```
+
+Response data:
+
+```json
+{
+  "upserted_count": 1,
+  "deleted_count": 1
 }
 ```
 

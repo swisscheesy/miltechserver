@@ -16,6 +16,8 @@ type ServiceImpl struct {
 	repository Repository
 }
 
+const maxBatchCompletionChanges = 100
+
 func NewService(repository Repository) *ServiceImpl {
 	return &ServiceImpl{repository: repository}
 }
@@ -109,6 +111,24 @@ func (service *ServiceImpl) UpsertCompletion(user *bootstrap.User, equipmentID s
 	}
 	resp := mapCompletion(*saved)
 	return &resp, nil
+}
+
+func (service *ServiceImpl) BatchCompletions(user *bootstrap.User, equipmentID string, req BatchCompletionsRequest) (*BatchCompletionsResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	upserts, deletes, err := service.buildBatchCompletionsChangeSet(equipmentID, req)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.repository.BatchCompletions(user, strings.TrimSpace(equipmentID), upserts, deletes)
+	if err != nil {
+		return nil, err
+	}
+	return &BatchCompletionsResponse{
+		UpsertedCount: result.UpsertedCount,
+		DeletedCount:  result.DeletedCount,
+	}, nil
 }
 
 func (service *ServiceImpl) DeleteCompletion(user *bootstrap.User, equipmentID string, req DeleteCompletionRequest) error {
@@ -231,6 +251,48 @@ func (service *ServiceImpl) validateDeleteCompletionRequest(equipmentID string, 
 		ItemIndex:   req.ItemIndex,
 		StepID:      stepID,
 	}, nil
+}
+
+func (service *ServiceImpl) buildBatchCompletionsChangeSet(equipmentID string, req BatchCompletionsRequest) ([]model.PmcsSbsCompletions, []CompletionKey, error) {
+	id, err := uuid.Parse(strings.TrimSpace(equipmentID))
+	if err != nil {
+		return nil, nil, ErrInvalidID
+	}
+	canonicalEquipmentID := id.String()
+
+	totalChanges := len(req.UpsertCompletions) + len(req.DeleteCompletions)
+	if totalChanges > maxBatchCompletionChanges {
+		return nil, nil, ErrInvalidRequest
+	}
+
+	upserts := make([]model.PmcsSbsCompletions, 0, len(req.UpsertCompletions))
+	upsertKeys := map[string]struct{}{}
+	for _, completion := range req.UpsertCompletions {
+		row, err := service.validateCompletionRequest(canonicalEquipmentID, completion)
+		if err != nil {
+			return nil, nil, err
+		}
+		key := completionKey(row.EquipmentID.String(), row.SectionID, row.ItemIndex, row.StepID)
+		if _, duplicate := upsertKeys[key]; duplicate {
+			return nil, nil, ErrInvalidSyncRequest
+		}
+		upserts = append(upserts, row)
+		upsertKeys[key] = struct{}{}
+	}
+
+	deletes := make([]CompletionKey, 0, len(req.DeleteCompletions))
+	for _, completion := range req.DeleteCompletions {
+		key, err := service.validateDeleteCompletionRequest(canonicalEquipmentID, completion)
+		if err != nil {
+			return nil, nil, err
+		}
+		if _, duplicate := upsertKeys[completionKey(key.EquipmentID, key.SectionID, key.ItemIndex, key.StepID)]; duplicate {
+			return nil, nil, ErrInvalidSyncRequest
+		}
+		deletes = append(deletes, key)
+	}
+
+	return upserts, deletes, nil
 }
 
 func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRequest) (model.PmcsSbsFaults, error) {

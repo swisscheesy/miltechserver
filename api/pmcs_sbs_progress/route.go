@@ -34,6 +34,7 @@ func registerHandlers(group *gin.RouterGroup, svc Service) {
 	group.PUT("/pmcs-sbs/equipment/:equipment_id", handler.upsertEquipment)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id", handler.deleteEquipment)
 	group.PUT("/pmcs-sbs/equipment/:equipment_id/completions", handler.upsertCompletion)
+	group.PATCH("/pmcs-sbs/equipment/:equipment_id/completions/batch", handler.batchCompletions)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id/completions", handler.deleteCompletion)
 	group.PUT("/pmcs-sbs/equipment/:equipment_id/faults", handler.upsertFault)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id/faults", handler.deleteFault)
@@ -124,6 +125,27 @@ func (handler Handler) upsertCompletion(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Completion saved", Data: result})
+}
+
+func (handler Handler) batchCompletions(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		return
+	}
+
+	var req BatchCompletionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		return
+	}
+
+	result, err := handler.service.BatchCompletions(user, c.Param("equipment_id"), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Completions synced", Data: result})
 }
 
 func (handler Handler) deleteCompletion(c *gin.Context) {

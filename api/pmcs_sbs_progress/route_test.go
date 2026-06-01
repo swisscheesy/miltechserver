@@ -21,6 +21,7 @@ type serviceStub struct {
 	aggregateResp   *EquipmentAggregateResponse
 	equipmentResp   *EquipmentResponse
 	completionResp  *CompletionResponse
+	batchResp       *BatchCompletionsResponse
 	faultResp       *FaultResponse
 	syncResp        *SyncResponse
 	err             error
@@ -61,6 +62,15 @@ func (s *serviceStub) UpsertCompletion(user *bootstrap.User, equipmentID string,
 		req         CompletionRequest
 	}{equipmentID: equipmentID, req: req}
 	return s.completionResp, s.err
+}
+
+func (s *serviceStub) BatchCompletions(user *bootstrap.User, equipmentID string, req BatchCompletionsRequest) (*BatchCompletionsResponse, error) {
+	s.capturedUser = user
+	s.capturedRequest = struct {
+		equipmentID string
+		req         BatchCompletionsRequest
+	}{equipmentID: equipmentID, req: req}
+	return s.batchResp, s.err
 }
 
 func (s *serviceStub) DeleteCompletion(user *bootstrap.User, equipmentID string, req DeleteCompletionRequest) error {
@@ -191,6 +201,31 @@ func TestUpsertCompletionSuccess(t *testing.T) {
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
+}
+
+func TestBatchCompletionsSuccess(t *testing.T) {
+	stub := &serviceStub{batchResp: &BatchCompletionsResponse{UpsertedCount: 2, DeletedCount: 1}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodPatch, "/api/v1/auth/pmcs-sbs/equipment/550e8400-e29b-41d4-a716-446655440000/completions/batch", BatchCompletionsRequest{
+		UpsertCompletions: []CompletionRequest{
+			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"},
+			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-b"},
+		},
+		DeleteCompletions: []DeleteCompletionRequest{
+			{SectionID: "before", ItemIndex: 0, StepID: "1-c"},
+		},
+	}, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	captured, ok := stub.capturedRequest.(struct {
+		equipmentID string
+		req         BatchCompletionsRequest
+	})
+	require.True(t, ok)
+	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", captured.equipmentID)
+	require.Len(t, captured.req.UpsertCompletions, 2)
+	require.Len(t, captured.req.DeleteCompletions, 1)
 }
 
 func TestUpsertFaultMapsInvalidStatus(t *testing.T) {
