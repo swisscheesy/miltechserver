@@ -24,6 +24,8 @@ An equipment row is the sync anchor for one user-owned PMCS SBS session.
 | `equipment_manual` | string | Yes | PMCS SBS JSON blob path. Must be a clean path starting with `pmcs_sbs/` and ending with `.json`. |
 | `admin` | string | Yes | Administrative number or user-facing equipment label. Blank values are rejected. |
 | `serial` | string | No | Serial number. Blank is accepted. |
+| `nomenclature` | string | No | Equipment nomenclature. Blank is accepted. |
+| `model` | string | No | Equipment model. Blank is accepted. |
 | `uic` | string | No | Unit identification code. Blank is accepted. |
 | `created_at` | RFC 3339 timestamp | Response only | Server timestamp from initial insert. |
 | `updated_at` | RFC 3339 timestamp | Response only | Server timestamp from latest accepted write. |
@@ -132,6 +134,8 @@ Success response: `200 OK`
         "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
         "admin": "A12",
         "serial": "SER123",
+        "nomenclature": "Truck, Utility",
+        "model": "M1152A1",
         "uic": "WABC01",
         "created_at": "2026-05-28T18:44:12.123456Z",
         "updated_at": "2026-05-28T19:12:03.654321Z"
@@ -181,6 +185,8 @@ Success response: `200 OK`
       "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
       "admin": "A12",
       "serial": "SER123",
+      "nomenclature": "Truck, Utility",
+      "model": "M1152A1",
       "uic": "WABC01",
       "created_at": "2026-05-28T18:44:12.123456Z",
       "updated_at": "2026-05-28T19:12:03.654321Z"
@@ -233,6 +239,8 @@ Request body:
   "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
   "admin": "A12",
   "serial": "SER123",
+  "nomenclature": "Truck, Utility",
+  "model": "M1152A1",
   "uic": "WABC01"
 }
 ```
@@ -247,6 +255,8 @@ Success response: `200 OK`
     "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
     "admin": "A12",
     "serial": "SER123",
+    "nomenclature": "Truck, Utility",
+    "model": "M1152A1",
     "uic": "WABC01",
     "created_at": "2026-05-28T18:44:12.123456Z",
     "updated_at": "2026-05-28T19:12:03.654321Z"
@@ -495,6 +505,8 @@ Request body:
       "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
       "admin": "A12",
       "serial": "SER123",
+      "nomenclature": "Truck, Utility",
+      "model": "M1152A1",
       "uic": "WABC01"
     }
   ],
@@ -537,6 +549,8 @@ Success response: `200 OK`
           "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
           "admin": "A12",
           "serial": "SER123",
+          "nomenclature": "Truck, Utility",
+          "model": "M1152A1",
           "uic": "WABC01",
           "created_at": "2026-05-28T18:44:12.123456Z",
           "updated_at": "2026-05-28T19:20:03.333333Z"
@@ -605,6 +619,7 @@ Contradiction checks canonicalize UUID casing and trim whitespace. Completion ke
 ## Persistence Semantics
 
 - Equipment, completion, and fault writes trim leading and trailing whitespace from string fields before persistence.
+- `nomenclature` and `model` are optional equipment metadata fields. Blank or omitted values are accepted and returned as empty strings.
 - Equipment writes preserve `created_at` on update and refresh `updated_at`.
 - Completion writes always store `is_complete: true` and refresh `updated_at`.
 - Batch completion requests accept at most 100 total upsert and delete changes.

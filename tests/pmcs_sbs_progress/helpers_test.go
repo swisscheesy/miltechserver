@@ -47,6 +47,8 @@ func sampleEquipment(user *bootstrap.User) model.PmcsSbsEquipment {
 		EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
 		Admin:           "A12",
 		Serial:          "SER-1",
+		Nomenclature:    "Truck, Utility",
+		Model:           "M1152A1",
 		Uic:             "UIC",
 		CreatedAt:       now,
 		UpdatedAt:       now,

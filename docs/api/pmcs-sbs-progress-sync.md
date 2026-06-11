@@ -14,6 +14,7 @@ This API syncs PMCS SBS equipment, completed steps, and faults for logged-in use
 - `equipment_manual` stores the PMCS SBS JSON blob path, for example `pmcs_sbs/hmmwv/basic.json`.
 - `equipment_manual` must be a clean path under `pmcs_sbs/` and must end with `.json`.
 - `admin` is required when saving equipment.
+- `nomenclature` and `model` are optional equipment metadata fields. Blank or omitted values are accepted and returned as empty strings.
 - Completion rows represent completed steps only.
 - `section_id`, `item_no`, and `step_id` are required for completion saves.
 - `item_index` must be zero or greater.
@@ -46,6 +47,8 @@ Returns one equipment row with its completions and faults.
   "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
   "admin": "A12",
   "serial": "SER123",
+  "nomenclature": "Truck, Utility",
+  "model": "M1152A1",
   "uic": "WABC01"
 }
 ```

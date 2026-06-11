@@ -3,14 +3,18 @@ package pmcs_sbs_progress
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-type repoStub struct{}
+type repoStub struct {
+	syncResult *SyncResult
+}
 
 func (repo *repoStub) ListEquipment(user *bootstrap.User) ([]model.PmcsSbsEquipment, error) {
 	return nil, nil
@@ -49,6 +53,9 @@ func (repo *repoStub) DeleteFault(user *bootstrap.User, equipmentID string, sect
 }
 
 func (repo *repoStub) Sync(user *bootstrap.User, changeSet SyncChangeSet) (*SyncResult, error) {
+	if repo.syncResult != nil {
+		return repo.syncResult, nil
+	}
 	return &SyncResult{}, nil
 }
 
@@ -59,6 +66,8 @@ func TestValidateEquipmentRequest(t *testing.T) {
 		EquipmentManual: " pmcs_sbs/hmmwv/basic.json ",
 		Admin:           " A12 ",
 		Serial:          " SER ",
+		Nomenclature:    " Truck, Utility ",
+		Model:           " M1152A1 ",
 		Uic:             " UIC ",
 	})
 
@@ -67,7 +76,30 @@ func TestValidateEquipmentRequest(t *testing.T) {
 	require.Equal(t, "pmcs_sbs/hmmwv/basic.json", req.EquipmentManual)
 	require.Equal(t, "A12", req.Admin)
 	require.Equal(t, "SER", req.Serial)
+	require.Equal(t, "Truck, Utility", req.Nomenclature)
+	require.Equal(t, "M1152A1", req.Model)
 	require.Equal(t, "UIC", req.Uic)
+}
+
+func TestMapEquipmentIncludesMetadata(t *testing.T) {
+	id := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	now := time.Now().UTC()
+
+	resp := mapEquipment(model.PmcsSbsEquipment{
+		ID:              id,
+		EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
+		Admin:           "A12",
+		Serial:          "SER",
+		Nomenclature:    "Truck, Utility",
+		Model:           "M1152A1",
+		Uic:             "UIC",
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	})
+
+	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", resp.ID)
+	require.Equal(t, "Truck, Utility", resp.Nomenclature)
+	require.Equal(t, "M1152A1", resp.Model)
 }
 
 func TestValidateEquipmentRequestRejectsInvalidValues(t *testing.T) {
@@ -457,6 +489,10 @@ func TestBuildSyncChangeSet(t *testing.T) {
 			ID:              "550e8400-e29b-41d4-a716-446655440000",
 			EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
 			Admin:           "A12",
+			Serial:          " SER ",
+			Nomenclature:    " Truck, Utility ",
+			Model:           " M1152A1 ",
+			Uic:             " UIC ",
 		}},
 		UpsertCompletions: []SyncCompletionRequest{{
 			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
@@ -480,6 +516,36 @@ func TestBuildSyncChangeSet(t *testing.T) {
 	require.Len(t, changeSet.UpsertCompletions, 1)
 	require.Len(t, changeSet.UpsertFaults, 1)
 	require.Equal(t, user.UserID, changeSet.UpsertEquipment[0].UserUID)
+	require.Equal(t, "SER", changeSet.UpsertEquipment[0].Serial)
+	require.Equal(t, "Truck, Utility", changeSet.UpsertEquipment[0].Nomenclature)
+	require.Equal(t, "M1152A1", changeSet.UpsertEquipment[0].Model)
+	require.Equal(t, "UIC", changeSet.UpsertEquipment[0].Uic)
+}
+
+func TestSyncResponseIncludesEquipmentMetadata(t *testing.T) {
+	id := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+	now := time.Now().UTC()
+	svc := NewService(&repoStub{syncResult: &SyncResult{
+		Equipment: []EquipmentAggregate{{
+			Equipment: model.PmcsSbsEquipment{
+				ID:              id,
+				EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
+				Admin:           "A12",
+				Serial:          "SER",
+				Nomenclature:    "Truck, Utility",
+				Model:           "M1152A1",
+				Uic:             "UIC",
+				CreatedAt:       now,
+				UpdatedAt:       now,
+			},
+		}},
+	}})
+
+	resp, err := svc.Sync(requireUser(), SyncRequest{})
+	require.NoError(t, err)
+	require.Len(t, resp.Equipment, 1)
+	require.Equal(t, "Truck, Utility", resp.Equipment[0].Equipment.Nomenclature)
+	require.Equal(t, "M1152A1", resp.Equipment[0].Equipment.Model)
 }
 
 func requireUser() *bootstrap.User {

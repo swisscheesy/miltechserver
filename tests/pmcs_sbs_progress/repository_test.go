@@ -20,14 +20,20 @@ func TestRepositoryEquipmentLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, equipment.ID, saved.ID)
 	require.Equal(t, user.UserID, saved.UserUID)
+	require.Equal(t, "Truck, Utility", saved.Nomenclature)
+	require.Equal(t, "M1152A1", saved.Model)
 
 	list, err := repo.ListEquipment(user)
 	require.NoError(t, err)
 	require.Len(t, list, 1)
+	require.Equal(t, "Truck, Utility", list[0].Nomenclature)
+	require.Equal(t, "M1152A1", list[0].Model)
 
 	aggregate, err := repo.GetEquipmentAggregate(user, equipment.ID.String())
 	require.NoError(t, err)
 	require.Equal(t, equipment.ID, aggregate.Equipment.ID)
+	require.Equal(t, "Truck, Utility", aggregate.Equipment.Nomenclature)
+	require.Equal(t, "M1152A1", aggregate.Equipment.Model)
 	require.Empty(t, aggregate.Completions)
 	require.Empty(t, aggregate.Faults)
 
@@ -35,6 +41,29 @@ func TestRepositoryEquipmentLifecycle(t *testing.T) {
 	list, err = repo.ListEquipment(user)
 	require.NoError(t, err)
 	require.Empty(t, list)
+}
+
+func TestRepositoryEquipmentUpsertUpdatesMetadata(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-equipment-metadata")
+	ensureUser(t, testDB, user)
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+	equipment := sampleEquipment(user)
+
+	_, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+
+	equipment.Nomenclature = "Carrier, Personnel"
+	equipment.Model = "M1165A1"
+	updated, err := repo.UpsertEquipment(user, equipment)
+	require.NoError(t, err)
+	require.Equal(t, "Carrier, Personnel", updated.Nomenclature)
+	require.Equal(t, "M1165A1", updated.Model)
+
+	aggregate, err := repo.GetEquipmentAggregate(user, equipment.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "Carrier, Personnel", aggregate.Equipment.Nomenclature)
+	require.Equal(t, "M1165A1", aggregate.Equipment.Model)
 }
 
 func TestRepositoryGetEquipmentAggregateIncludesChildren(t *testing.T) {
@@ -219,6 +248,8 @@ func TestRepositorySyncAppliesChangeSet(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, result.Equipment, 1)
+	require.Equal(t, "Truck, Utility", result.Equipment[0].Equipment.Nomenclature)
+	require.Equal(t, "M1152A1", result.Equipment[0].Equipment.Model)
 	require.Len(t, result.Equipment[0].Completions, 1)
 	require.Len(t, result.Equipment[0].Faults, 1)
 }

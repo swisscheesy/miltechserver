@@ -6,6 +6,8 @@ type EquipmentRequest struct {
 	EquipmentManual string `json:"equipment_manual"`
 	Admin           string `json:"admin"`
 	Serial          string `json:"serial"`
+	Nomenclature    string `json:"nomenclature"`
+	Model           string `json:"model"`
 	Uic             string `json:"uic"`
 }
 
@@ -55,6 +57,8 @@ type SyncEquipmentRequest struct {
 	EquipmentManual string `json:"equipment_manual"`
 	Admin           string `json:"admin"`
 	Serial          string `json:"serial"`
+	Nomenclature    string `json:"nomenclature"`
+	Model           string `json:"model"`
 	Uic             string `json:"uic"`
 }
 
@@ -94,6 +98,8 @@ type EquipmentResponse struct {
 	EquipmentManual string    `json:"equipment_manual"`
 	Admin           string    `json:"admin"`
 	Serial          string    `json:"serial"`
+	Nomenclature    string    `json:"nomenclature"`
+	Model           string    `json:"model"`
 	Uic             string    `json:"uic"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`

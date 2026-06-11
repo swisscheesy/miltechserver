@@ -27,6 +27,8 @@ type validatedEquipment struct {
 	EquipmentManual string
 	Admin           string
 	Serial          string
+	Nomenclature    string
+	Model           string
 	Uic             string
 }
 
@@ -74,6 +76,8 @@ func (service *ServiceImpl) UpsertEquipment(user *bootstrap.User, equipmentID st
 		EquipmentManual: validated.EquipmentManual,
 		Admin:           validated.Admin,
 		Serial:          validated.Serial,
+		Nomenclature:    validated.Nomenclature,
+		Model:           validated.Model,
 		Uic:             validated.Uic,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -209,6 +213,8 @@ func (service *ServiceImpl) validateEquipmentRequest(equipmentID string, req Equ
 		EquipmentManual: equipmentManual,
 		Admin:           admin,
 		Serial:          strings.TrimSpace(req.Serial),
+		Nomenclature:    strings.TrimSpace(req.Nomenclature),
+		Model:           strings.TrimSpace(req.Model),
 		Uic:             strings.TrimSpace(req.Uic),
 	}, nil
 }
@@ -413,6 +419,8 @@ func (service *ServiceImpl) buildSyncChangeSet(user *bootstrap.User, req SyncReq
 			EquipmentManual: equipment.EquipmentManual,
 			Admin:           equipment.Admin,
 			Serial:          equipment.Serial,
+			Nomenclature:    equipment.Nomenclature,
+			Model:           equipment.Model,
 			Uic:             equipment.Uic,
 		})
 		if err != nil {
@@ -425,6 +433,8 @@ func (service *ServiceImpl) buildSyncChangeSet(user *bootstrap.User, req SyncReq
 			EquipmentManual: validated.EquipmentManual,
 			Admin:           validated.Admin,
 			Serial:          validated.Serial,
+			Nomenclature:    validated.Nomenclature,
+			Model:           validated.Model,
 			Uic:             validated.Uic,
 			CreatedAt:       now,
 			UpdatedAt:       now,
@@ -526,6 +536,8 @@ func mapEquipment(row model.PmcsSbsEquipment) EquipmentResponse {
 		EquipmentManual: row.EquipmentManual,
 		Admin:           row.Admin,
 		Serial:          row.Serial,
+		Nomenclature:    row.Nomenclature,
+		Model:           row.Model,
 		Uic:             row.Uic,
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,

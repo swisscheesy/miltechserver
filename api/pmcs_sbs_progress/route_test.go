@@ -164,6 +164,10 @@ func TestUpsertEquipmentSuccess(t *testing.T) {
 		ID:              "550e8400-e29b-41d4-a716-446655440000",
 		EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
 		Admin:           "A12",
+		Serial:          "SER123",
+		Nomenclature:    "Truck, Utility",
+		Model:           "M1152A1",
+		Uic:             "WABC01",
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}}
@@ -172,9 +176,28 @@ func TestUpsertEquipmentSuccess(t *testing.T) {
 	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/550e8400-e29b-41d4-a716-446655440000", EquipmentRequest{
 		EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
 		Admin:           "A12",
+		Serial:          "SER123",
+		Nomenclature:    " Truck, Utility ",
+		Model:           " M1152A1 ",
+		Uic:             "WABC01",
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
+	captured, ok := stub.capturedRequest.(struct {
+		equipmentID string
+		req         EquipmentRequest
+	})
+	require.True(t, ok)
+	require.Equal(t, " Truck, Utility ", captured.req.Nomenclature)
+	require.Equal(t, " M1152A1 ", captured.req.Model)
+
+	var body struct {
+		Status int               `json:"status"`
+		Data   EquipmentResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "Truck, Utility", body.Data.Nomenclature)
+	require.Equal(t, "M1152A1", body.Data.Model)
 }
 
 func TestInvalidJSONReturnsBadRequest(t *testing.T) {

@@ -26,12 +26,12 @@ BEFORE ANY ACTION, you MUST use these tools. Tool names use double underscores b
 ```bash
 # IGNORE if you are calling MCP tool
 # BEFORE writing ANY code, search ALL relevant docs:
-mcp__Ref__ref_search_documentation "[language/framework] [feature] best practices 2025"
-mcp__Ref__ref_search_documentation "[API name] documentation"
-mcp__Ref__ref_search_documentation "[technology] [pattern] implementation"
+mcp__ref.ref_search_documentation "[language/framework] [feature] best practices 2026"
+mcp__ref.ref_search_documentation "[API name] documentation"
+mcp__ref.ref_search_documentation "[technology] [pattern] implementation"
 
 # Read the actual documentation URLs found:
-mcp__Ref__ref_read_url "[documentation URL from search]"
+mcp__Ref.ref_read_url "[documentation URL from search]"
 ```
 
 #### Sequential Thinking (FOR COMPLEX TASKS)
