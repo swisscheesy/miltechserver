@@ -15,6 +15,8 @@ This document contains universal development principles and practices for AI ass
 - **Authentication** Firebase Auth
 
 Follow current application architecure as best as possible.  Any code written should implement well with currently functionality, and follow existing project standards.
+Use the golang-pro skill for help when working on go code.
+When working with a postgres database, user Database Optimizer & Supabase Postgres Best Practices skills to ensure we are following best practices and keeping our database optimized.
 
 ## Required Tools and Research Methods
 
