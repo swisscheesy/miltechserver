@@ -2,6 +2,9 @@ package core
 
 import (
 	"log/slog"
+	"net/http"
+	"time"
+
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
@@ -12,6 +15,44 @@ import (
 
 type Handler struct {
 	service ShopService
+}
+
+func (handler *Handler) GetShopEquipmentOverview(c *gin.Context) {
+	startedAt := time.Now()
+	ctxUser, ok := c.Get("user")
+	user, userOK := ctxUser.(*bootstrap.User)
+	if !ok || !userOK || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return
+	}
+
+	overview, err := handler.service.GetShopEquipmentOverview(c.Request.Context(), user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, response.StandardResponse{
+			Status:  http.StatusInternalServerError,
+			Message: ErrShopEquipmentOverviewUnavailable.Error(),
+			Data:    nil,
+		})
+		return
+	}
+
+	equipmentCount := 0
+	for i := range overview.Shops {
+		equipmentCount += overview.Shops[i].EquipmentCount
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "Shop equipment overview retrieved successfully",
+		Data:    overview,
+	})
+	slog.Info(
+		"Shop equipment overview request completed",
+		"user_id", user.UserID,
+		"shop_count", len(overview.Shops),
+		"equipment_count", equipmentCount,
+		"duration_ms", time.Since(startedAt).Milliseconds(),
+	)
 }
 
 // Shop Operations

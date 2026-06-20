@@ -8,6 +8,7 @@ require (
 	firebase.google.com/go/v4 v4.15.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.1
+	github.com/gin-contrib/gzip v1.1.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-jet/jet/v2 v2.13.0
 	github.com/google/uuid v1.6.0
