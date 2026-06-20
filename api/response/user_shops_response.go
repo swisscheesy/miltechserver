@@ -75,3 +75,24 @@ type ShopDetailResponse struct {
 	VehicleCount  int64 `json:"vehicle_count"`  // Total count of shop vehicles
 	IsAdmin       bool  `json:"is_admin"`       // Whether current user is admin
 }
+
+type ShopEquipmentOverviewResponse struct {
+	Shops []ShopEquipmentOverview `json:"shops"`
+}
+
+type ShopEquipmentOverview struct {
+	ID             string                 `sql:"primary_key" alias:"shops.id" json:"id"`
+	Name           string                 `alias:"shops.name" json:"name"`
+	Details        *string                `alias:"shops.details" json:"details"`
+	Role           string                 `alias:"shop_members.role" json:"role"`
+	EquipmentCount int                    `json:"equipment_count"`
+	Equipment      []ShopEquipmentSummary `alias:"shop_vehicle" json:"equipment"`
+}
+
+type ShopEquipmentSummary struct {
+	ID     string `sql:"primary_key" alias:"id" json:"id"`
+	Admin  string `alias:"admin" json:"admin"`
+	Model  string `alias:"model" json:"model"`
+	Serial string `alias:"serial" json:"serial"`
+	Niin   string `alias:"niin" json:"niin"`
+}
