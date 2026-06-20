@@ -143,6 +143,45 @@ func (repo *RepositoryImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops,
 	return shops, nil
 }
 
+func (repo *RepositoryImpl) GetShopEquipmentOverview(
+	ctx context.Context,
+	user *bootstrap.User,
+) ([]response.ShopEquipmentOverview, error) {
+	queryStarted := time.Now()
+	stmt := SELECT(
+		Shops.ID, Shops.Name, Shops.Details, ShopMembers.Role,
+		ShopVehicle.ID, ShopVehicle.Admin, ShopVehicle.Model,
+		ShopVehicle.Serial, ShopVehicle.Niin,
+	).FROM(
+		Shops.
+			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(Shops.ID)).
+			LEFT_JOIN(ShopVehicle, ShopVehicle.ShopID.EQ(Shops.ID)),
+	).WHERE(
+		ShopMembers.UserID.EQ(String(user.UserID)),
+	).ORDER_BY(
+		Shops.CreatedAt.DESC(),
+		ShopVehicle.SaveTime.DESC(),
+		ShopVehicle.ID.DESC(),
+	)
+
+	shops := make([]response.ShopEquipmentOverview, 0)
+	if err := stmt.QueryContext(ctx, repo.db, &shops); err != nil {
+		return nil, fmt.Errorf("failed to query shop equipment overview: %w", err)
+	}
+
+	equipmentCount := 0
+	for i := range shops {
+		equipmentCount += len(shops[i].Equipment)
+	}
+	slog.Info("Shop equipment overview query completed",
+		"user_id", user.UserID,
+		"shop_count", len(shops),
+		"equipment_count", equipmentCount,
+		"duration_ms", time.Since(queryStarted).Milliseconds(),
+	)
+	return shops, nil
+}
+
 func (repo *RepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
 	rawSQL := `
 		SELECT

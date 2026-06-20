@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
@@ -13,6 +14,7 @@ type Repository interface {
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
 	GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error)
 	GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error)
+	GetShopEquipmentOverview(ctx context.Context, user *bootstrap.User) ([]response.ShopEquipmentOverview, error)
 	AddMemberToShop(user *bootstrap.User, shopID string, role string) error
 	DeleteShopMessageBlobs(shopID string) error
 }
