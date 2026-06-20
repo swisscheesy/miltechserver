@@ -392,3 +392,22 @@ Based on the current project setup:
 - Context propagation ensures all Azure calls cancel immediately when a client disconnects
 - 500 error responses across all library handlers no longer expose Azure internals (this fix applied retroactively to `ps_mag` and the parent `library` package as part of this work)
 - `ps_mag` and `pmcs_sbs` now share the same security posture on error responses; future library sub-packages should follow the same pattern
+
+### ADR-015: Unbounded Shop Equipment Overview (2026-06-20)
+
+**Context:**
+- The overview client needs every shop the authenticated user belongs to and compact equipment identity fields in one current response.
+- The accepted representative load is 100 shops and 25,000 equipment records, with warm-cache p95 below one second.
+- Existing per-shop vehicle retrieval would create an N+1 query pattern.
+
+**Decision:**
+- Add `GET /api/v1/auth/shops/equipment/overview` under `api/shops/core`.
+- Use one membership-filtered Jet query with a left join to equipment and request-context cancellation.
+- Return compact DTOs, preserve empty shops, and apply endpoint-scoped gzip.
+- Keep the response unbounded and uncached, with no endpoint deadline or endpoint-specific rate limiter.
+- Keep the existing schema because representative evidence did not justify another index.
+
+**Consequences:**
+- The endpoint performs one database round trip and limits rows through membership in the query.
+- Memory and bandwidth grow linearly with equipment count; gzip reduces transfer size but not DTO allocation.
+- If workloads exceed the accepted bound or p95 target, revisit the transport contract before speculative indexing or caching.
