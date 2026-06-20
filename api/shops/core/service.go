@@ -1,6 +1,8 @@
 package core
 
 import (
+	"context"
+
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
@@ -13,4 +15,5 @@ type ShopService interface {
 	GetShopsByUser(user *bootstrap.User) ([]model.Shops, error)
 	GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error)
 	GetUserDataWithShops(user *bootstrap.User) (*response.UserShopsResponse, error)
+	GetShopEquipmentOverview(ctx context.Context, user *bootstrap.User) (*response.ShopEquipmentOverviewResponse, error)
 }

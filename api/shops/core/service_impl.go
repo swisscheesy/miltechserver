@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -154,6 +155,31 @@ func (service *ServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*respons
 
 	slog.Info("User data with shops and statistics retrieved", "user_id", user.UserID, "shops_count", len(shopsWithStats))
 	return userShopsResponse, nil
+}
+
+func (service *ServiceImpl) GetShopEquipmentOverview(ctx context.Context, user *bootstrap.User) (*response.ShopEquipmentOverviewResponse, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	shops, err := service.repo.GetShopEquipmentOverview(ctx, user)
+	if err != nil {
+		slog.Error("Failed to retrieve shop equipment overview", "error", err, "user_id", user.UserID)
+		return nil, ErrShopEquipmentOverviewUnavailable
+	}
+
+	if shops == nil {
+		shops = make([]response.ShopEquipmentOverview, 0)
+	}
+
+	for i := range shops {
+		if shops[i].Equipment == nil {
+			shops[i].Equipment = make([]response.ShopEquipmentSummary, 0)
+		}
+		shops[i].EquipmentCount = len(shops[i].Equipment)
+	}
+
+	return &response.ShopEquipmentOverviewResponse{Shops: shops}, nil
 }
 
 // deleteShopWithBlobCleanup is a private helper that deletes a shop and cleans up associated blobs
