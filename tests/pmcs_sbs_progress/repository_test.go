@@ -70,6 +70,9 @@ func TestRepositoryMissingVehicleReturnsNotFound(t *testing.T) {
 
 	_, err = repo.UpsertFault(user, sampleFault("missing-vehicle"))
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+
+	err = repo.DeleteFault(user, pmcs_sbs_progress.FaultKey{EquipmentID: "missing-vehicle", SectionID: "before", ItemIndex: 0})
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
 }
 
 func TestRepositoryAnyShopMemberCanManageFaults(t *testing.T) {
@@ -110,7 +113,7 @@ func TestRepositoryFaultUpsertPreservesCreatedAt(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, first.CreatedAt, second.CreatedAt)
-	require.True(t, second.UpdatedAt.After(first.UpdatedAt) || second.UpdatedAt.Equal(first.UpdatedAt))
+	require.True(t, second.UpdatedAt.After(first.UpdatedAt))
 	require.Equal(t, "updated leak", second.FaultText)
 	require.Equal(t, "tightened", second.CorrectiveAction)
 }
