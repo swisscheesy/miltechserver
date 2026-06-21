@@ -1,125 +1,28 @@
-# PMCS SBS Progress Sync API
+# PMCS SBS Faults API
 
-Base URL: `https://<host>/api/v1/auth`
-Authentication: Firebase bearer token required.
-Content-Type: `application/json`
+Base URL: `/api/v1/auth`
 
-## Overview
+The server no longer stores PMCS SBS guide progress, completions, or PMCS-owned equipment. PMCS SBS tracking remains client-side. The authenticated server API stores only PMCS SBS faults for existing `shop_vehicle` equipment.
 
-This API syncs PMCS SBS equipment, completed steps, and faults for logged-in users. The public PMCS SBS library API still serves document JSON from Azure Blob Storage. This API stores user progress for a selected `equipment_manual` blob path.
+The public PMCS SBS library API remains separate and continues to serve guide JSON from Azure Blob Storage.
 
-## Rules
+## Authorization
 
-- Equipment IDs are client-generated UUIDs.
-- `equipment_manual` stores the PMCS SBS JSON blob path, for example `pmcs_sbs/hmmwv/basic.json`.
-- `equipment_manual` must be a clean path under `pmcs_sbs/` and must end with `.json`.
-- `admin` is required when saving equipment.
-- `nomenclature` and `model` are optional equipment metadata fields. Blank or omitted values are accepted and returned as empty strings.
-- Completion rows represent completed steps only.
-- `section_id`, `item_no`, and `step_id` are required for completion saves.
-- `item_index` must be zero or greater.
-- Fault status must be `X`, `/`, or `-`.
-- `fault_text` is required when saving a fault.
-- Deletes are hard deletes.
-- Last write wins by server processing time.
-- Batch sync rejects contradictory changes in one request, such as upserting and deleting the same equipment, completion, or fault.
+All endpoints require Firebase authentication. The authenticated user must be a member of the shop that owns the target `shop_vehicle`.
 
-## Endpoints
-
-### List Equipment
-
-`GET /pmcs-sbs/equipment`
-
-Returns all PMCS SBS equipment for the authenticated user.
-
-### Get Equipment Progress
-
-`GET /pmcs-sbs/equipment/:equipment_id`
-
-Returns one equipment row with its completions and faults.
-
-### Save Equipment
-
-`PUT /pmcs-sbs/equipment/:equipment_id`
+Missing vehicles and vehicles in shops the user cannot access both return:
 
 ```json
-{
-  "equipment_manual": "pmcs_sbs/hmmwv/basic.json",
-  "admin": "A12",
-  "serial": "SER123",
-  "nomenclature": "Truck, Utility",
-  "model": "M1152A1",
-  "uic": "WABC01"
-}
+{"message":"pmcs sbs equipment not found"}
 ```
 
-### Delete Equipment
+## List Faults
 
-`DELETE /pmcs-sbs/equipment/:equipment_id`
+`GET /pmcs-sbs/equipment/:equipment_id/faults`
 
-Deletes equipment and child completion/fault rows.
+Returns all PMCS SBS faults for the shop vehicle.
 
-### Save Completion
-
-`PUT /pmcs-sbs/equipment/:equipment_id/completions`
-
-```json
-{
-  "section_id": "before",
-  "item_index": 0,
-  "item_no": "1",
-  "step_id": "1-a" 
-}
-```
-
-### Batch Completions
-
-`PATCH /pmcs-sbs/equipment/:equipment_id/completions/batch`
-
-Applies up to 100 completion changes for one equipment row in one transaction. Empty or omitted arrays are accepted as a no-op.
-
-```json
-{
-  "upsert_completions": [
-    {
-      "section_id": "during",
-      "item_index": 0,
-      "item_no": "1",
-      "step_id": "c"
-    }
-  ],
-  "delete_completions": [
-    {
-      "section_id": "during",
-      "item_index": 0,
-      "step_id": "d"
-    }
-  ]
-}
-```
-
-Response data:
-
-```json
-{
-  "upserted_count": 1,
-  "deleted_count": 1
-}
-```
-
-### Delete Completion
-
-`DELETE /pmcs-sbs/equipment/:equipment_id/completions`
-
-```json
-{
-  "section_id": "before",
-  "item_index": 0,
-  "step_id": "1-a"
-}
-```
-
-### Save Fault
+## Save Fault
 
 `PUT /pmcs-sbs/equipment/:equipment_id/faults`
 
@@ -134,7 +37,9 @@ Response data:
 }
 ```
 
-### Delete Fault
+Accepted status inputs are `X`, `x`, `/`, `slash`, `-`, and `dash`. Responses normalize to `x`, `slash`, or `dash`.
+
+## Delete Fault
 
 `DELETE /pmcs-sbs/equipment/:equipment_id/faults`
 
@@ -145,19 +50,4 @@ Response data:
 }
 ```
 
-### Batch Sync
-
-`POST /pmcs-sbs/sync`
-
-Sends explicit offline replay changes in one request.
-
-```json
-{
-  "upsert_equipment": [],
-  "delete_equipment_ids": [],
-  "upsert_completions": [],
-  "delete_completions": [],
-  "upsert_faults": [],
-  "delete_faults": []
-}
-```
+Deletes are idempotent after the user has access to the parent vehicle.
