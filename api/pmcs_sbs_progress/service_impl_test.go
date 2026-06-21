@@ -8,323 +8,142 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 type repoStub struct {
-	syncResult *SyncResult
+	listFaults []model.PmcsSbsFaults
+	savedFault *model.PmcsSbsFaults
+	err        error
+
+	capturedUser        *bootstrap.User
+	capturedEquipmentID string
+	capturedFault       model.PmcsSbsFaults
+	capturedDelete      FaultKey
 }
 
-func (repo *repoStub) ListEquipment(user *bootstrap.User) ([]model.PmcsSbsEquipment, error) {
-	return nil, nil
-}
-
-func (repo *repoStub) GetEquipmentAggregate(user *bootstrap.User, equipmentID string) (*EquipmentAggregate, error) {
-	return nil, nil
-}
-
-func (repo *repoStub) UpsertEquipment(user *bootstrap.User, equipment model.PmcsSbsEquipment) (*model.PmcsSbsEquipment, error) {
-	return &equipment, nil
-}
-
-func (repo *repoStub) DeleteEquipment(user *bootstrap.User, equipmentID string) error {
-	return nil
-}
-
-func (repo *repoStub) UpsertCompletion(user *bootstrap.User, completion model.PmcsSbsCompletions) (*model.PmcsSbsCompletions, error) {
-	return &completion, nil
-}
-
-func (repo *repoStub) BatchCompletions(user *bootstrap.User, equipmentID string, upserts []model.PmcsSbsCompletions, deletes []CompletionKey) (*BatchCompletionsResult, error) {
-	return &BatchCompletionsResult{UpsertedCount: int64(len(upserts)), DeletedCount: int64(len(deletes))}, nil
-}
-
-func (repo *repoStub) DeleteCompletion(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32, stepID string) error {
-	return nil
+func (repo *repoStub) ListFaults(user *bootstrap.User, equipmentID string) ([]model.PmcsSbsFaults, error) {
+	repo.capturedUser = user
+	repo.capturedEquipmentID = equipmentID
+	return repo.listFaults, repo.err
 }
 
 func (repo *repoStub) UpsertFault(user *bootstrap.User, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
-	return &fault, nil
-}
-
-func (repo *repoStub) DeleteFault(user *bootstrap.User, equipmentID string, sectionID string, itemIndex int32) error {
-	return nil
-}
-
-func (repo *repoStub) Sync(user *bootstrap.User, changeSet SyncChangeSet) (*SyncResult, error) {
-	if repo.syncResult != nil {
-		return repo.syncResult, nil
+	repo.capturedUser = user
+	repo.capturedFault = fault
+	if repo.savedFault != nil {
+		return repo.savedFault, repo.err
 	}
-	return &SyncResult{}, nil
+	return &fault, repo.err
 }
 
-func TestValidateEquipmentRequest(t *testing.T) {
+func (repo *repoStub) DeleteFault(user *bootstrap.User, key FaultKey) error {
+	repo.capturedUser = user
+	repo.capturedDelete = key
+	return repo.err
+}
+
+func requireUser() *bootstrap.User {
+	return &bootstrap.User{UserID: "user-1", Email: "user-1@example.com", Username: "user-1"}
+}
+
+func requireServiceError(t *testing.T, err error, target error) {
+	t.Helper()
+	require.Error(t, err)
+	require.Truef(t, errors.Is(err, target), "expected %v, got %v", target, err)
+}
+
+func TestListFaultsRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	req, err := svc.validateEquipmentRequest("550e8400-e29b-41d4-a716-446655440000", EquipmentRequest{
-		EquipmentManual: " pmcs_sbs/hmmwv/basic.json ",
-		Admin:           " A12 ",
-		Serial:          " SER ",
-		Nomenclature:    " Truck, Utility ",
-		Model:           " M1152A1 ",
-		Uic:             " UIC ",
-	})
+	_, err := svc.ListFaults(nil, "vehicle-1")
 
-	require.NoError(t, err)
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", req.ID.String())
-	require.Equal(t, "pmcs_sbs/hmmwv/basic.json", req.EquipmentManual)
-	require.Equal(t, "A12", req.Admin)
-	require.Equal(t, "SER", req.Serial)
-	require.Equal(t, "Truck, Utility", req.Nomenclature)
-	require.Equal(t, "M1152A1", req.Model)
-	require.Equal(t, "UIC", req.Uic)
+	requireServiceError(t, err, ErrUnauthorized)
 }
 
-func TestMapEquipmentIncludesMetadata(t *testing.T) {
-	id := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+func TestListFaultsRejectsBlankEquipmentID(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, err := svc.ListFaults(requireUser(), " ")
+
+	requireServiceError(t, err, ErrInvalidID)
+}
+
+func TestListFaultsMapsRows(t *testing.T) {
 	now := time.Now().UTC()
+	stub := &repoStub{listFaults: []model.PmcsSbsFaults{{
+		EquipmentID:      "vehicle-1",
+		SectionID:        "before",
+		ItemIndex:        0,
+		ItemNo:           "1",
+		Status:           "x",
+		FaultText:        "leak",
+		CorrectiveAction: "tightened",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}}}
+	svc := NewService(stub)
 
-	resp := mapEquipment(model.PmcsSbsEquipment{
-		ID:              id,
-		EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
-		Admin:           "A12",
-		Serial:          "SER",
-		Nomenclature:    "Truck, Utility",
-		Model:           "M1152A1",
-		Uic:             "UIC",
-		CreatedAt:       now,
-		UpdatedAt:       now,
-	})
-
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", resp.ID)
-	require.Equal(t, "Truck, Utility", resp.Nomenclature)
-	require.Equal(t, "M1152A1", resp.Model)
-}
-
-func TestValidateEquipmentRequestRejectsInvalidValues(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	cases := []struct {
-		name        string
-		equipmentID string
-		req         EquipmentRequest
-		want        error
-	}{
-		{
-			name:        "invalid uuid",
-			equipmentID: "not-a-uuid",
-			req:         EquipmentRequest{EquipmentManual: "pmcs_sbs/hmmwv/basic.json", Admin: "A12"},
-			want:        ErrInvalidID,
-		},
-		{
-			name:        "bad blob prefix",
-			equipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			req:         EquipmentRequest{EquipmentManual: "pmcs/hmmwv/basic.json", Admin: "A12"},
-			want:        ErrInvalidBlobPath,
-		},
-		{
-			name:        "bad blob extension",
-			equipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			req:         EquipmentRequest{EquipmentManual: "pmcs_sbs/hmmwv/basic.pdf", Admin: "A12"},
-			want:        ErrInvalidBlobPath,
-		},
-		{
-			name:        "path traversal",
-			equipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			req:         EquipmentRequest{EquipmentManual: "pmcs_sbs/../secret.json", Admin: "A12"},
-			want:        ErrInvalidBlobPath,
-		},
-		{
-			name:        "missing admin",
-			equipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			req:         EquipmentRequest{EquipmentManual: "pmcs_sbs/hmmwv/basic.json", Admin: " "},
-			want:        ErrInvalidRequest,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.validateEquipmentRequest(tc.equipmentID, tc.req)
-			requireServiceError(t, err, tc.want)
-		})
-	}
-}
-
-func TestValidateCompletionRequest(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	completion, err := svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{
-		SectionID: " before ",
-		ItemIndex: 0,
-		ItemNo:    " 1 ",
-		StepID:    " 1-a ",
-	})
+	resp, err := svc.ListFaults(requireUser(), " vehicle-1 ")
 
 	require.NoError(t, err)
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", completion.EquipmentID.String())
-	require.Equal(t, "before", completion.SectionID)
-	require.Equal(t, int32(0), completion.ItemIndex)
-	require.Equal(t, "1", completion.ItemNo)
-	require.Equal(t, "1-a", completion.StepID)
-	require.True(t, completion.IsComplete)
-}
-
-func TestValidateCompletionRequestRejectsInvalidValues(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	_, err := svc.validateCompletionRequest("bad", CompletionRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"})
-	requireServiceError(t, err, ErrInvalidID)
-
-	_, err = svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{SectionID: "", ItemIndex: 0, ItemNo: "1", StepID: "1-a"})
-	requireServiceError(t, err, ErrInvalidRequest)
-
-	_, err = svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{SectionID: "before", ItemIndex: 0, ItemNo: "", StepID: "1-a"})
-	requireServiceError(t, err, ErrInvalidRequest)
-
-	_, err = svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: ""})
-	requireServiceError(t, err, ErrInvalidRequest)
-
-	_, err = svc.validateCompletionRequest("550e8400-e29b-41d4-a716-446655440000", CompletionRequest{SectionID: "before", ItemIndex: -1, ItemNo: "1", StepID: "1-a"})
-	requireServiceError(t, err, ErrInvalidRequest)
-}
-
-func TestBuildBatchCompletionsChangeSet(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	upserts, deletes, err := svc.buildBatchCompletionsChangeSet("550E8400-E29B-41D4-A716-446655440000", BatchCompletionsRequest{
-		UpsertCompletions: []CompletionRequest{{
-			SectionID: " before ",
-			ItemIndex: 0,
-			ItemNo:    " 1 ",
-			StepID:    " 1-a ",
-		}},
-		DeleteCompletions: []DeleteCompletionRequest{{
-			SectionID: " before ",
-			ItemIndex: 0,
-			StepID:    " 1-b ",
-		}},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, upserts, 1)
-	require.Len(t, deletes, 1)
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", upserts[0].EquipmentID.String())
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", deletes[0].EquipmentID)
-	require.Equal(t, "before", upserts[0].SectionID)
-	require.Equal(t, "before", deletes[0].SectionID)
-}
-
-func TestBuildBatchCompletionsChangeSetAllowsNoOp(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	upserts, deletes, err := svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{})
-
-	require.NoError(t, err)
-	require.Empty(t, upserts)
-	require.Empty(t, deletes)
-}
-
-func TestBuildBatchCompletionsChangeSetRejectsInvalidValues(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	_, _, err := svc.buildBatchCompletionsChangeSet("bad", BatchCompletionsRequest{})
-	requireServiceError(t, err, ErrInvalidID)
-
-	tooMany := BatchCompletionsRequest{UpsertCompletions: make([]CompletionRequest, maxBatchCompletionChanges+1)}
-	for i := range tooMany.UpsertCompletions {
-		tooMany.UpsertCompletions[i] = CompletionRequest{SectionID: "before", ItemIndex: int32(i), ItemNo: "1", StepID: "a"}
-	}
-	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", tooMany)
-	requireServiceError(t, err, ErrInvalidRequest)
-
-	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
-		UpsertCompletions: []CompletionRequest{{
-			SectionID: "before",
-			ItemIndex: 0,
-			ItemNo:    "1",
-			StepID:    "1-a",
-		}},
-		DeleteCompletions: []DeleteCompletionRequest{{
-			SectionID: "before",
-			ItemIndex: 0,
-			StepID:    "1-a",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	_, _, err = svc.buildBatchCompletionsChangeSet("550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
-		UpsertCompletions: []CompletionRequest{
-			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"},
-			{SectionID: " before ", ItemIndex: 0, ItemNo: "1", StepID: " 1-a "},
-		},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-}
-
-func TestBatchCompletionsReturnsCounts(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	resp, err := svc.BatchCompletions(requireUser(), "550e8400-e29b-41d4-a716-446655440000", BatchCompletionsRequest{
-		UpsertCompletions: []CompletionRequest{
-			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-a"},
-			{SectionID: "before", ItemIndex: 0, ItemNo: "1", StepID: "1-b"},
-		},
-		DeleteCompletions: []DeleteCompletionRequest{
-			{SectionID: "before", ItemIndex: 0, StepID: "1-c"},
-		},
-	})
-
-	require.NoError(t, err)
-	require.Equal(t, int64(2), resp.UpsertedCount)
-	require.Equal(t, int64(1), resp.DeletedCount)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Len(t, resp.Faults, 1)
+	require.Equal(t, "vehicle-1", resp.Faults[0].EquipmentID)
+	require.Equal(t, "before", resp.Faults[0].SectionID)
+	require.Equal(t, "x", resp.Faults[0].Status)
+	require.Equal(t, 1, resp.Count)
 }
 
 func TestValidateFaultRequest(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	fault, err := svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{
+	fault, err := svc.validateFaultRequest(" vehicle-1 ", FaultRequest{
 		SectionID:        " before ",
 		ItemIndex:        0,
 		ItemNo:           " 1 ",
-		Status:           "X",
+		Status:           " X ",
 		FaultText:        " leak ",
-		CorrectiveAction: " tighten ",
+		CorrectiveAction: " tightened ",
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, "550e8400-e29b-41d4-a716-446655440000", fault.EquipmentID.String())
+	require.Equal(t, "vehicle-1", fault.EquipmentID)
 	require.Equal(t, "before", fault.SectionID)
+	require.Equal(t, int32(0), fault.ItemIndex)
 	require.Equal(t, "1", fault.ItemNo)
 	require.Equal(t, "x", fault.Status)
 	require.Equal(t, "leak", fault.FaultText)
-	require.Equal(t, "tighten", fault.CorrectiveAction)
+	require.Equal(t, "tightened", fault.CorrectiveAction)
 	require.False(t, fault.CreatedAt.IsZero())
 	require.False(t, fault.UpdatedAt.IsZero())
 }
 
 func TestValidateFaultRequestAcceptsAllowedStatuses(t *testing.T) {
 	svc := NewService(&repoStub{})
-
-	testCases := map[string]string{
-		"X":     "x",
-		"x":     "x",
-		"/":     "slash",
-		"slash": "slash",
-		"-":     "dash",
-		"dash":  "dash",
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{input: "X", want: "x"},
+		{input: "x", want: "x"},
+		{input: "/", want: "slash"},
+		{input: "slash", want: "slash"},
+		{input: "-", want: "dash"},
+		{input: "dash", want: "dash"},
 	}
-	for status, expected := range testCases {
-		t.Run(status, func(t *testing.T) {
-			fault, err := svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			fault, err := svc.validateFaultRequest("vehicle-1", FaultRequest{
 				SectionID: "before",
 				ItemIndex: 0,
 				ItemNo:    "1",
-				Status:    status,
+				Status:    tc.input,
 				FaultText: "leak",
 			})
 			require.NoError(t, err)
-			require.Equal(t, expected, fault.Status)
+			require.Equal(t, tc.want, fault.Status)
 		})
 	}
 }
@@ -332,227 +151,123 @@ func TestValidateFaultRequestAcceptsAllowedStatuses(t *testing.T) {
 func TestValidateFaultRequestRejectsInvalidValues(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.validateFaultRequest("bad", FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"})
+	cases := []struct {
+		name        string
+		equipmentID string
+		req         FaultRequest
+		want        error
+	}{
+		{
+			name:        "blank equipment",
+			equipmentID: " ",
+			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidID,
+		},
+		{
+			name:        "blank section",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{SectionID: " ", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidRequest,
+		},
+		{
+			name:        "negative item index",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{SectionID: "before", ItemIndex: -1, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidRequest,
+		},
+		{
+			name:        "blank item no",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: " ", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidRequest,
+		},
+		{
+			name:        "invalid status",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "BAD", FaultText: "leak"},
+			want:        ErrInvalidStatus,
+		},
+		{
+			name:        "blank fault text",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: " "},
+			want:        ErrInvalidRequest,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.validateFaultRequest(tc.equipmentID, tc.req)
+			requireServiceError(t, err, tc.want)
+		})
+	}
+}
+
+func TestValidateDeleteFaultRequest(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	key, err := svc.validateDeleteFaultRequest(" vehicle-1 ", DeleteFaultRequest{
+		SectionID: " before ",
+		ItemIndex: 0,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "vehicle-1", key.EquipmentID)
+	require.Equal(t, "before", key.SectionID)
+	require.Equal(t, int32(0), key.ItemIndex)
+}
+
+func TestValidateDeleteFaultRequestRejectsInvalidValues(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, err := svc.validateDeleteFaultRequest(" ", DeleteFaultRequest{SectionID: "before", ItemIndex: 0})
 	requireServiceError(t, err, ErrInvalidID)
 
-	_, err = svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "BAD", FaultText: "leak"})
-	requireServiceError(t, err, ErrInvalidStatus)
-
-	_, err = svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: " "})
+	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{SectionID: " ", ItemIndex: 0})
 	requireServiceError(t, err, ErrInvalidRequest)
 
-	_, err = svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{SectionID: "", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"})
-	requireServiceError(t, err, ErrInvalidRequest)
-
-	_, err = svc.validateFaultRequest("550e8400-e29b-41d4-a716-446655440000", FaultRequest{SectionID: "before", ItemIndex: -1, ItemNo: "1", Status: "X", FaultText: "leak"})
+	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{SectionID: "before", ItemIndex: -1})
 	requireServiceError(t, err, ErrInvalidRequest)
 }
 
-func TestValidateSyncRequestRejectsContradictions(t *testing.T) {
-	svc := NewService(&repoStub{})
-
-	err := svc.validateSyncRequest(SyncRequest{
-		UpsertEquipment: []SyncEquipmentRequest{{
-			ID:              "550E8400-E29B-41D4-A716-446655440000",
-			EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
-			Admin:           "A12",
-		}},
-		DeleteEquipmentIDs: []string{"550e8400-e29b-41d4-a716-446655440000"},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		DeleteEquipmentIDs: []string{"550e8400-e29b-41d4-a716-446655440000"},
-		UpsertCompletions: []SyncCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			StepID:      "1-a",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		DeleteEquipmentIDs: []string{"550E8400-E29B-41D4-A716-446655440000"},
-		UpsertCompletions: []SyncCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			StepID:      "1-a",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		DeleteEquipmentIDs: []string{"550e8400-e29b-41d4-a716-446655440000"},
-		UpsertFaults: []SyncFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			Status:      "X",
-			FaultText:   "leak",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		DeleteEquipmentIDs: []string{"550E8400-E29B-41D4-A716-446655440000"},
-		UpsertFaults: []SyncFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			Status:      "X",
-			FaultText:   "leak",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		UpsertCompletions: []SyncCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			StepID:      "1-a",
-		}},
-		DeleteCompletions: []SyncDeleteCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			StepID:      "1-a",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		UpsertCompletions: []SyncCompletionRequest{{
-			EquipmentID: "550E8400-E29B-41D4-A716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			StepID:      "1-a",
-		}},
-		DeleteCompletions: []SyncDeleteCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			StepID:      "1-a",
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		UpsertFaults: []SyncFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			Status:      "X",
-			FaultText:   "leak",
-		}},
-		DeleteFaults: []SyncDeleteFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-
-	err = svc.validateSyncRequest(SyncRequest{
-		UpsertFaults: []SyncFaultRequest{{
-			EquipmentID: "550E8400-E29B-41D4-A716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			Status:      "X",
-			FaultText:   "leak",
-		}},
-		DeleteFaults: []SyncDeleteFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-		}},
-	})
-	requireServiceError(t, err, ErrInvalidSyncRequest)
-}
-
-func TestBuildSyncChangeSet(t *testing.T) {
-	svc := NewService(&repoStub{})
-	user := requireUser()
-
-	changeSet, err := svc.buildSyncChangeSet(user, SyncRequest{
-		UpsertEquipment: []SyncEquipmentRequest{{
-			ID:              "550e8400-e29b-41d4-a716-446655440000",
-			EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
-			Admin:           "A12",
-			Serial:          " SER ",
-			Nomenclature:    " Truck, Utility ",
-			Model:           " M1152A1 ",
-			Uic:             " UIC ",
-		}},
-		UpsertCompletions: []SyncCompletionRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			StepID:      "1-a",
-		}},
-		UpsertFaults: []SyncFaultRequest{{
-			EquipmentID: "550e8400-e29b-41d4-a716-446655440000",
-			SectionID:   "before",
-			ItemIndex:   0,
-			ItemNo:      "1",
-			Status:      "X",
-			FaultText:   "leak",
-		}},
-	})
-
-	require.NoError(t, err)
-	require.Len(t, changeSet.UpsertEquipment, 1)
-	require.Len(t, changeSet.UpsertCompletions, 1)
-	require.Len(t, changeSet.UpsertFaults, 1)
-	require.Equal(t, user.UserID, changeSet.UpsertEquipment[0].UserUID)
-	require.Equal(t, "SER", changeSet.UpsertEquipment[0].Serial)
-	require.Equal(t, "Truck, Utility", changeSet.UpsertEquipment[0].Nomenclature)
-	require.Equal(t, "M1152A1", changeSet.UpsertEquipment[0].Model)
-	require.Equal(t, "UIC", changeSet.UpsertEquipment[0].Uic)
-}
-
-func TestSyncResponseIncludesEquipmentMetadata(t *testing.T) {
-	id := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
+func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	now := time.Now().UTC()
-	svc := NewService(&repoStub{syncResult: &SyncResult{
-		Equipment: []EquipmentAggregate{{
-			Equipment: model.PmcsSbsEquipment{
-				ID:              id,
-				EquipmentManual: "pmcs_sbs/hmmwv/basic.json",
-				Admin:           "A12",
-				Serial:          "SER",
-				Nomenclature:    "Truck, Utility",
-				Model:           "M1152A1",
-				Uic:             "UIC",
-				CreatedAt:       now,
-				UpdatedAt:       now,
-			},
-		}},
-	}})
+	stub := &repoStub{savedFault: &model.PmcsSbsFaults{
+		EquipmentID:      "vehicle-1",
+		SectionID:        "before",
+		ItemIndex:        0,
+		ItemNo:           "1",
+		Status:           "x",
+		FaultText:        "leak",
+		CorrectiveAction: "",
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}}
+	svc := NewService(stub)
 
-	resp, err := svc.Sync(requireUser(), SyncRequest{})
+	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", FaultRequest{
+		SectionID: "before",
+		ItemIndex: 0,
+		ItemNo:    "1",
+		Status:    "X",
+		FaultText: "leak",
+	})
+
 	require.NoError(t, err)
-	require.Len(t, resp.Equipment, 1)
-	require.Equal(t, "Truck, Utility", resp.Equipment[0].Equipment.Nomenclature)
-	require.Equal(t, "M1152A1", resp.Equipment[0].Equipment.Model)
+	require.Equal(t, "vehicle-1", stub.capturedFault.EquipmentID)
+	require.Equal(t, "x", stub.capturedFault.Status)
+	require.Equal(t, "vehicle-1", resp.EquipmentID)
+	require.Equal(t, "x", resp.Status)
 }
 
-func requireUser() *bootstrap.User {
-	return &bootstrap.User{UserID: "user-1", Username: "tester", Email: "user-1@example.com"}
-}
+func TestDeleteFaultPassesValidatedKey(t *testing.T) {
+	stub := &repoStub{}
+	svc := NewService(stub)
 
-func requireServiceError(t *testing.T, err error, target error) {
-	t.Helper()
-	require.True(t, errors.Is(err, target), "expected %v, got %v", target, err)
+	err := svc.DeleteFault(requireUser(), " vehicle-1 ", DeleteFaultRequest{SectionID: " before ", ItemIndex: 0})
+
+	require.NoError(t, err)
+	require.Equal(t, "vehicle-1", stub.capturedDelete.EquipmentID)
+	require.Equal(t, "before", stub.capturedDelete.SectionID)
+	require.Equal(t, int32(0), stub.capturedDelete.ItemIndex)
 }
