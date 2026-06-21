@@ -26,11 +26,6 @@ This endpoint returns every shop the authenticated user belongs to, with a compa
 - Uses one current server read per request. There is no pagination, cache contract, conditional response, or sync cursor.
 - Supports endpoint-scoped gzip compression when the request includes `Accept-Encoding: gzip`.
 
-## When Mobile Should Use This Endpoint
-
-Use this endpoint when loading a shop equipment overview, search seed, picker, dashboard, or similar screen where the app needs all shops and their equipment grouped together.
-
-Do not use this endpoint as a background sync replacement. It returns the current full overview snapshot and does not provide incremental changes.
 
 ## Request Format
 
