@@ -8,15 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSetupRegistersPmcsSbsProgressRoutesUnderAuth(t *testing.T) {
+func TestSetupRegistersPmcsSbsFaultRoutesUnderAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
 	Setup(nil, router, nil, nil, nil)
 
-	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment")
-	requireRouteRegistered(t, router, http.MethodPatch, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/completions/batch")
-	requireRouteRegistered(t, router, http.MethodPost, "/api/v1/auth/pmcs-sbs/sync")
+	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
+	requireRouteRegistered(t, router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
+	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
 }
 
 func requireRouteRegistered(t *testing.T, router *gin.Engine, method string, path string) {
