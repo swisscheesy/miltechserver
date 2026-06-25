@@ -117,7 +117,33 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, key FaultKey) erro
 }
 
 func (repo *RepositoryImpl) DeleteFaults(user *bootstrap.User, equipmentID string, guideManual string, keys []FaultKey) (int64, error) {
-	return 0, errors.New("bulk delete pmcs sbs faults not implemented")
+	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
+		return 0, err
+	}
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	keyRows := make([]Expression, 0, len(keys))
+	for _, key := range keys {
+		keyRows = append(keyRows, ROW(String(key.SectionID), Int32(key.ItemIndex)))
+	}
+
+	result, err := PmcsSbsFaults.DELETE().
+		WHERE(
+			PmcsSbsFaults.EquipmentID.EQ(String(equipmentID)).
+				AND(PmcsSbsFaults.GuideManual.EQ(String(guideManual))).
+				AND(ROW(PmcsSbsFaults.SectionID, PmcsSbsFaults.ItemIndex).IN(keyRows...)),
+		).
+		Exec(repo.db)
+	if err != nil {
+		return 0, fmt.Errorf("bulk delete pmcs sbs faults: %w", err)
+	}
+	deletedCount, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("bulk delete pmcs sbs faults rows affected: %w", err)
+	}
+	return deletedCount, nil
 }
 
 func (repo *RepositoryImpl) requireVehicleAccess(user *bootstrap.User, equipmentID string) error {
