@@ -22,7 +22,7 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
-func (repo *RepositoryImpl) ListFaults(user *bootstrap.User, equipmentID string) ([]model.PmcsSbsFaults, error) {
+func (repo *RepositoryImpl) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) ([]model.PmcsSbsFaults, error) {
 	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
 		return nil, err
 	}
@@ -30,7 +30,10 @@ func (repo *RepositoryImpl) ListFaults(user *bootstrap.User, equipmentID string)
 	var rows []model.PmcsSbsFaults
 	stmt := SELECT(PmcsSbsFaults.AllColumns).
 		FROM(PmcsSbsFaults).
-		WHERE(PmcsSbsFaults.EquipmentID.EQ(String(equipmentID))).
+		WHERE(
+			PmcsSbsFaults.EquipmentID.EQ(String(equipmentID)).
+				AND(PmcsSbsFaults.GuideManual.EQ(String(guideManual))),
+		).
 		ORDER_BY(
 			PmcsSbsFaults.SectionID.ASC(),
 			PmcsSbsFaults.ItemIndex.ASC(),
@@ -55,6 +58,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSb
 
 	stmt := PmcsSbsFaults.INSERT(
 		PmcsSbsFaults.EquipmentID,
+		PmcsSbsFaults.GuideManual,
 		PmcsSbsFaults.SectionID,
 		PmcsSbsFaults.ItemIndex,
 		PmcsSbsFaults.ItemNo,
@@ -65,6 +69,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSb
 		PmcsSbsFaults.UpdatedAt,
 	).VALUES(
 		String(fault.EquipmentID),
+		String(fault.GuideManual),
 		String(fault.SectionID),
 		Int32(fault.ItemIndex),
 		String(fault.ItemNo),
@@ -75,6 +80,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, fault model.PmcsSb
 		TimestampzT(now),
 	).ON_CONFLICT(
 		PmcsSbsFaults.EquipmentID,
+		PmcsSbsFaults.GuideManual,
 		PmcsSbsFaults.SectionID,
 		PmcsSbsFaults.ItemIndex,
 	).DO_UPDATE(SET(
@@ -100,6 +106,7 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, key FaultKey) erro
 	if _, err := PmcsSbsFaults.DELETE().
 		WHERE(
 			PmcsSbsFaults.EquipmentID.EQ(String(key.EquipmentID)).
+				AND(PmcsSbsFaults.GuideManual.EQ(String(key.GuideManual))).
 				AND(PmcsSbsFaults.SectionID.EQ(String(key.SectionID))).
 				AND(PmcsSbsFaults.ItemIndex.EQ(Int32(key.ItemIndex))),
 		).

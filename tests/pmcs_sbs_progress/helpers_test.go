@@ -128,6 +128,7 @@ func sampleFault(equipmentID string) model.PmcsSbsFaults {
 	now := time.Now().UTC()
 	return model.PmcsSbsFaults{
 		EquipmentID:      equipmentID,
+		GuideManual:      "pmcs_sbs/hmmwv/file.json",
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",

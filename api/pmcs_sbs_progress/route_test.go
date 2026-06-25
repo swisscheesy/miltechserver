@@ -24,9 +24,12 @@ type serviceStub struct {
 	capturedRequest interface{}
 }
 
-func (s *serviceStub) ListFaults(user *bootstrap.User, equipmentID string) (*FaultListResponse, error) {
+func (s *serviceStub) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error) {
 	s.capturedUser = user
-	s.capturedRequest = equipmentID
+	s.capturedRequest = struct {
+		equipmentID string
+		guideManual string
+	}{equipmentID: equipmentID, guideManual: guideManual}
 	return s.listResp, s.err
 }
 
@@ -51,7 +54,7 @@ func (s *serviceStub) DeleteFault(user *bootstrap.User, equipmentID string, req 
 func TestHandlersRequireAuth(t *testing.T) {
 	router := newRouteTestRouter(&serviceStub{})
 
-	resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", nil, nil)
+	resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults?guide_manual=pmcs_sbs/hmmwv/file.json", nil, nil)
 
 	require.Equal(t, http.StatusUnauthorized, resp.Code)
 }
@@ -75,7 +78,7 @@ func TestHandlersRejectInvalidAuthContext(t *testing.T) {
 			})
 			registerHandlers(group, &serviceStub{})
 
-			resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", nil, routeUser())
+			resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults?guide_manual=pmcs_sbs/hmmwv/file.json", nil, routeUser())
 
 			require.Equal(t, http.StatusUnauthorized, resp.Code)
 		})
@@ -86,17 +89,24 @@ func TestListFaultsSuccess(t *testing.T) {
 	stub := &serviceStub{listResp: &FaultListResponse{Faults: []FaultResponse{}, Count: 0}}
 	router := newRouteTestRouter(stub)
 
-	resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", nil, routeUser())
+	resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults?guide_manual=pmcs_sbs/hmmwv/file.json", nil, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.Equal(t, "user-1", stub.capturedUser.UserID)
-	require.Equal(t, "vehicle-1", stub.capturedRequest)
+	captured, ok := stub.capturedRequest.(struct {
+		equipmentID string
+		guideManual string
+	})
+	require.True(t, ok)
+	require.Equal(t, "vehicle-1", captured.equipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", captured.guideManual)
 }
 
 func TestUpsertFaultSuccess(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &serviceStub{faultResp: &FaultResponse{
 		EquipmentID:      "vehicle-1",
+		GuideManual:      "pmcs_sbs/hmmwv/file.json",
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",
@@ -109,11 +119,12 @@ func TestUpsertFaultSuccess(t *testing.T) {
 	router := newRouteTestRouter(stub)
 
 	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", FaultRequest{
-		SectionID: "before",
-		ItemIndex: 0,
-		ItemNo:    "1",
-		Status:    "X",
-		FaultText: "leak",
+		GuideManual: "pmcs_sbs/hmmwv/file.json",
+		SectionID:   "before",
+		ItemIndex:   0,
+		ItemNo:      "1",
+		Status:      "X",
+		FaultText:   "leak",
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -123,6 +134,7 @@ func TestUpsertFaultSuccess(t *testing.T) {
 	})
 	require.True(t, ok)
 	require.Equal(t, "vehicle-1", captured.equipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", captured.req.GuideManual)
 	require.Equal(t, "X", captured.req.Status)
 
 	var body struct {
@@ -130,6 +142,7 @@ func TestUpsertFaultSuccess(t *testing.T) {
 		Data   FaultResponse `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", body.Data.GuideManual)
 	require.Equal(t, "x", body.Data.Status)
 }
 
@@ -150,8 +163,9 @@ func TestDeleteFaultSuccess(t *testing.T) {
 	router := newRouteTestRouter(stub)
 
 	resp := doRouteJSON(router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", DeleteFaultRequest{
-		SectionID: "before",
-		ItemIndex: 0,
+		GuideManual: "pmcs_sbs/hmmwv/file.json",
+		SectionID:   "before",
+		ItemIndex:   0,
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -161,6 +175,7 @@ func TestDeleteFaultSuccess(t *testing.T) {
 	})
 	require.True(t, ok)
 	require.Equal(t, "vehicle-1", captured.equipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", captured.req.GuideManual)
 	require.Equal(t, "before", captured.req.SectionID)
 }
 
@@ -172,6 +187,7 @@ func TestServiceErrorMapping(t *testing.T) {
 	}{
 		{name: "unauthorized", err: ErrUnauthorized, want: http.StatusUnauthorized},
 		{name: "invalid id", err: ErrInvalidID, want: http.StatusBadRequest},
+		{name: "invalid guide manual", err: ErrInvalidGuideManual, want: http.StatusBadRequest},
 		{name: "invalid request", err: ErrInvalidRequest, want: http.StatusBadRequest},
 		{name: "invalid status", err: ErrInvalidStatus, want: http.StatusBadRequest},
 		{name: "not found", err: ErrNotFound, want: http.StatusNotFound},
@@ -181,7 +197,7 @@ func TestServiceErrorMapping(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := newRouteTestRouter(&serviceStub{err: tc.err})
-			resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults", nil, routeUser())
+			resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults?guide_manual=pmcs_sbs/hmmwv/file.json", nil, routeUser())
 			require.Equal(t, tc.want, resp.Code)
 		})
 	}

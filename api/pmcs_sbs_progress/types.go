@@ -3,6 +3,7 @@ package pmcs_sbs_progress
 import "time"
 
 type FaultRequest struct {
+	GuideManual      string `json:"guide_manual"`
 	SectionID        string `json:"section_id"`
 	ItemIndex        int32  `json:"item_index"`
 	ItemNo           string `json:"item_no"`
@@ -12,12 +13,14 @@ type FaultRequest struct {
 }
 
 type DeleteFaultRequest struct {
-	SectionID string `json:"section_id"`
-	ItemIndex int32  `json:"item_index"`
+	GuideManual string `json:"guide_manual"`
+	SectionID   string `json:"section_id"`
+	ItemIndex   int32  `json:"item_index"`
 }
 
 type FaultResponse struct {
 	EquipmentID      string    `json:"equipment_id"`
+	GuideManual      string    `json:"guide_manual"`
 	SectionID        string    `json:"section_id"`
 	ItemIndex        int32     `json:"item_index"`
 	ItemNo           string    `json:"item_no"`

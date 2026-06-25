@@ -18,13 +18,15 @@ type repoStub struct {
 
 	capturedUser        *bootstrap.User
 	capturedEquipmentID string
+	capturedGuideManual string
 	capturedFault       model.PmcsSbsFaults
 	capturedDelete      FaultKey
 }
 
-func (repo *repoStub) ListFaults(user *bootstrap.User, equipmentID string) ([]model.PmcsSbsFaults, error) {
+func (repo *repoStub) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) ([]model.PmcsSbsFaults, error) {
 	repo.capturedUser = user
 	repo.capturedEquipmentID = equipmentID
+	repo.capturedGuideManual = guideManual
 	return repo.listFaults, repo.err
 }
 
@@ -56,7 +58,7 @@ func requireServiceError(t *testing.T, err error, target error) {
 func TestListFaultsRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.ListFaults(nil, "vehicle-1")
+	_, err := svc.ListFaults(nil, "vehicle-1", "pmcs_sbs/hmmwv/file.json")
 
 	requireServiceError(t, err, ErrUnauthorized)
 }
@@ -64,15 +66,24 @@ func TestListFaultsRequiresAuth(t *testing.T) {
 func TestListFaultsRejectsBlankEquipmentID(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.ListFaults(requireUser(), " ")
+	_, err := svc.ListFaults(requireUser(), " ", "pmcs_sbs/hmmwv/file.json")
 
 	requireServiceError(t, err, ErrInvalidID)
+}
+
+func TestListFaultsRejectsInvalidGuideManual(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, err := svc.ListFaults(requireUser(), "vehicle-1", "pmcs_sbs/../file.json")
+
+	requireServiceError(t, err, ErrInvalidGuideManual)
 }
 
 func TestListFaultsMapsRows(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &repoStub{listFaults: []model.PmcsSbsFaults{{
 		EquipmentID:      "vehicle-1",
+		GuideManual:      "pmcs_sbs/hmmwv/file.json",
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",
@@ -84,12 +95,14 @@ func TestListFaultsMapsRows(t *testing.T) {
 	}}}
 	svc := NewService(stub)
 
-	resp, err := svc.ListFaults(requireUser(), " vehicle-1 ")
+	resp, err := svc.ListFaults(requireUser(), " vehicle-1 ", " pmcs_sbs/hmmwv/file.json ")
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", stub.capturedGuideManual)
 	require.Len(t, resp.Faults, 1)
 	require.Equal(t, "vehicle-1", resp.Faults[0].EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", resp.Faults[0].GuideManual)
 	require.Equal(t, "before", resp.Faults[0].SectionID)
 	require.Equal(t, "x", resp.Faults[0].Status)
 	require.Equal(t, 1, resp.Count)
@@ -99,6 +112,7 @@ func TestValidateFaultRequest(t *testing.T) {
 	svc := NewService(&repoStub{})
 
 	fault, err := svc.validateFaultRequest(" vehicle-1 ", FaultRequest{
+		GuideManual:      " pmcs_sbs/hmmwv/file.json ",
 		SectionID:        " before ",
 		ItemIndex:        0,
 		ItemNo:           " 1 ",
@@ -109,6 +123,7 @@ func TestValidateFaultRequest(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", fault.EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", fault.GuideManual)
 	require.Equal(t, "before", fault.SectionID)
 	require.Equal(t, int32(0), fault.ItemIndex)
 	require.Equal(t, "1", fault.ItemNo)
@@ -136,11 +151,12 @@ func TestValidateFaultRequestAcceptsAllowedStatuses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
 			fault, err := svc.validateFaultRequest("vehicle-1", FaultRequest{
-				SectionID: "before",
-				ItemIndex: 0,
-				ItemNo:    "1",
-				Status:    tc.input,
-				FaultText: "leak",
+				GuideManual: "pmcs_sbs/hmmwv/file.json",
+				SectionID:   "before",
+				ItemIndex:   0,
+				ItemNo:      "1",
+				Status:      tc.input,
+				FaultText:   "leak",
 			})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, fault.Status)
@@ -160,37 +176,55 @@ func TestValidateFaultRequestRejectsInvalidValues(t *testing.T) {
 		{
 			name:        "blank equipment",
 			equipmentID: " ",
-			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
 			want:        ErrInvalidID,
+		},
+		{
+			name:        "blank guide manual",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{GuideManual: " ", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidGuideManual,
+		},
+		{
+			name:        "guide manual traversal",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/../file.json", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidGuideManual,
+		},
+		{
+			name:        "guide manual outside pmcs sbs",
+			equipmentID: "vehicle-1",
+			req:         FaultRequest{GuideManual: "pmcs/hmmwv/file.json", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			want:        ErrInvalidGuideManual,
 		},
 		{
 			name:        "blank section",
 			equipmentID: "vehicle-1",
-			req:         FaultRequest{SectionID: " ", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: " ", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"},
 			want:        ErrInvalidRequest,
 		},
 		{
 			name:        "negative item index",
 			equipmentID: "vehicle-1",
-			req:         FaultRequest{SectionID: "before", ItemIndex: -1, ItemNo: "1", Status: "X", FaultText: "leak"},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: -1, ItemNo: "1", Status: "X", FaultText: "leak"},
 			want:        ErrInvalidRequest,
 		},
 		{
 			name:        "blank item no",
 			equipmentID: "vehicle-1",
-			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: " ", Status: "X", FaultText: "leak"},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0, ItemNo: " ", Status: "X", FaultText: "leak"},
 			want:        ErrInvalidRequest,
 		},
 		{
 			name:        "invalid status",
 			equipmentID: "vehicle-1",
-			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "BAD", FaultText: "leak"},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "BAD", FaultText: "leak"},
 			want:        ErrInvalidStatus,
 		},
 		{
 			name:        "blank fault text",
 			equipmentID: "vehicle-1",
-			req:         FaultRequest{SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: " "},
+			req:         FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: " "},
 			want:        ErrInvalidRequest,
 		},
 	}
@@ -207,12 +241,14 @@ func TestValidateDeleteFaultRequest(t *testing.T) {
 	svc := NewService(&repoStub{})
 
 	key, err := svc.validateDeleteFaultRequest(" vehicle-1 ", DeleteFaultRequest{
-		SectionID: " before ",
-		ItemIndex: 0,
+		GuideManual: " pmcs_sbs/hmmwv/file.json ",
+		SectionID:   " before ",
+		ItemIndex:   0,
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", key.EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", key.GuideManual)
 	require.Equal(t, "before", key.SectionID)
 	require.Equal(t, int32(0), key.ItemIndex)
 }
@@ -220,13 +256,16 @@ func TestValidateDeleteFaultRequest(t *testing.T) {
 func TestValidateDeleteFaultRequestRejectsInvalidValues(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.validateDeleteFaultRequest(" ", DeleteFaultRequest{SectionID: "before", ItemIndex: 0})
+	_, err := svc.validateDeleteFaultRequest(" ", DeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0})
 	requireServiceError(t, err, ErrInvalidID)
 
-	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{SectionID: " ", ItemIndex: 0})
+	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{GuideManual: " ", SectionID: "before", ItemIndex: 0})
+	requireServiceError(t, err, ErrInvalidGuideManual)
+
+	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: " ", ItemIndex: 0})
 	requireServiceError(t, err, ErrInvalidRequest)
 
-	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{SectionID: "before", ItemIndex: -1})
+	_, err = svc.validateDeleteFaultRequest("vehicle-1", DeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: -1})
 	requireServiceError(t, err, ErrInvalidRequest)
 }
 
@@ -234,6 +273,7 @@ func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &repoStub{savedFault: &model.PmcsSbsFaults{
 		EquipmentID:      "vehicle-1",
+		GuideManual:      "pmcs_sbs/hmmwv/file.json",
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",
@@ -246,17 +286,20 @@ func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	svc := NewService(stub)
 
 	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", FaultRequest{
-		SectionID: "before",
-		ItemIndex: 0,
-		ItemNo:    "1",
-		Status:    "X",
-		FaultText: "leak",
+		GuideManual: "pmcs_sbs/hmmwv/file.json",
+		SectionID:   "before",
+		ItemIndex:   0,
+		ItemNo:      "1",
+		Status:      "X",
+		FaultText:   "leak",
 	})
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedFault.EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", stub.capturedFault.GuideManual)
 	require.Equal(t, "x", stub.capturedFault.Status)
 	require.Equal(t, "vehicle-1", resp.EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", resp.GuideManual)
 	require.Equal(t, "x", resp.Status)
 }
 
@@ -264,10 +307,11 @@ func TestDeleteFaultPassesValidatedKey(t *testing.T) {
 	stub := &repoStub{}
 	svc := NewService(stub)
 
-	err := svc.DeleteFault(requireUser(), " vehicle-1 ", DeleteFaultRequest{SectionID: " before ", ItemIndex: 0})
+	err := svc.DeleteFault(requireUser(), " vehicle-1 ", DeleteFaultRequest{GuideManual: " pmcs_sbs/hmmwv/file.json ", SectionID: " before ", ItemIndex: 0})
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedDelete.EquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", stub.capturedDelete.GuideManual)
 	require.Equal(t, "before", stub.capturedDelete.SectionID)
 	require.Equal(t, int32(0), stub.capturedDelete.ItemIndex)
 }

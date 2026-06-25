@@ -40,7 +40,7 @@ func (handler Handler) listFaults(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.ListFaults(user, c.Param("equipment_id"))
+	result, err := handler.service.ListFaults(user, c.Param("equipment_id"), c.Query("guide_manual"))
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -111,6 +111,7 @@ func respondServiceError(c *gin.Context, err error) {
 	case errors.Is(err, ErrUnauthorized):
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
 	case errors.Is(err, ErrInvalidID),
+		errors.Is(err, ErrInvalidGuideManual),
 		errors.Is(err, ErrInvalidRequest),
 		errors.Is(err, ErrInvalidStatus):
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})

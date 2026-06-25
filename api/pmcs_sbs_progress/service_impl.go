@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"path"
 	"strings"
 	"time"
 
@@ -16,7 +17,7 @@ func NewService(repository Repository) *ServiceImpl {
 	return &ServiceImpl{repository: repository}
 }
 
-func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string) (*FaultListResponse, error) {
+func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -24,8 +25,12 @@ func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string)
 	if err != nil {
 		return nil, err
 	}
+	trimmedGuideManual, err := validateGuideManual(guideManual)
+	if err != nil {
+		return nil, err
+	}
 
-	rows, err := service.repository.ListFaults(user, trimmedEquipmentID)
+	rows, err := service.repository.ListFaults(user, trimmedEquipmentID, trimmedGuideManual)
 	if err != nil {
 		return nil, err
 	}
@@ -71,6 +76,10 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRe
 	}
 
 	sectionID := strings.TrimSpace(req.SectionID)
+	guideManual, err := validateGuideManual(req.GuideManual)
+	if err != nil {
+		return model.PmcsSbsFaults{}, err
+	}
 	itemNo := strings.TrimSpace(req.ItemNo)
 	status, validStatus := normalizeFaultStatus(req.Status)
 	faultText := strings.TrimSpace(req.FaultText)
@@ -84,6 +93,7 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRe
 	now := time.Now().UTC()
 	return model.PmcsSbsFaults{
 		EquipmentID:      trimmedEquipmentID,
+		GuideManual:      guideManual,
 		SectionID:        sectionID,
 		ItemIndex:        req.ItemIndex,
 		ItemNo:           itemNo,
@@ -102,10 +112,14 @@ func (service *ServiceImpl) validateDeleteFaultRequest(equipmentID string, req D
 	}
 
 	sectionID := strings.TrimSpace(req.SectionID)
+	guideManual, err := validateGuideManual(req.GuideManual)
+	if err != nil {
+		return FaultKey{}, err
+	}
 	if sectionID == "" || req.ItemIndex < 0 {
 		return FaultKey{}, ErrInvalidRequest
 	}
-	return FaultKey{EquipmentID: trimmedEquipmentID, SectionID: sectionID, ItemIndex: req.ItemIndex}, nil
+	return FaultKey{EquipmentID: trimmedEquipmentID, GuideManual: guideManual, SectionID: sectionID, ItemIndex: req.ItemIndex}, nil
 }
 
 func validateEquipmentID(equipmentID string) (string, error) {
@@ -114,6 +128,18 @@ func validateEquipmentID(equipmentID string) (string, error) {
 		return "", ErrInvalidID
 	}
 	return trimmedEquipmentID, nil
+}
+
+func validateGuideManual(guideManual string) (string, error) {
+	trimmedGuideManual := strings.TrimSpace(guideManual)
+	if trimmedGuideManual == "" ||
+		strings.Contains(trimmedGuideManual, "\\") ||
+		!strings.HasPrefix(trimmedGuideManual, "pmcs_sbs/") ||
+		!strings.HasSuffix(trimmedGuideManual, ".json") ||
+		path.Clean(trimmedGuideManual) != trimmedGuideManual {
+		return "", ErrInvalidGuideManual
+	}
+	return trimmedGuideManual, nil
 }
 
 func hasAuthenticatedUser(user *bootstrap.User) bool {
@@ -136,6 +162,7 @@ func normalizeFaultStatus(status string) (string, bool) {
 func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	return FaultResponse{
 		EquipmentID:      row.EquipmentID,
+		GuideManual:      row.GuideManual,
 		SectionID:        row.SectionID,
 		ItemIndex:        row.ItemIndex,
 		ItemNo:           row.ItemNo,
