@@ -189,6 +189,52 @@ func TestDeleteFaultSuccess(t *testing.T) {
 	require.Equal(t, "before", captured.req.SectionID)
 }
 
+func TestBulkDeleteFaultsSuccess(t *testing.T) {
+	stub := &serviceStub{bulkDeleteResp: &BulkDeleteFaultResponse{RequestedCount: 2, DeletedCount: 1}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults/bulk", BulkDeleteFaultRequest{
+		GuideManual: "pmcs_sbs/hmmwv/file.json",
+		Faults: []BulkDeleteFaultItemRequest{
+			{SectionID: "before", ItemIndex: 0},
+			{SectionID: "after", ItemIndex: 2},
+		},
+	}, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	captured, ok := stub.capturedRequest.(struct {
+		equipmentID string
+		req         BulkDeleteFaultRequest
+	})
+	require.True(t, ok)
+	require.Equal(t, "vehicle-1", captured.equipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", captured.req.GuideManual)
+	require.Len(t, captured.req.Faults, 2)
+
+	var body struct {
+		Message        string `json:"message"`
+		RequestedCount int    `json:"requested_count"`
+		DeletedCount   int    `json:"deleted_count"`
+	}
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "Faults deleted", body.Message)
+	require.Equal(t, 2, body.RequestedCount)
+	require.Equal(t, 1, body.DeletedCount)
+}
+
+func TestBulkDeleteInvalidJSONReturnsBadRequest(t *testing.T) {
+	router := newRouteTestRouter(&serviceStub{})
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/faults/bulk", strings.NewReader("{"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", "user-1")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	require.JSONEq(t, `{"message":"invalid request body"}`, resp.Body.String())
+}
+
 func TestServiceErrorMapping(t *testing.T) {
 	cases := []struct {
 		name string

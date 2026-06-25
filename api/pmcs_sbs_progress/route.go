@@ -32,6 +32,7 @@ func registerHandlers(group *gin.RouterGroup, svc Service) {
 	group.GET("/pmcs-sbs/equipment/:equipment_id/faults", handler.listFaults)
 	group.PUT("/pmcs-sbs/equipment/:equipment_id/faults", handler.upsertFault)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id/faults", handler.deleteFault)
+	group.DELETE("/pmcs-sbs/equipment/:equipment_id/faults/bulk", handler.deleteFaults)
 }
 
 func (handler Handler) listFaults(c *gin.Context) {
@@ -88,6 +89,31 @@ func (handler Handler) deleteFault(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Fault deleted"})
+}
+
+func (handler Handler) deleteFaults(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		return
+	}
+
+	var req BulkDeleteFaultRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		return
+	}
+
+	result, err := handler.service.DeleteFaults(user, c.Param("equipment_id"), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":         "Faults deleted",
+		"requested_count": result.RequestedCount,
+		"deleted_count":   result.DeletedCount,
+	})
 }
 
 func getUser(c *gin.Context) (*bootstrap.User, bool) {
