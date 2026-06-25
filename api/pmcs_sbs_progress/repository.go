@@ -9,6 +9,7 @@ type Repository interface {
 	ListFaults(user *bootstrap.User, equipmentID string, guideManual string) ([]model.PmcsSbsFaults, error)
 	UpsertFault(user *bootstrap.User, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error)
 	DeleteFault(user *bootstrap.User, key FaultKey) error
+	DeleteFaults(user *bootstrap.User, equipmentID string, guideManual string, keys []FaultKey) (int64, error)
 }
 
 type FaultKey struct {

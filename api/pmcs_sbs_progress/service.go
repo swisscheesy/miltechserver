@@ -6,4 +6,5 @@ type Service interface {
 	ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error)
 	UpsertFault(user *bootstrap.User, equipmentID string, req FaultRequest) (*FaultResponse, error)
 	DeleteFault(user *bootstrap.User, equipmentID string, req DeleteFaultRequest) error
+	DeleteFaults(user *bootstrap.User, equipmentID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error)
 }

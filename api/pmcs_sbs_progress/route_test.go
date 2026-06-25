@@ -19,6 +19,7 @@ import (
 type serviceStub struct {
 	listResp        *FaultListResponse
 	faultResp       *FaultResponse
+	bulkDeleteResp  *BulkDeleteFaultResponse
 	err             error
 	capturedUser    *bootstrap.User
 	capturedRequest interface{}
@@ -49,6 +50,15 @@ func (s *serviceStub) DeleteFault(user *bootstrap.User, equipmentID string, req 
 		req         DeleteFaultRequest
 	}{equipmentID: equipmentID, req: req}
 	return s.err
+}
+
+func (s *serviceStub) DeleteFaults(user *bootstrap.User, equipmentID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
+	s.capturedUser = user
+	s.capturedRequest = struct {
+		equipmentID string
+		req         BulkDeleteFaultRequest
+	}{equipmentID: equipmentID, req: req}
+	return s.bulkDeleteResp, s.err
 }
 
 func TestHandlersRequireAuth(t *testing.T) {

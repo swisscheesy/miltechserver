@@ -12,15 +12,17 @@ import (
 )
 
 type repoStub struct {
-	listFaults []model.PmcsSbsFaults
-	savedFault *model.PmcsSbsFaults
-	err        error
+	listFaults   []model.PmcsSbsFaults
+	savedFault   *model.PmcsSbsFaults
+	deletedCount int64
+	err          error
 
 	capturedUser        *bootstrap.User
 	capturedEquipmentID string
 	capturedGuideManual string
 	capturedFault       model.PmcsSbsFaults
 	capturedDelete      FaultKey
+	capturedBulkKeys    []FaultKey
 }
 
 func (repo *repoStub) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) ([]model.PmcsSbsFaults, error) {
@@ -43,6 +45,14 @@ func (repo *repoStub) DeleteFault(user *bootstrap.User, key FaultKey) error {
 	repo.capturedUser = user
 	repo.capturedDelete = key
 	return repo.err
+}
+
+func (repo *repoStub) DeleteFaults(user *bootstrap.User, equipmentID string, guideManual string, keys []FaultKey) (int64, error) {
+	repo.capturedUser = user
+	repo.capturedEquipmentID = equipmentID
+	repo.capturedGuideManual = guideManual
+	repo.capturedBulkKeys = keys
+	return repo.deletedCount, repo.err
 }
 
 func requireUser() *bootstrap.User {
@@ -314,4 +324,70 @@ func TestDeleteFaultPassesValidatedKey(t *testing.T) {
 	require.Equal(t, "pmcs_sbs/hmmwv/file.json", stub.capturedDelete.GuideManual)
 	require.Equal(t, "before", stub.capturedDelete.SectionID)
 	require.Equal(t, int32(0), stub.capturedDelete.ItemIndex)
+}
+
+func TestDeleteFaultsPassesValidatedKeysAndCounts(t *testing.T) {
+	stub := &repoStub{deletedCount: 1}
+	svc := NewService(stub)
+
+	resp, err := svc.DeleteFaults(requireUser(), " vehicle-1 ", BulkDeleteFaultRequest{
+		GuideManual: " pmcs_sbs/hmmwv/file.json ",
+		Faults: []BulkDeleteFaultItemRequest{
+			{SectionID: " before ", ItemIndex: 0},
+			{SectionID: " after ", ItemIndex: 2},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", stub.capturedGuideManual)
+	require.Equal(t, []FaultKey{
+		{EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0},
+		{EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "after", ItemIndex: 2},
+	}, stub.capturedBulkKeys)
+	require.Equal(t, 2, resp.RequestedCount)
+	require.Equal(t, 1, resp.DeletedCount)
+}
+
+func TestDeleteFaultsRequiresAuth(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, err := svc.DeleteFaults(nil, "vehicle-1", BulkDeleteFaultRequest{
+		GuideManual: "pmcs_sbs/hmmwv/file.json",
+		Faults:      []BulkDeleteFaultItemRequest{{SectionID: "before", ItemIndex: 0}},
+	})
+
+	requireServiceError(t, err, ErrUnauthorized)
+}
+
+func TestValidateBulkDeleteFaultRequestRejectsInvalidValues(t *testing.T) {
+	svc := NewService(&repoStub{})
+	validFaults := []BulkDeleteFaultItemRequest{{SectionID: "before", ItemIndex: 0}}
+	tooManyFaults := make([]BulkDeleteFaultItemRequest, maxBulkDeleteFaults+1)
+	for i := range tooManyFaults {
+		tooManyFaults[i] = BulkDeleteFaultItemRequest{SectionID: "before", ItemIndex: int32(i)}
+	}
+
+	cases := []struct {
+		name        string
+		equipmentID string
+		req         BulkDeleteFaultRequest
+		want        error
+	}{
+		{name: "blank equipment", equipmentID: " ", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: validFaults}, want: ErrInvalidID},
+		{name: "blank guide manual", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: " ", Faults: validFaults}, want: ErrInvalidGuideManual},
+		{name: "invalid guide manual", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/../file.json", Faults: validFaults}, want: ErrInvalidGuideManual},
+		{name: "empty faults", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: []BulkDeleteFaultItemRequest{}}, want: ErrInvalidRequest},
+		{name: "too many faults", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: tooManyFaults}, want: ErrInvalidRequest},
+		{name: "blank section", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: []BulkDeleteFaultItemRequest{{SectionID: " ", ItemIndex: 0}}}, want: ErrInvalidRequest},
+		{name: "negative item index", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: []BulkDeleteFaultItemRequest{{SectionID: "before", ItemIndex: -1}}}, want: ErrInvalidRequest},
+		{name: "duplicate key", equipmentID: "vehicle-1", req: BulkDeleteFaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", Faults: []BulkDeleteFaultItemRequest{{SectionID: " before ", ItemIndex: 0}, {SectionID: "before", ItemIndex: 0}}}, want: ErrInvalidRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, _, err := svc.validateBulkDeleteFaultRequest(tc.equipmentID, tc.req)
+			requireServiceError(t, err, tc.want)
+		})
+	}
 }

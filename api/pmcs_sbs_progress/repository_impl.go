@@ -116,6 +116,10 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, key FaultKey) erro
 	return nil
 }
 
+func (repo *RepositoryImpl) DeleteFaults(user *bootstrap.User, equipmentID string, guideManual string, keys []FaultKey) (int64, error) {
+	return 0, errors.New("bulk delete pmcs sbs faults not implemented")
+}
+
 func (repo *RepositoryImpl) requireVehicleAccess(user *bootstrap.User, equipmentID string) error {
 	if user == nil {
 		return ErrUnauthorized

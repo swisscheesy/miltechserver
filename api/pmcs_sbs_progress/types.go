@@ -18,6 +18,16 @@ type DeleteFaultRequest struct {
 	ItemIndex   int32  `json:"item_index"`
 }
 
+type BulkDeleteFaultRequest struct {
+	GuideManual string                       `json:"guide_manual"`
+	Faults      []BulkDeleteFaultItemRequest `json:"faults"`
+}
+
+type BulkDeleteFaultItemRequest struct {
+	SectionID string `json:"section_id"`
+	ItemIndex int32  `json:"item_index"`
+}
+
 type FaultResponse struct {
 	EquipmentID      string    `json:"equipment_id"`
 	GuideManual      string    `json:"guide_manual"`
@@ -34,4 +44,9 @@ type FaultResponse struct {
 type FaultListResponse struct {
 	Faults []FaultResponse `json:"faults"`
 	Count  int             `json:"count"`
+}
+
+type BulkDeleteFaultResponse struct {
+	RequestedCount int `json:"requested_count"`
+	DeletedCount   int `json:"deleted_count"`
 }

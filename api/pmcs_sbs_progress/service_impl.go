@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"fmt"
 	"path"
 	"strings"
 	"time"
@@ -16,6 +17,8 @@ type ServiceImpl struct {
 func NewService(repository Repository) *ServiceImpl {
 	return &ServiceImpl{repository: repository}
 }
+
+const maxBulkDeleteFaults = 100
 
 func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error) {
 	if !hasAuthenticatedUser(user) {
@@ -69,6 +72,21 @@ func (service *ServiceImpl) DeleteFault(user *bootstrap.User, equipmentID string
 	return service.repository.DeleteFault(user, key)
 }
 
+func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	trimmedEquipmentID, guideManual, keys, err := service.validateBulkDeleteFaultRequest(equipmentID, req)
+	if err != nil {
+		return nil, err
+	}
+	deletedCount, err := service.repository.DeleteFaults(user, trimmedEquipmentID, guideManual, keys)
+	if err != nil {
+		return nil, err
+	}
+	return &BulkDeleteFaultResponse{RequestedCount: len(keys), DeletedCount: int(deletedCount)}, nil
+}
+
 func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRequest) (model.PmcsSbsFaults, error) {
 	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
@@ -120,6 +138,35 @@ func (service *ServiceImpl) validateDeleteFaultRequest(equipmentID string, req D
 		return FaultKey{}, ErrInvalidRequest
 	}
 	return FaultKey{EquipmentID: trimmedEquipmentID, GuideManual: guideManual, SectionID: sectionID, ItemIndex: req.ItemIndex}, nil
+}
+
+func (service *ServiceImpl) validateBulkDeleteFaultRequest(equipmentID string, req BulkDeleteFaultRequest) (string, string, []FaultKey, error) {
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+	if err != nil {
+		return "", "", nil, err
+	}
+	guideManual, err := validateGuideManual(req.GuideManual)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if len(req.Faults) == 0 || len(req.Faults) > maxBulkDeleteFaults {
+		return "", "", nil, ErrInvalidRequest
+	}
+	keys := make([]FaultKey, 0, len(req.Faults))
+	seen := make(map[string]struct{}, len(req.Faults))
+	for _, fault := range req.Faults {
+		sectionID := strings.TrimSpace(fault.SectionID)
+		if sectionID == "" || fault.ItemIndex < 0 {
+			return "", "", nil, ErrInvalidRequest
+		}
+		duplicateKey := fmt.Sprintf("%s\x00%d", sectionID, fault.ItemIndex)
+		if _, exists := seen[duplicateKey]; exists {
+			return "", "", nil, ErrInvalidRequest
+		}
+		seen[duplicateKey] = struct{}{}
+		keys = append(keys, FaultKey{EquipmentID: trimmedEquipmentID, GuideManual: guideManual, SectionID: sectionID, ItemIndex: fault.ItemIndex})
+	}
+	return trimmedEquipmentID, guideManual, keys, nil
 }
 
 func validateEquipmentID(equipmentID string) (string, error) {
