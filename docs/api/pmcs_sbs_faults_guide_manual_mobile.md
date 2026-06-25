@@ -19,6 +19,7 @@ Base URL: `/api/v1/auth`
 | `GET` | `/pmcs-sbs/equipment/:equipment_id/faults?guide_manual=...` | List faults for one Shops vehicle and one PMCS SBS guide/manual. |
 | `PUT` | `/pmcs-sbs/equipment/:equipment_id/faults` | Create or update one fault. |
 | `DELETE` | `/pmcs-sbs/equipment/:equipment_id/faults` | Delete one fault. |
+| `DELETE` | `/pmcs-sbs/equipment/:equipment_id/faults/bulk` | Delete up to 100 faults for one Shops vehicle and one PMCS SBS guide/manual. |
 
 `:equipment_id` is the selected Shops vehicle id: `shop_vehicle.id`.
 
@@ -171,6 +172,46 @@ Success response:
 
 Deleting a missing fault still returns success when the user can access the parent vehicle.
 
+## Bulk Delete Faults
+
+Request:
+
+`DELETE /api/v1/auth/pmcs-sbs/equipment/550e8400-e29b-41d4-a716-446655440000/faults/bulk`
+
+```json
+{
+  "guide_manual": "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json",
+  "faults": [
+    {
+      "section_id": "before",
+      "item_index": 0
+    },
+    {
+      "section_id": "before",
+      "item_index": 1
+    }
+  ]
+}
+```
+
+Success response:
+
+```json
+{
+  "message": "Faults deleted",
+  "requested_count": 2,
+  "deleted_count": 1
+}
+```
+
+Rules:
+
+- `guide_manual` is required once per request.
+- `faults` must contain `1` to `100` entries.
+- Each fault key requires `section_id` and `item_index`.
+- Duplicate `(section_id, item_index)` entries are rejected.
+- Missing fault keys do not fail the request when the vehicle is accessible. They are included in `requested_count` but not `deleted_count`.
+
 ## Error Responses
 
 | Condition | HTTP status | Response |
@@ -180,6 +221,9 @@ Deleting a missing fault still returns success when the user can access the pare
 | Missing or invalid `guide_manual` | `400` | `{"message":"invalid guide manual"}` |
 | Blank required field or negative `item_index` | `400` | `{"message":"invalid request"}` |
 | Invalid `status` | `400` | `{"message":"invalid fault status"}` |
+| Empty `faults` on bulk delete | `400` | `{"message":"invalid request"}` |
+| More than 100 faults on bulk delete | `400` | `{"message":"invalid request"}` |
+| Duplicate bulk delete fault keys | `400` | `{"message":"invalid request"}` |
 | Missing or unauthorized vehicle | `404` | `{"message":"pmcs sbs equipment not found"}` |
 | Unexpected server error | `500` | `{"status":500,"data":null,"message":"internal Server Error"}` |
 
