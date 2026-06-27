@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -155,6 +157,41 @@ func TestGetImageValidationDoesNotRequireBlobClient(t *testing.T) {
 			_, err := svc.GetImage(context.Background(), tc.guideBlobPath, tc.imageName)
 
 			require.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
+func TestIsBlobNotFoundError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "blob not found response error",
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.BlobNotFound)},
+			want: true,
+		},
+		{
+			name: "authentication failure response error",
+			err:  &azcore.ResponseError{ErrorCode: string(bloberror.AuthenticationFailed)},
+			want: false,
+		},
+		{
+			name: "generic error",
+			err:  errors.New("network unavailable"),
+			want: false,
+		},
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, isBlobNotFoundError(tc.err))
 		})
 	}
 }

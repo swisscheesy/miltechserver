@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 )
 
@@ -226,7 +227,10 @@ func (s *ServiceImpl) GetImage(ctx context.Context, guideBlobPath string, imageN
 			"imageName", cleanedImageName,
 			"imageBlobPath", imageBlobPath,
 			"error", err)
-		return nil, fmt.Errorf("%w: %v", ErrFileNotFound, err)
+		if isBlobNotFoundError(err) {
+			return nil, fmt.Errorf("%w: %v", ErrFileNotFound, err)
+		}
+		return nil, fmt.Errorf("%w: %v", ErrBlobReadFailed, err)
 	}
 
 	contentLength := int64(-1)
@@ -307,6 +311,10 @@ func buildImageBlobPath(guideBlobPath string, imageName string) (string, error) 
 	}
 
 	return path.Join(guideDir, "images", guideName, cleanedImageName+".png"), nil
+}
+
+func isBlobNotFoundError(err error) bool {
+	return bloberror.HasCode(err, bloberror.BlobNotFound)
 }
 
 // formatDisplayName converts folder names to human-readable display names.
