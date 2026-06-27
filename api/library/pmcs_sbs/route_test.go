@@ -299,6 +299,8 @@ func TestGetImageSuccess(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	require.Equal(t, "image/png", resp.Header().Get("Content-Type"))
 	require.Equal(t, `inline; filename="Before_12.png"`, resp.Header().Get("Content-Disposition"))
+	require.Equal(t, "public, max-age=86400", resp.Header().Get("Cache-Control"))
+	require.Equal(t, "9", resp.Header().Get("Content-Length"))
 	require.Equal(t, "png-bytes", resp.Body.String())
 }
 
@@ -388,6 +390,36 @@ func TestGetImageGenericError(t *testing.T) {
 
 	require.Equal(t, http.StatusInternalServerError, resp.Code)
 	require.JSONEq(t, `{"error":"Failed to retrieve image"}`, resp.Body.String())
+}
+
+func TestGetImageNilDownloadResponseReturnsGenericError(t *testing.T) {
+	tests := []struct {
+		name      string
+		imageResp *ImageDownload
+	}{
+		{name: "nil image response", imageResp: nil},
+		{name: "nil image body", imageResp: &ImageDownload{}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			stub := &capturingStub{
+				serviceStub: serviceStub{imageResp: tc.imageResp},
+			}
+			registerHandlers(router.Group("/api/v1"), stub)
+
+			req := newImageRequest("/api/v1/library/pmcs-sbs/image?blob_path=pmcs_sbs/hmmwv/file.json&image_name=Before_12", "198.51.100.16:1234")
+			resp := httptest.NewRecorder()
+
+			require.NotPanics(t, func() {
+				router.ServeHTTP(resp, req)
+			})
+			require.Equal(t, http.StatusInternalServerError, resp.Code)
+			require.JSONEq(t, `{"error":"Failed to retrieve image"}`, resp.Body.String())
+		})
+	}
 }
 
 func TestGetImagePassesBlobPathAndImageName(t *testing.T) {

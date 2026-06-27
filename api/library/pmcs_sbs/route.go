@@ -176,6 +176,13 @@ func (h *Handler) getImage(c *gin.Context) {
 		}
 		return
 	}
+	if image == nil || image.Body == nil {
+		slog.Error("PMCS SBS image download returned empty response", "blobPath", blobPath, "imageName", imageName)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to retrieve image",
+		})
+		return
+	}
 	defer image.Body.Close()
 
 	slog.Info(
