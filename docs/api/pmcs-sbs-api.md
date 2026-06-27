@@ -2,19 +2,20 @@
 
 **Base URL:** `https://<host>/api/v1`
 **Authentication:** None required — all endpoints are public
-**Content-Type:** `application/json`
+**Content-Type:** `application/json` unless otherwise noted
 
 ---
 
 ## Overview
 
-The PMCS Step-by-Step (SBS) API provides access to structured JSON documents stored in Azure Blob Storage. Each document contains step-by-step maintenance procedures for a specific vehicle or equipment family. The API is organized into three endpoints:
+The PMCS Step-by-Step (SBS) API provides access to structured JSON documents and item images stored in Azure Blob Storage. Each document contains step-by-step maintenance procedures for a specific vehicle or equipment family. The API is organized into four endpoints:
 
 1. **List folders** — discover which vehicle families have PMCS SBS content available
 2. **List files** — discover which JSON documents exist within a specific folder
 3. **Fetch content** — retrieve the raw JSON content of a specific document for display or offline storage
+4. **Fetch image** — retrieve raw PNG image bytes referenced by guide item `images` arrays
 
-The recommended flow is to call the three endpoints in order: folders → files → content.
+The recommended flow is to call the endpoints in order: folders → files → content. After guide JSON is loaded, inspect item `images` arrays and fetch referenced images on demand.
 
 ---
 
@@ -251,13 +252,77 @@ The `data` field contains the document's JSON content inline. The exact structur
 
 ---
 
+### 4. Fetch Image
+
+Streams raw PNG bytes for an item image referenced by a PMCS SBS guide document.
+
+**`GET /library/pmcs-sbs/image?blob_path=<guide_json_blob_path>&image_name=<extensionless_image_name>`**
+
+No authentication is required.
+
+> **Rate limited:** This endpoint uses the same rate limit as Fetch Content: a burst of **10 requests** per IP address, sustained at **2 requests per second**. Exceeding this limit returns `429 Too Many Requests`. Load images on demand and avoid prefetching images for steps the user has not opened.
+
+---
+
+#### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `blob_path` | string | Yes | The selected guide JSON path from the List Files response. Use the same value passed to Fetch Content. |
+| `image_name` | string | Yes | The exact extensionless string from the guide item's `images` array. Do not append `.png`. |
+
+---
+
+#### Success Response — `200 OK`
+
+The response body is binary PNG data, not JSON.
+
+| Header | Value |
+|--------|-------|
+| `Content-Type` | `image/png` |
+| `Content-Disposition` | `inline; filename="<image_name>.png"` |
+| `Cache-Control` | `public, max-age=86400` |
+| `Content-Length` | Included when Azure Blob Storage provides the content length |
+
+Example:
+
+```http
+GET /library/pmcs-sbs/image?blob_path=pmcs_sbs/HMMWV/HMMWV%20NoArmor%20(SEPT13).json&image_name=Before_12
+```
+
+For this request, the server derives the image blob path:
+
+```text
+pmcs_sbs/HMMWV/images/HMMWV NoArmor (SEPT13)/Before_12.png
+```
+
+The server derives the image location from the selected guide JSON `blob_path` and `image_name`. It does not parse the guide JSON and does not verify that `image_name` appears in any item `images` array.
+
+---
+
+#### Error Responses
+
+| Condition | Status | Response Body |
+|-----------|--------|---------------|
+| `blob_path` is missing or blank | `400` | `{"error":"blob_path query parameter is required"}` |
+| `image_name` is missing or blank | `400` | `{"error":"image_name query parameter is required"}` |
+| Invalid guide path | `400` | `{"error":"Invalid request","details":"..."}` |
+| Invalid image name | `400` | `{"error":"Invalid request","details":"..."}` |
+| Image missing from blob storage | `404` | `{"error":"Image not found","details":"The requested image does not exist or is not accessible"}` |
+| Rate limit exceeded | `429` | *(no JSON body — Gin default)* |
+| Azure storage failure | `500` | `{"error":"Failed to retrieve image"}` |
+
+---
+
 ## Recommended Mobile Workflow
 
 1. **Discover folders** — On first load or refresh, call `GET /library/pmcs-sbs/folders` to populate the vehicle/equipment picker. Cache this list — it changes rarely.
 2. **List documents** — When a user selects a folder, call `GET /library/pmcs-sbs/:folder/files` using the `name` from the folder listing. Present the returned files by `name`.
-3. **Fetch on demand** — When a user selects a file, call `GET /library/pmcs-sbs/content?blob_path=<blob_path>` using the `blob_path` from the file listing. Parse the response `data` field as the document JSON.
-4. **Cache content locally** — Store the fetched JSON locally using `blob_path` as the cache key, alongside the `last_modified` timestamp from the file listing. On next launch, compare `last_modified` against your cached value and re-fetch only if the document has changed.
-5. **Handle empty folders** — A `count` of `0` in the file listing is not an error. Show an "no documents available" state for that folder.
+3. **Fetch guide JSON first** — When a user selects a file, call `GET /library/pmcs-sbs/content?blob_path=<blob_path>` using the `blob_path` from the file listing. Parse the response `data` field as the document JSON.
+4. **Read item image references** — Inspect item `images` arrays after the guide JSON is loaded. Each image value is an extensionless `image_name`.
+5. **Fetch images on demand** — Request each image with `GET /library/pmcs-sbs/image?blob_path=<blob_path>&image_name=<image_name>` using the same selected guide `blob_path` and the exact extensionless `image_name` from the item. Treat image `404` responses as missing content and continue rendering the step without that image.
+6. **Cache content locally** — Store the fetched JSON locally using `blob_path` as the cache key, alongside the `last_modified` timestamp from the file listing. On next launch, compare `last_modified` against your cached value and re-fetch only if the document has changed. Cache image bytes separately by guide `blob_path` plus `image_name` if local image caching is needed.
+7. **Handle empty folders** — A `count` of `0` in the file listing is not an error. Show an "no documents available" state for that folder.
 
 ---
 
@@ -266,8 +331,10 @@ The `data` field contains the document's JSON content inline. The exact structur
 | Status | Recommended Behavior |
 |--------|---------------------|
 | `400` (missing or invalid `blob_path`) | This should not occur in normal use if `blob_path` values come from the API. If it does, check that you are passing `blob_path` from the List Files response without modification. |
-| `404` | Show a "document not found" message. The file may have been removed. Refresh the file listing for that folder. |
-| `429` | Back off and retry after a short delay. Do not prefetch content for documents the user has not yet requested. |
+| `400` (missing or invalid `image_name`) | This should not occur when image names come directly from guide item `images` arrays. If it does, confirm the client is passing the extensionless value without modification. |
+| Document `404` | Show a "document not found" message. The file may have been removed. Refresh the file listing for that folder. |
+| Image `404` | Treat the image as missing optional content. Continue rendering the step without that image. |
+| `429` | Back off and retry after a short delay. Do not prefetch content or images the user has not yet requested. |
 | `500` | Show a generic "content unavailable, try again" message. Do not display any response fields to the user. |
 
 ---
@@ -280,12 +347,13 @@ The `data` field contains the document's JSON content inline. The exact structur
 | List files in the HMMWV folder | `GET /library/pmcs-sbs/hmmwv/files` |
 | Fetch a specific HMMWV document | `GET /library/pmcs-sbs/content?blob_path=pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json` |
 | Fetch a Bradley document | `GET /library/pmcs-sbs/content?blob_path=pmcs_sbs/m2_bradley/m2_bradley_pmcs.json` |
+| Fetch a HMMWV item image | `GET /library/pmcs-sbs/image?blob_path=pmcs_sbs/HMMWV/HMMWV%20NoArmor%20(SEPT13).json&image_name=Before_12` |
 
 ---
 
 ## Validation Rules Reference
 
-The server enforces the following rules on `blob_path`. Violating any of them returns `400`.
+The server enforces the following rules on `blob_path` for content and image requests. Violating any of them returns `400`.
 
 | Rule | Detail |
 |------|--------|
@@ -293,5 +361,15 @@ The server enforces the following rules on `blob_path`. Violating any of them re
 | Must start with `pmcs_sbs/` | Any other prefix, including `pmcs/`, is rejected |
 | Must end with `.json` | Case-insensitive. `.JSON`, `.Json` are also accepted. |
 | Must not contain path traversal | Sequences like `../` are sanitized server-side and will fail the prefix check |
+
+The server enforces the following rules on `image_name` for image requests. Violating any of them returns `400`.
+
+| Rule | Detail |
+|------|--------|
+| Must not be blank | Whitespace-only values are also rejected |
+| Must not include an extension | Pass `Before_12`, not `Before_12.png` |
+| Must not contain `/` or `\\` | Path separators are rejected |
+| Must not contain `.` | Dot characters are rejected, including extension and traversal attempts |
+| Must not contain traversal tokens | Values like `..`, `../`, or `..\\` are rejected |
 
 Similarly for the `:folder` path parameter: values containing `/`, `.`, or `\` are rejected with a `500`. Source folder names exclusively from the `name` field in List Folders responses.
