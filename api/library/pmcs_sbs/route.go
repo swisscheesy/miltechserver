@@ -2,6 +2,7 @@ package pmcs_sbs
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -32,6 +33,7 @@ func registerHandlers(publicGroup *gin.RouterGroup, svc Service) {
 	publicGroup.GET("/library/pmcs-sbs/:folder/files", h.getFiles)
 	// Rate-limited: each IP is allowed a burst of 10 requests, sustained at 2 req/s.
 	publicGroup.GET("/library/pmcs-sbs/content", middleware.RateLimiter(), h.getFileContent)
+	publicGroup.GET("/library/pmcs-sbs/image", middleware.RateLimiter(), h.getImage)
 }
 
 // getFolders returns all top-level folders in the PMCS SBS library.
@@ -121,4 +123,72 @@ func (h *Handler) getFileContent(c *gin.Context) {
 
 	slog.Info("Successfully retrieved PMCS SBS file content", "blobPath", blobPath)
 	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: content})
+}
+
+// getImage fetches a guide item PNG from Azure and streams its raw bytes.
+// GET /library/pmcs-sbs/image?blob_path=pmcs_sbs/hmmwv/file.json&image_name=Before_12
+func (h *Handler) getImage(c *gin.Context) {
+	blobPath := c.Query("blob_path")
+	imageName := c.Query("image_name")
+
+	slog.Info("GetPMCSSBSImage endpoint called", "blobPath", blobPath, "imageName", imageName)
+
+	if strings.TrimSpace(blobPath) == "" {
+		slog.Warn("GetPMCSSBSImage called with empty blob_path", "imageName", imageName)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "blob_path query parameter is required",
+		})
+		return
+	}
+
+	if strings.TrimSpace(imageName) == "" {
+		slog.Warn("GetPMCSSBSImage called with empty image_name", "blobPath", blobPath)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "image_name query parameter is required",
+		})
+		return
+	}
+
+	image, err := h.service.GetImage(c.Request.Context(), blobPath, imageName)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrFileNotFound):
+			slog.Warn("PMCS SBS image not found", "blobPath", blobPath, "imageName", imageName, "error", err)
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "Image not found",
+				"details": "The requested image does not exist or is not accessible",
+			})
+		case errors.Is(err, ErrEmptyBlobPath),
+			errors.Is(err, ErrInvalidBlobPath),
+			errors.Is(err, ErrInvalidFileType),
+			errors.Is(err, ErrEmptyImageName),
+			errors.Is(err, ErrInvalidImageName):
+			slog.Warn("Invalid request for PMCS SBS image", "blobPath", blobPath, "imageName", imageName, "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":   "Invalid request",
+				"details": err.Error(),
+			})
+		default:
+			slog.Error("Failed to retrieve PMCS SBS image", "error", err, "blobPath", blobPath, "imageName", imageName)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to retrieve image",
+			})
+		}
+		return
+	}
+	defer image.Body.Close()
+
+	slog.Info(
+		"Successfully retrieved PMCS SBS image",
+		"blobPath", blobPath,
+		"imageName", imageName,
+		"imageBlobPath", image.BlobPath,
+	)
+
+	extraHeaders := map[string]string{
+		"Content-Disposition": fmt.Sprintf(`inline; filename="%s"`, image.FileName),
+		"Cache-Control":       "public, max-age=86400",
+	}
+
+	c.DataFromReader(http.StatusOK, image.ContentLength, image.ContentType, image.Body, extraHeaders)
 }

@@ -20,6 +20,15 @@ func TestSetupRegistersPmcsSbsFaultRoutesUnderAuth(t *testing.T) {
 	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults/bulk")
 }
 
+func TestSetupRegistersPmcsSbsImageRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	Setup(nil, router, nil, nil, nil)
+
+	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/library/pmcs-sbs/image")
+}
+
 func requireRouteRegistered(t *testing.T, router *gin.Engine, method string, path string) {
 	t.Helper()
 
