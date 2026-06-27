@@ -360,7 +360,7 @@ The server enforces the following rules on `blob_path` for content and image req
 | Must not be blank | Whitespace-only values are also rejected |
 | Must start with `pmcs_sbs/` | Any other prefix, including `pmcs/`, is rejected |
 | Must end with `.json` | Case-insensitive. `.JSON`, `.Json` are also accepted. |
-| Must not contain path traversal | Sequences like `../` are sanitized server-side and will fail the prefix check |
+| Must be canonical | Traversal or non-canonical paths are rejected |
 
 The server enforces the following rules on `image_name` for image requests. Violating any of them returns `400`.
 
