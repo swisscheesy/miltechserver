@@ -1,5 +1,7 @@
 package pmcs_sbs
 
+import "io"
+
 // FolderResponse represents a top-level folder in the PMCS SBS library.
 type FolderResponse struct {
 	Name        string `json:"name"`
@@ -26,4 +28,12 @@ type FilesListResponse struct {
 	FolderName string         `json:"folder_name"`
 	Files      []FileResponse `json:"files"`
 	Count      int            `json:"count"`
+}
+
+type ImageDownload struct {
+	Body          io.ReadCloser
+	ContentLength int64
+	ContentType   string
+	FileName      string
+	BlobPath      string
 }

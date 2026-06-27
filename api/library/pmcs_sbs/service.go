@@ -17,4 +17,8 @@ type Service interface {
 	// GetFileContent fetches a JSON blob and returns its raw content.
 	// ctx should be the request context so Azure calls are cancelled on client disconnect.
 	GetFileContent(ctx context.Context, blobPath string) (json.RawMessage, error)
+
+	// GetImage fetches a PMCS SBS guide item image.
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
+	GetImage(ctx context.Context, guideBlobPath string, imageName string) (*ImageDownload, error)
 }

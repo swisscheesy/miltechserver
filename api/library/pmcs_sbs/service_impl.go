@@ -150,18 +150,9 @@ func (s *ServiceImpl) GetFiles(ctx context.Context, folderName string) (*FilesLi
 // GetFileContent downloads a JSON blob from Azure and returns its raw content.
 // ctx should be the request context so the Azure DownloadStream call is cancelled on client disconnect.
 func (s *ServiceImpl) GetFileContent(ctx context.Context, blobPath string) (json.RawMessage, error) {
-	if strings.TrimSpace(blobPath) == "" {
-		return nil, ErrEmptyBlobPath
-	}
-
-	// Sanitise path to prevent directory traversal (e.g. "pmcs_sbs/../secret.json").
-	blobPath = path.Clean(blobPath)
-
-	if !strings.HasPrefix(blobPath, PMCSSBSPrefix) {
-		return nil, ErrInvalidBlobPath
-	}
-	if !strings.HasSuffix(strings.ToLower(blobPath), ".json") {
-		return nil, ErrInvalidFileType
+	blobPath, err := cleanGuideBlobPath(blobPath)
+	if err != nil {
+		return nil, err
 	}
 
 	slog.Info("Downloading PMCS SBS file content from Azure Blob Storage",
@@ -196,6 +187,76 @@ func (s *ServiceImpl) GetFileContent(ctx context.Context, blobPath string) (json
 		"size", len(data))
 
 	return json.RawMessage(data), nil
+}
+
+func (s *ServiceImpl) GetImage(ctx context.Context, guideBlobPath string, imageName string) (*ImageDownload, error) {
+	imageBlobPath, err := buildImageBlobPath(guideBlobPath, imageName)
+	if err != nil {
+		return nil, err
+	}
+
+	_ = ctx
+	_ = imageBlobPath
+	return nil, fmt.Errorf("pmcs sbs image download is not implemented")
+}
+
+func cleanGuideBlobPath(blobPath string) (string, error) {
+	trimmedBlobPath := strings.TrimSpace(blobPath)
+	if trimmedBlobPath == "" {
+		return "", ErrEmptyBlobPath
+	}
+	if strings.Contains(trimmedBlobPath, "\\") {
+		return "", ErrInvalidBlobPath
+	}
+
+	cleanedBlobPath := path.Clean(trimmedBlobPath)
+	if cleanedBlobPath != trimmedBlobPath {
+		return "", ErrInvalidBlobPath
+	}
+	if !strings.HasPrefix(cleanedBlobPath, PMCSSBSPrefix) {
+		return "", ErrInvalidBlobPath
+	}
+	if !strings.EqualFold(path.Ext(cleanedBlobPath), ".json") {
+		return "", ErrInvalidFileType
+	}
+
+	return cleanedBlobPath, nil
+}
+
+func cleanImageName(imageName string) (string, error) {
+	trimmedImageName := strings.TrimSpace(imageName)
+	if trimmedImageName == "" {
+		return "", ErrEmptyImageName
+	}
+	if strings.ContainsAny(trimmedImageName, `/\.`) {
+		return "", ErrInvalidImageName
+	}
+	if path.Clean(trimmedImageName) != trimmedImageName {
+		return "", ErrInvalidImageName
+	}
+
+	return trimmedImageName, nil
+}
+
+func buildImageBlobPath(guideBlobPath string, imageName string) (string, error) {
+	cleanedGuideBlobPath, err := cleanGuideBlobPath(guideBlobPath)
+	if err != nil {
+		return "", err
+	}
+
+	cleanedImageName, err := cleanImageName(imageName)
+	if err != nil {
+		return "", err
+	}
+
+	guideDir := path.Dir(cleanedGuideBlobPath)
+	guideFile := path.Base(cleanedGuideBlobPath)
+	guideName := strings.TrimSuffix(guideFile, path.Ext(guideFile))
+	if guideName == "" {
+		return "", ErrInvalidBlobPath
+	}
+
+	return path.Join(guideDir, "images", guideName, cleanedImageName+".png"), nil
 }
 
 // formatDisplayName converts folder names to human-readable display names.

@@ -2,6 +2,7 @@ package pmcs_sbs
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -67,6 +68,67 @@ func TestGetFileContentValidation(t *testing.T) {
 	// path.Clean turns "pmcs_sbs/../secret.json" into "secret.json", failing the prefix check.
 	_, err = svc.GetFileContent(context.Background(), "pmcs_sbs/../secret.json")
 	require.ErrorIs(t, err, ErrInvalidBlobPath)
+}
+
+func TestBuildImageBlobPath(t *testing.T) {
+	imageBlobPath, err := buildImageBlobPath(
+		"pmcs_sbs/HMMWV/HMMWV NoArmor (SEPT13).json",
+		"Before_12",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "pmcs_sbs/HMMWV/images/HMMWV NoArmor (SEPT13)/Before_12.png", imageBlobPath)
+}
+
+func TestBuildImageBlobPathGuidePathValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		guideBlobPath string
+		wantErr       error
+	}{
+		{"blank guide path", "   ", ErrEmptyBlobPath},
+		{"non-json file", "pmcs_sbs/HMMWV/file.pdf", ErrInvalidFileType},
+		{"path traversal", "pmcs_sbs/HMMWV/../secret.json", ErrInvalidBlobPath},
+		{"windows separators", `pmcs_sbs\HMMWV\file.json`, ErrInvalidBlobPath},
+		{"wrong prefix", "pmcs/other/file.json", ErrInvalidBlobPath},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := buildImageBlobPath(tc.guideBlobPath, "Before_12")
+
+			require.Error(t, err)
+			require.True(t, errors.Is(err, tc.wantErr), "expected %v, got %v", tc.wantErr, err)
+		})
+	}
+}
+
+func TestBuildImageBlobPathImageNameValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		imageName string
+		wantErr   error
+	}{
+		{"blank image name", "   ", ErrEmptyImageName},
+		{"png extension", "Before_12.png", ErrInvalidImageName},
+		{"forward slash", "folder/Before_12", ErrInvalidImageName},
+		{"windows separator", `folder\Before_12`, ErrInvalidImageName},
+		{"path traversal", "../Before_12", ErrInvalidImageName},
+		{"dot in name", "Before.12", ErrInvalidImageName},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := buildImageBlobPath("pmcs_sbs/HMMWV/HMMWV NoArmor (SEPT13).json", tc.imageName)
+
+			require.Error(t, err)
+			require.True(t, errors.Is(err, tc.wantErr), "expected %v, got %v", tc.wantErr, err)
+		})
+	}
+}
+
+func (s *serviceStub) GetImage(_ context.Context, _ string, _ string) (*ImageDownload, error) {
+	return nil, nil
 }
 
 func TestGetFilesValidation(t *testing.T) {
