@@ -192,12 +192,62 @@ func (s *ServiceImpl) GetFileContent(ctx context.Context, blobPath string) (json
 func (s *ServiceImpl) GetImage(ctx context.Context, guideBlobPath string, imageName string) (*ImageDownload, error) {
 	imageBlobPath, err := buildImageBlobPath(guideBlobPath, imageName)
 	if err != nil {
+		slog.Warn("Invalid PMCS SBS image download request",
+			"container", LibraryContainerName,
+			"guideBlobPath", guideBlobPath,
+			"imageName", imageName,
+			"error", err)
 		return nil, err
 	}
 
-	_ = ctx
-	_ = imageBlobPath
-	return nil, fmt.Errorf("pmcs sbs image download is not implemented")
+	cleanedImageName, err := cleanImageName(imageName)
+	if err != nil {
+		slog.Warn("Invalid PMCS SBS image name after blob path validation",
+			"container", LibraryContainerName,
+			"guideBlobPath", guideBlobPath,
+			"imageName", imageName,
+			"imageBlobPath", imageBlobPath,
+			"error", err)
+		return nil, err
+	}
+
+	slog.Info("Downloading PMCS SBS image from Azure Blob Storage",
+		"container", LibraryContainerName,
+		"guideBlobPath", guideBlobPath,
+		"imageName", cleanedImageName,
+		"imageBlobPath", imageBlobPath)
+
+	blobClient := s.blobClient.ServiceClient().NewContainerClient(LibraryContainerName).NewBlobClient(imageBlobPath)
+	downloadResponse, err := blobClient.DownloadStream(ctx, nil)
+	if err != nil {
+		slog.Error("Failed to download PMCS SBS image",
+			"container", LibraryContainerName,
+			"guideBlobPath", guideBlobPath,
+			"imageName", cleanedImageName,
+			"imageBlobPath", imageBlobPath,
+			"error", err)
+		return nil, fmt.Errorf("%w: %v", ErrFileNotFound, err)
+	}
+
+	contentLength := int64(-1)
+	if downloadResponse.ContentLength != nil {
+		contentLength = *downloadResponse.ContentLength
+	}
+
+	slog.Info("Successfully started PMCS SBS image download",
+		"container", LibraryContainerName,
+		"guideBlobPath", guideBlobPath,
+		"imageName", cleanedImageName,
+		"imageBlobPath", imageBlobPath,
+		"contentLength", contentLength)
+
+	return &ImageDownload{
+		Body:          downloadResponse.Body,
+		ContentLength: contentLength,
+		ContentType:   "image/png",
+		FileName:      cleanedImageName + ".png",
+		BlobPath:      imageBlobPath,
+	}, nil
 }
 
 func cleanGuideBlobPath(blobPath string) (string, error) {

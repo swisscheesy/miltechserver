@@ -127,6 +127,38 @@ func TestBuildImageBlobPathImageNameValidation(t *testing.T) {
 	}
 }
 
+func TestGetImageValidationDoesNotRequireBlobClient(t *testing.T) {
+	svc := NewService(nil)
+
+	tests := []struct {
+		name          string
+		guideBlobPath string
+		imageName     string
+		wantErr       error
+	}{
+		{
+			name:          "invalid guide path",
+			guideBlobPath: "pmcs_sbs/HMMWV/../secret.json",
+			imageName:     "Before_12",
+			wantErr:       ErrInvalidBlobPath,
+		},
+		{
+			name:          "invalid image name",
+			guideBlobPath: "pmcs_sbs/HMMWV/HMMWV NoArmor (SEPT13).json",
+			imageName:     "Before_12.png",
+			wantErr:       ErrInvalidImageName,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.GetImage(context.Background(), tc.guideBlobPath, tc.imageName)
+
+			require.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
 func (s *serviceStub) GetImage(_ context.Context, _ string, _ string) (*ImageDownload, error) {
 	return nil, nil
 }
