@@ -246,36 +246,47 @@ func (repo *RepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*r
 
 func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error) {
 	rawSQL := `
+		WITH user_shops AS (
+			SELECT
+				s.id,
+				s.name,
+				s.details,
+				s.created_by,
+				s.created_at,
+				s.updated_at,
+				s.admin_only_lists,
+				sm.role
+			FROM shops s
+			INNER JOIN shop_members sm ON s.id = sm.shop_id
+			WHERE sm.user_id = $1
+		),
+		member_stats AS (
+			SELECT sm.shop_id, COUNT(*) AS member_count
+			FROM shop_members sm
+			INNER JOIN user_shops us ON us.id = sm.shop_id
+			GROUP BY sm.shop_id
+		),
+		vehicle_stats AS (
+			SELECT sv.shop_id, COUNT(*) AS vehicle_count
+			FROM shop_vehicle sv
+			INNER JOIN user_shops us ON us.id = sv.shop_id
+			GROUP BY sv.shop_id
+		)
 		SELECT
-			s.id,
-			s.name,
-			s.details,
-			s.created_by,
-			s.created_at,
-			s.updated_at,
-			s.admin_only_lists,
-			COALESCE(member_stats.member_count, 0) as member_count,
-			COALESCE(vehicle_stats.vehicle_count, 0) as vehicle_count,
-			CASE WHEN admin_check.user_id IS NOT NULL THEN true ELSE false END as is_admin
-		FROM shops s
-		INNER JOIN shop_members sm ON s.id = sm.shop_id
-		LEFT JOIN (
-			SELECT shop_id, COUNT(*) as member_count
-			FROM shop_members
-			GROUP BY shop_id
-		) member_stats ON s.id = member_stats.shop_id
-		LEFT JOIN (
-			SELECT shop_id, COUNT(*) as vehicle_count
-			FROM shop_vehicle
-			GROUP BY shop_id
-		) vehicle_stats ON s.id = vehicle_stats.shop_id
-		LEFT JOIN (
-			SELECT shop_id, user_id
-			FROM shop_members
-			WHERE role = 'admin' AND user_id = $1
-		) admin_check ON s.id = admin_check.shop_id AND admin_check.user_id = $1
-		WHERE sm.user_id = $1
-		ORDER BY s.created_at DESC
+			us.id,
+			us.name,
+			us.details,
+			us.created_by,
+			us.created_at,
+			us.updated_at,
+			us.admin_only_lists,
+			COALESCE(member_stats.member_count, 0) AS member_count,
+			COALESCE(vehicle_stats.vehicle_count, 0) AS vehicle_count,
+			(us.role = 'admin') AS is_admin
+		FROM user_shops us
+		LEFT JOIN member_stats ON us.id = member_stats.shop_id
+		LEFT JOIN vehicle_stats ON us.id = vehicle_stats.shop_id
+		ORDER BY us.created_at DESC
 	`
 
 	rows, err := repo.db.Query(rawSQL, user.UserID)
