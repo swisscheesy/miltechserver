@@ -42,3 +42,36 @@ func TestShopEquipmentOverviewResponseEmptyArrays(t *testing.T) {
 	require.Contains(t, string(payload), `"equipment":[]`)
 	require.NotContains(t, string(payload), `"equipment":null`)
 }
+
+func TestShopAggregateResponseDTOsEncodeEmptyArrays(t *testing.T) {
+	result := ShopListsWithItemsResponse{
+		Lists: []ShopListWithItems{{
+			ShopListWithUsername: ShopListWithUsername{
+				ID: "list-1", ShopID: "shop-1", CreatedBy: "user-1", Description: "Parts",
+			},
+			Items: []ShopListItemWithUsername{},
+		}},
+	}
+
+	payload, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"lists":[`)
+	require.Contains(t, string(payload), `"items":[]`)
+}
+
+func TestShopBootstrapResponseDTOsEncodeCounts(t *testing.T) {
+	result := ShopsBootstrapResponse{
+		Shops: []ShopBootstrapSummary{{
+			ID: "shop-1", Name: "Alpha", Role: "admin", IsAdmin: true,
+			Settings:  ShopAggregateSettings{AdminOnlyLists: true},
+			Counts:    ShopAggregateCounts{Members: 2, Vehicles: 3},
+			Equipment: []ShopEquipmentSummary{},
+		}},
+	}
+
+	payload, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.Contains(t, string(payload), `"admin_only_lists":true`)
+	require.Contains(t, string(payload), `"members":2`)
+	require.Contains(t, string(payload), `"equipment":[]`)
+}

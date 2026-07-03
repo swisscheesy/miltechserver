@@ -96,3 +96,71 @@ type ShopEquipmentSummary struct {
 	Serial string `alias:"serial" json:"serial"`
 	Niin   string `alias:"niin" json:"niin"`
 }
+
+type ShopListsWithItemsResponse struct {
+	Lists []ShopListWithItems `json:"lists"`
+}
+
+type ShopListWithItems struct {
+	ShopListWithUsername
+	Items []ShopListItemWithUsername `json:"items"`
+}
+
+type ShopAggregateSettings struct {
+	AdminOnlyLists bool `json:"admin_only_lists"`
+}
+
+type ShopAggregateCounts struct {
+	Members           int64 `json:"members"`
+	Vehicles          int64 `json:"vehicles"`
+	Lists             int64 `json:"lists"`
+	Messages          int64 `json:"messages"`
+	Notifications     int64 `json:"notifications"`
+	NotificationItems int64 `json:"notification_items,omitempty"`
+	OpenServices      int64 `json:"open_services"`
+	Services          int64 `json:"services,omitempty"`
+	RecentChanges     int64 `json:"recent_changes,omitempty"`
+}
+
+type ShopSnapshotResponse struct {
+	Shop          ShopSnapshotSummary              `json:"shop"`
+	Vehicles      []model.ShopVehicle              `json:"vehicles"`
+	Lists         []ShopListWithItems              `json:"lists"`
+	Notifications []VehicleNotificationWithItems   `json:"notifications"`
+	Messages      []model.ShopMessages             `json:"messages"`
+	Services      []EquipmentServiceResponse       `json:"services"`
+	RecentChanges []NotificationChangeWithUsername `json:"recent_changes"`
+}
+
+type ShopSnapshotSummary struct {
+	ID       string                `json:"id"`
+	Name     string                `json:"name"`
+	Details  *string               `json:"details"`
+	Role     string                `json:"role"`
+	IsAdmin  bool                  `json:"is_admin"`
+	Settings ShopAggregateSettings `json:"settings"`
+	Counts   ShopAggregateCounts   `json:"counts"`
+}
+
+type VehicleMaintenanceSnapshotResponse struct {
+	Vehicle       model.ShopVehicle                `json:"vehicle"`
+	Notifications []VehicleNotificationWithItems   `json:"notifications"`
+	RecentChanges []NotificationChangeWithUsername `json:"recent_changes"`
+	Services      []EquipmentServiceResponse       `json:"services"`
+	Counts        ShopAggregateCounts              `json:"counts"`
+}
+
+type ShopsBootstrapResponse struct {
+	Shops []ShopBootstrapSummary `json:"shops"`
+}
+
+type ShopBootstrapSummary struct {
+	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
+	Details   *string                `json:"details"`
+	Role      string                 `json:"role"`
+	IsAdmin   bool                   `json:"is_admin"`
+	Settings  ShopAggregateSettings  `json:"settings"`
+	Counts    ShopAggregateCounts    `json:"counts"`
+	Equipment []ShopEquipmentSummary `json:"equipment"`
+}
