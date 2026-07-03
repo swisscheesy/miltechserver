@@ -35,7 +35,10 @@ func (repo *RepositoryImpl) GetInDateRange(user *bootstrap.User, shopID string, 
 
 	stmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...)).
 		ORDER_BY(EquipmentServices.ServiceDate.ASC())
 

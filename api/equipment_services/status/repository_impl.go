@@ -38,7 +38,10 @@ func (repo *RepositoryImpl) GetOverdue(user *bootstrap.User, shopID string, equi
 		Raw("EXTRACT(DAY FROM NOW() - service_date)").AS("days_overdue"),
 	).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...)).
 		ORDER_BY(EquipmentServices.ServiceDate.ASC()).
 		LIMIT(int64(limit))
@@ -84,7 +87,10 @@ func (repo *RepositoryImpl) GetDueSoon(user *bootstrap.User, shopID string, days
 		Raw("EXTRACT(DAY FROM service_date - NOW())").AS("days_until_due"),
 	).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...)).
 		ORDER_BY(EquipmentServices.ServiceDate.ASC()).
 		LIMIT(int64(limit))

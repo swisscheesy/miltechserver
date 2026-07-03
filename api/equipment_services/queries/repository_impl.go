@@ -18,10 +18,6 @@ type RepositoryImpl struct {
 	db *sql.DB
 }
 
-type countResult struct {
-	Count int64 `alias:"count"`
-}
-
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
@@ -59,21 +55,27 @@ func (repo *RepositoryImpl) GetByShop(user *bootstrap.User, shopID string, filte
 		conditions = append(conditions, EquipmentServices.ServiceDate.LT_EQ(TimestampzT(endTime)))
 	}
 
-	countStmt := SELECT(COUNT(STAR)).FROM(
+	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...))
 
-	var count countResult
-	err := countStmt.Query(repo.db, &count)
+	countQuery, countArgs := countStmt.Sql()
+	var totalCount int64
+	err := repo.db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count services: %w", err)
 	}
-	totalCount := count.Count
 
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...)).
 		ORDER_BY(EquipmentServices.CreatedAt.DESC()).
 		LIMIT(int64(filters.Limit)).
@@ -100,21 +102,27 @@ func (repo *RepositoryImpl) GetByEquipment(user *bootstrap.User, equipmentID str
 		conditions = append(conditions, EquipmentServices.ServiceDate.LT_EQ(TimestampzT(*endDate)))
 	}
 
-	countStmt := SELECT(COUNT(STAR)).FROM(
+	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...))
 
-	var count countResult
-	err := countStmt.Query(repo.db, &count)
+	countQuery, countArgs := countStmt.Sql()
+	var totalCount int64
+	err := repo.db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count services: %w", err)
 	}
-	totalCount := count.Count
 
 	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
 		EquipmentServices.
-			INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID)),
+			INNER_JOIN(ShopMembers,
+				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
+					AND(ShopMembers.UserID.EQ(String(user.UserID))),
+			),
 	).WHERE(postgres.AND(conditions...)).
 		ORDER_BY(EquipmentServices.ServiceDate.DESC()).
 		LIMIT(int64(limit)).
