@@ -119,7 +119,7 @@ func (s *ServiceImpl) GetVehicleMaintenanceSnapshot(ctx context.Context, user *b
 		Notifications: notifications,
 		RecentChanges: changes,
 		Services:      services,
-		Counts: response.ShopAggregateCounts{
+		Counts: response.VehicleMaintenanceSnapshotCounts{
 			Notifications:     int64(len(notifications)),
 			NotificationItems: itemCount,
 			RecentChanges:     int64(len(changes)),

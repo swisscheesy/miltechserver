@@ -8,4 +8,5 @@ import (
 func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	handler := Handler{service: service}
 	router.GET("/shops/:shop_id/lists-with-items", gzip.Gzip(gzip.DefaultCompression), handler.getListsWithItems)
+	router.GET("/shops/vehicles/:vehicle_id/maintenance-snapshot", gzip.Gzip(gzip.DefaultCompression), handler.getVehicleMaintenanceSnapshot)
 }

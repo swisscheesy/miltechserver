@@ -122,6 +122,13 @@ type ShopAggregateCounts struct {
 	RecentChanges     int64 `json:"recent_changes,omitempty"`
 }
 
+type VehicleMaintenanceSnapshotCounts struct {
+	Notifications     int64 `json:"notifications"`
+	NotificationItems int64 `json:"notification_items"`
+	RecentChanges     int64 `json:"recent_changes"`
+	Services          int64 `json:"services"`
+}
+
 type ShopSnapshotResponse struct {
 	Shop          ShopSnapshotSummary              `json:"shop"`
 	Vehicles      []model.ShopVehicle              `json:"vehicles"`
@@ -147,7 +154,7 @@ type VehicleMaintenanceSnapshotResponse struct {
 	Notifications []VehicleNotificationWithItems   `json:"notifications"`
 	RecentChanges []NotificationChangeWithUsername `json:"recent_changes"`
 	Services      []EquipmentServiceResponse       `json:"services"`
-	Counts        ShopAggregateCounts              `json:"counts"`
+	Counts        VehicleMaintenanceSnapshotCounts `json:"counts"`
 }
 
 type ShopsBootstrapResponse struct {

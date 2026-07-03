@@ -75,3 +75,29 @@ func TestShopBootstrapResponseDTOsEncodeCounts(t *testing.T) {
 	require.Contains(t, string(payload), `"members":2`)
 	require.Contains(t, string(payload), `"equipment":[]`)
 }
+
+func TestVehicleMaintenanceSnapshotResponseCountsOnlyIncludesMaintenanceFields(t *testing.T) {
+	result := VehicleMaintenanceSnapshotResponse{
+		Counts: VehicleMaintenanceSnapshotCounts{
+			Notifications:     1,
+			NotificationItems: 2,
+			RecentChanges:     3,
+			Services:          4,
+		},
+	}
+
+	payload, err := json.Marshal(result)
+	require.NoError(t, err)
+
+	var decoded map[string]any
+	err = json.Unmarshal(payload, &decoded)
+	require.NoError(t, err)
+
+	counts := decoded["counts"].(map[string]any)
+	require.Equal(t, map[string]any{
+		"notifications":      float64(1),
+		"notification_items": float64(2),
+		"recent_changes":     float64(3),
+		"services":           float64(4),
+	}, counts)
+}
