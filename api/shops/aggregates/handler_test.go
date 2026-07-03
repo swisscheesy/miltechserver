@@ -2,6 +2,7 @@ package aggregates
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -32,7 +33,7 @@ func (s serviceStub) GetBootstrap(context.Context, *bootstrap.User, BootstrapOpt
 	return nil, errors.New("unexpected bootstrap call")
 }
 
-func TestGetListsWithItemsRequiresUser(t *testing.T) {
+func TestListsWithItemsRequiresUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	RegisterRoutes(router.Group("/api/v1/auth"), serviceStub{})
@@ -41,4 +42,37 @@ func TestGetListsWithItemsRequiresUser(t *testing.T) {
 	resp := httptest.NewRecorder()
 	router.ServeHTTP(resp, req)
 	require.Equal(t, http.StatusUnauthorized, resp.Code)
+}
+
+func TestListsWithItemsReturnsStandardResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("user", &bootstrap.User{UserID: "user-1"})
+		c.Next()
+	})
+	RegisterRoutes(router.Group("/api/v1/auth"), serviceStub{
+		listsResp: &response.ShopListsWithItemsResponse{
+			Lists: []response.ShopListWithItems{},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/shops/shop-1/lists-with-items", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	var payload struct {
+		Status int `json:"status"`
+		Data   struct {
+			Lists []response.ShopListWithItems `json:"lists"`
+		} `json:"data"`
+		Message string `json:"message"`
+	}
+	err := json.Unmarshal(resp.Body.Bytes(), &payload)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, payload.Status)
+	require.Equal(t, "Shop lists with items retrieved successfully", payload.Message)
+	require.Empty(t, payload.Data.Lists)
 }

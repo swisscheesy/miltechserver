@@ -202,6 +202,47 @@ func createVehicle(t *testing.T, router *gin.Engine, userID string, shopID strin
 	return vehicleID
 }
 
+func createList(t *testing.T, router *gin.Engine, userID string, shopID string) string {
+	t.Helper()
+
+	body := map[string]interface{}{
+		"shop_id":     shopID,
+		"description": "Test list",
+	}
+
+	resp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/lists", body, userID)
+	require.Equal(t, http.StatusCreated, resp.Code)
+
+	data := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	listID, ok := data["id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, listID)
+
+	return listID
+}
+
+func createListItem(t *testing.T, router *gin.Engine, userID string, listID string, niin string, nomenclature string) string {
+	t.Helper()
+
+	body := map[string]interface{}{
+		"list_id":         listID,
+		"niin":            niin,
+		"nomenclature":    nomenclature,
+		"quantity":        1,
+		"unit_of_measure": "ea",
+	}
+
+	resp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/lists/items", body, userID)
+	require.Equal(t, http.StatusCreated, resp.Code)
+
+	data := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	itemID, ok := data["id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, itemID)
+
+	return itemID
+}
+
 func createNotification(t *testing.T, router *gin.Engine, userID string, shopID string, vehicleID string, title string) string {
 	t.Helper()
 
