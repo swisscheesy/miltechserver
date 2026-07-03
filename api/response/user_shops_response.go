@@ -122,6 +122,15 @@ type ShopAggregateCounts struct {
 	RecentChanges     int64 `json:"recent_changes,omitempty"`
 }
 
+type ShopSnapshotCounts struct {
+	Members       int64 `json:"members"`
+	Vehicles      int64 `json:"vehicles"`
+	Lists         int64 `json:"lists"`
+	Messages      int64 `json:"messages"`
+	Notifications int64 `json:"notifications"`
+	OpenServices  int64 `json:"open_services"`
+}
+
 type VehicleMaintenanceSnapshotCounts struct {
 	Notifications     int64 `json:"notifications"`
 	NotificationItems int64 `json:"notification_items"`
@@ -146,7 +155,7 @@ type ShopSnapshotSummary struct {
 	Role     string                `json:"role"`
 	IsAdmin  bool                  `json:"is_admin"`
 	Settings ShopAggregateSettings `json:"settings"`
-	Counts   ShopAggregateCounts   `json:"counts"`
+	Counts   ShopSnapshotCounts    `json:"counts"`
 }
 
 type VehicleMaintenanceSnapshotResponse struct {

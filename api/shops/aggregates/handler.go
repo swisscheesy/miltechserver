@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
@@ -64,6 +65,31 @@ func (handler Handler) getVehicleMaintenanceSnapshot(c *gin.Context) {
 	})
 }
 
+func (handler Handler) getShopSnapshot(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return
+	}
+
+	options, err := parseShopSnapshotOptions(c)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+
+	result, err := handler.service.GetShopSnapshot(c.Request.Context(), user, c.Param("shop_id"), options)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "Shop snapshot retrieved successfully",
+		Data:    result,
+	})
+}
+
 func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
 	servicesLimit, err := parseOptionalIntQuery(c, "services_limit")
 	if err != nil {
@@ -77,6 +103,61 @@ func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
 		ServicesLimit: servicesLimit,
 		ChangesLimit:  changesLimit,
 	}, nil
+}
+
+func parseShopSnapshotOptions(c *gin.Context) (ShopSnapshotOptions, error) {
+	includes, err := parseShopSnapshotIncludes(c)
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	messageLimit, err := parseOptionalIntQuery(c, "message_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	changesLimit, err := parseOptionalIntQuery(c, "changes_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	servicesLimit, err := parseOptionalIntQuery(c, "services_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	return ShopSnapshotOptions{
+		Includes:      includes,
+		MessageLimit:  messageLimit,
+		ChangesLimit:  changesLimit,
+		ServicesLimit: servicesLimit,
+	}, nil
+}
+
+func parseShopSnapshotIncludes(c *gin.Context) (map[string]bool, error) {
+	raw, exists := c.GetQuery("include")
+	if !exists {
+		return map[string]bool{
+			"vehicles":      true,
+			"lists":         true,
+			"notifications": true,
+			"services":      true,
+		}, nil
+	}
+
+	allowed := map[string]bool{
+		"vehicles":      true,
+		"lists":         true,
+		"notifications": true,
+		"messages":      true,
+		"services":      true,
+		"changes":       true,
+	}
+	includes := make(map[string]bool)
+	for _, value := range strings.Split(raw, ",") {
+		include := strings.TrimSpace(value)
+		if !allowed[include] {
+			return nil, ErrInvalidInclude
+		}
+		includes[include] = true
+	}
+	return includes, nil
 }
 
 func parseOptionalIntQuery(c *gin.Context, key string) (int, error) {

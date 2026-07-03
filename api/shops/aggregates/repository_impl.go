@@ -17,7 +17,11 @@ type RepositoryImpl struct {
 	db *sql.DB
 }
 
-const maintenanceSnapshotNotificationLimit = 50
+const (
+	maintenanceSnapshotNotificationLimit             = 50
+	shopSnapshotNotificationLimit                    = 50
+	shopSnapshotNotificationItemLimitPerNotification = 25
+)
 
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
@@ -403,12 +407,474 @@ LIMIT $2`
 	return services, nil
 }
 
-func (repo *RepositoryImpl) GetShopSnapshot(context.Context, *bootstrap.User, string, ShopSnapshotOptions) (*response.ShopSnapshotResponse, error) {
-	return nil, ErrAggregateUnavailable
+func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error) {
+	summary, err := repo.getShopSnapshotSummary(ctx, user, shopID)
+	if err != nil {
+		return nil, err
+	}
+
+	includes := options.Includes
+	if includes == nil {
+		includes = map[string]bool{
+			"vehicles":      true,
+			"lists":         true,
+			"notifications": true,
+			"services":      true,
+		}
+	}
+
+	result := &response.ShopSnapshotResponse{
+		Shop:          *summary,
+		Vehicles:      []model.ShopVehicle{},
+		Lists:         []response.ShopListWithItems{},
+		Notifications: []response.VehicleNotificationWithItems{},
+		Messages:      []model.ShopMessages{},
+		Services:      []response.EquipmentServiceResponse{},
+		RecentChanges: []response.NotificationChangeWithUsername{},
+	}
+
+	if includes["vehicles"] {
+		vehicles, err := repo.getShopSnapshotVehicles(ctx, user, shopID)
+		if err != nil {
+			return nil, err
+		}
+		result.Vehicles = vehicles
+	}
+	if includes["lists"] {
+		lists, err := repo.GetListsWithItems(ctx, user, shopID)
+		if err != nil {
+			return nil, err
+		}
+		result.Lists = lists
+	}
+	if includes["notifications"] {
+		notifications, err := repo.getShopNotificationsWithItems(ctx, user, shopID, shopSnapshotNotificationLimit)
+		if err != nil {
+			return nil, err
+		}
+		result.Notifications = notifications
+	}
+	if includes["messages"] {
+		messages, err := repo.getShopSnapshotMessages(ctx, user, shopID, options.MessageLimit)
+		if err != nil {
+			return nil, err
+		}
+		result.Messages = messages
+	}
+	if includes["services"] {
+		services, err := repo.getShopSnapshotServices(ctx, user, shopID, options.ServicesLimit)
+		if err != nil {
+			return nil, err
+		}
+		result.Services = services
+	}
+	if includes["changes"] {
+		changes, err := repo.getShopSnapshotRecentChanges(ctx, user, shopID, options.ChangesLimit)
+		if err != nil {
+			return nil, err
+		}
+		result.RecentChanges = changes
+	}
+
+	return result, nil
 }
 
 func (repo *RepositoryImpl) GetBootstrap(context.Context, *bootstrap.User, BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
 	return nil, ErrAggregateUnavailable
+}
+
+func (repo *RepositoryImpl) getShopSnapshotSummary(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopSnapshotSummary, error) {
+	const query = `
+SELECT
+	s.id,
+	s.name,
+	s.details,
+	sm.role,
+	(sm.role = 'admin') AS is_admin,
+	s.admin_only_lists,
+	(SELECT COUNT(*) FROM shop_members m WHERE m.shop_id = s.id) AS member_count,
+	(SELECT COUNT(*) FROM shop_vehicle v WHERE v.shop_id = s.id) AS vehicle_count,
+	(SELECT COUNT(*) FROM shop_lists l WHERE l.shop_id = s.id) AS list_count,
+	(SELECT COUNT(*) FROM shop_messages msg WHERE msg.shop_id = s.id) AS message_count,
+	(SELECT COUNT(*) FROM shop_vehicle_notifications n WHERE n.shop_id = s.id) AS notification_count,
+	(SELECT COUNT(*) FROM equipment_services es WHERE es.shop_id = s.id AND es.is_completed = false) AS open_service_count
+FROM shop_members sm
+INNER JOIN shops s ON s.id = sm.shop_id
+WHERE sm.shop_id = $1 AND sm.user_id = $2
+LIMIT 1`
+
+	var summary response.ShopSnapshotSummary
+	var details sql.NullString
+	err := repo.db.QueryRowContext(ctx, query, shopID, user.UserID).Scan(
+		&summary.ID,
+		&summary.Name,
+		&details,
+		&summary.Role,
+		&summary.IsAdmin,
+		&summary.Settings.AdminOnlyLists,
+		&summary.Counts.Members,
+		&summary.Counts.Vehicles,
+		&summary.Counts.Lists,
+		&summary.Counts.Messages,
+		&summary.Counts.Notifications,
+		&summary.Counts.OpenServices,
+	)
+	if err != nil {
+		if errorsIsNoRows(err) {
+			return nil, shared.ErrShopAccessDenied
+		}
+		return nil, fmt.Errorf("failed to query shop snapshot summary: %w", err)
+	}
+	summary.Details = nullStringPtr(details)
+	return &summary, nil
+}
+
+func (repo *RepositoryImpl) getShopSnapshotVehicles(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopVehicle, error) {
+	const query = `
+SELECT
+	v.id, v.creator_id, v.niin, v.admin, v.model, v.serial, v.uoc,
+	v.mileage, v.hours, v.comment, v.save_time, v.last_updated, v.shop_id,
+	v.tracked_mileage, v.tracked_hours
+FROM shop_vehicle v
+INNER JOIN shop_members sm ON sm.shop_id = v.shop_id AND sm.user_id = $2
+WHERE v.shop_id = $1
+ORDER BY v.save_time DESC, v.id ASC`
+
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shop snapshot vehicles: %w", err)
+	}
+	defer rows.Close()
+
+	vehicles := []model.ShopVehicle{}
+	for rows.Next() {
+		var vehicle model.ShopVehicle
+		var trackedMileage sql.NullInt64
+		var trackedHours sql.NullInt64
+		err := rows.Scan(
+			&vehicle.ID,
+			&vehicle.CreatorID,
+			&vehicle.Niin,
+			&vehicle.Admin,
+			&vehicle.Model,
+			&vehicle.Serial,
+			&vehicle.Uoc,
+			&vehicle.Mileage,
+			&vehicle.Hours,
+			&vehicle.Comment,
+			&vehicle.SaveTime,
+			&vehicle.LastUpdated,
+			&vehicle.ShopID,
+			&trackedMileage,
+			&trackedHours,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shop snapshot vehicle: %w", err)
+		}
+		vehicle.TrackedMileage = nullInt32Ptr(trackedMileage)
+		vehicle.TrackedHours = nullInt32Ptr(trackedHours)
+		vehicles = append(vehicles, vehicle)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shop snapshot vehicles: %w", err)
+	}
+
+	return vehicles, nil
+}
+
+func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.VehicleNotificationWithItems, error) {
+	notifications, err := repo.getShopSnapshotNotifications(ctx, user, shopID, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(notifications) == 0 {
+		return []response.VehicleNotificationWithItems{}, nil
+	}
+
+	notificationIDs := make([]string, len(notifications))
+	for i, notification := range notifications {
+		notificationIDs[i] = notification.ID
+	}
+
+	items, err := repo.getSnapshotItemsByNotificationIDs(ctx, notificationIDs, shopSnapshotNotificationItemLimitPerNotification)
+	if err != nil {
+		return nil, err
+	}
+
+	itemsByNotification := make(map[string][]model.ShopNotificationItems, len(notificationIDs))
+	for _, item := range items {
+		itemsByNotification[item.NotificationID] = append(itemsByNotification[item.NotificationID], item)
+	}
+
+	result := make([]response.VehicleNotificationWithItems, len(notifications))
+	for i, notification := range notifications {
+		notificationItems := itemsByNotification[notification.ID]
+		if notificationItems == nil {
+			notificationItems = []model.ShopNotificationItems{}
+		}
+		result[i] = response.VehicleNotificationWithItems{
+			Notification: notification,
+			Items:        notificationItems,
+		}
+	}
+
+	return result, nil
+}
+
+func (repo *RepositoryImpl) getSnapshotItemsByNotificationIDs(ctx context.Context, notificationIDs []string, perNotificationLimit int) ([]model.ShopNotificationItems, error) {
+	if len(notificationIDs) == 0 {
+		return []model.ShopNotificationItems{}, nil
+	}
+
+	itemLimitPlaceholder := len(notificationIDs) + 1
+	query := fmt.Sprintf(`
+WITH ranked_items AS (
+	SELECT
+		id,
+		shop_id,
+		notification_id,
+		niin,
+		nomenclature,
+		quantity,
+		save_time,
+		ROW_NUMBER() OVER (
+			PARTITION BY notification_id
+			ORDER BY save_time ASC, id ASC
+		) AS item_rank
+	FROM shop_notification_items
+	WHERE notification_id IN (%s)
+)
+SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
+FROM ranked_items
+WHERE item_rank <= $%d
+ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder)
+
+	args := make([]any, 0, len(notificationIDs)+1)
+	for _, id := range notificationIDs {
+		args = append(args, id)
+	}
+	args = append(args, perNotificationLimit)
+
+	rows, err := repo.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query bounded snapshot notification items: %w", err)
+	}
+	defer rows.Close()
+
+	items := []model.ShopNotificationItems{}
+	for rows.Next() {
+		var item model.ShopNotificationItems
+		err := rows.Scan(
+			&item.ID,
+			&item.ShopID,
+			&item.NotificationID,
+			&item.Niin,
+			&item.Nomenclature,
+			&item.Quantity,
+			&item.SaveTime,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bounded snapshot notification item: %w", err)
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate bounded snapshot notification items: %w", err)
+	}
+
+	return items, nil
+}
+
+func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicleNotifications, error) {
+	const query = `
+SELECT n.id, n.shop_id, n.vehicle_id, n.title, n.description, n.type, n.completed, n.save_time, n.last_updated
+FROM shop_vehicle_notifications n
+INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2
+WHERE n.shop_id = $1
+ORDER BY n.save_time DESC, n.id ASC
+LIMIT $3`
+
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shop snapshot notifications: %w", err)
+	}
+	defer rows.Close()
+
+	notifications := []model.ShopVehicleNotifications{}
+	for rows.Next() {
+		var notification model.ShopVehicleNotifications
+		err := rows.Scan(
+			&notification.ID,
+			&notification.ShopID,
+			&notification.VehicleID,
+			&notification.Title,
+			&notification.Description,
+			&notification.Type,
+			&notification.Completed,
+			&notification.SaveTime,
+			&notification.LastUpdated,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shop snapshot notification: %w", err)
+		}
+		notifications = append(notifications, notification)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shop snapshot notifications: %w", err)
+	}
+
+	return notifications, nil
+}
+
+func (repo *RepositoryImpl) getShopSnapshotMessages(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopMessages, error) {
+	const query = `
+SELECT msg.id, msg.shop_id, msg.user_id, msg.message, msg.created_at, msg.updated_at, msg.is_edited, msg.parent_id
+FROM shop_messages msg
+INNER JOIN shop_members sm ON sm.shop_id = msg.shop_id AND sm.user_id = $2
+WHERE msg.shop_id = $1
+ORDER BY msg.created_at DESC, msg.id ASC
+LIMIT $3`
+
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shop snapshot messages: %w", err)
+	}
+	defer rows.Close()
+
+	messages := []model.ShopMessages{}
+	for rows.Next() {
+		var message model.ShopMessages
+		var createdAt sql.NullTime
+		var updatedAt sql.NullTime
+		var isEdited sql.NullBool
+		var parentID sql.NullString
+		err := rows.Scan(
+			&message.ID,
+			&message.ShopID,
+			&message.UserID,
+			&message.Message,
+			&createdAt,
+			&updatedAt,
+			&isEdited,
+			&parentID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shop snapshot message: %w", err)
+		}
+		message.CreatedAt = nullTimePtr(createdAt)
+		message.UpdatedAt = nullTimePtr(updatedAt)
+		message.IsEdited = nullBoolPtr(isEdited)
+		message.ParentID = nullStringPtr(parentID)
+		messages = append(messages, message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shop snapshot messages: %w", err)
+	}
+
+	return messages, nil
+}
+
+func (repo *RepositoryImpl) getShopSnapshotServices(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.EquipmentServiceResponse, error) {
+	const query = `
+SELECT
+	es.id, es.shop_id, es.equipment_id, es.list_id, es.description, es.service_type,
+	es.created_by, COALESCE(u.username, 'Unknown User') AS created_by_username,
+	es.is_completed, es.created_at, es.updated_at, es.service_date, es.service_hours,
+	es.completion_date
+FROM equipment_services es
+INNER JOIN shop_members sm ON sm.shop_id = es.shop_id AND sm.user_id = $2
+LEFT JOIN users u ON u.uid = es.created_by
+WHERE es.shop_id = $1
+ORDER BY es.service_date ASC NULLS LAST, es.created_at DESC, es.id ASC
+LIMIT $3`
+
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shop snapshot services: %w", err)
+	}
+	defer rows.Close()
+
+	services := []response.EquipmentServiceResponse{}
+	for rows.Next() {
+		var service response.EquipmentServiceResponse
+		var serviceDate sql.NullTime
+		var serviceHours sql.NullInt64
+		var completionDate sql.NullTime
+		err := rows.Scan(
+			&service.ID,
+			&service.ShopID,
+			&service.EquipmentID,
+			&service.ListID,
+			&service.Description,
+			&service.ServiceType,
+			&service.CreatedBy,
+			&service.CreatedByUsername,
+			&service.IsCompleted,
+			&service.CreatedAt,
+			&service.UpdatedAt,
+			&serviceDate,
+			&serviceHours,
+			&completionDate,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shop snapshot service: %w", err)
+		}
+		service.ServiceDate = nullTimePtr(serviceDate)
+		service.ServiceHours = nullInt32Ptr(serviceHours)
+		service.CompletionDate = nullTimePtr(completionDate)
+		services = append(services, service)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shop snapshot services: %w", err)
+	}
+
+	return services, nil
+}
+
+func (repo *RepositoryImpl) getShopSnapshotRecentChanges(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
+	const query = `
+SELECT
+	c.id,
+	c.notification_id,
+	c.shop_id,
+	c.vehicle_id,
+	c.changed_by,
+	COALESCE(u.username, 'Unknown User') AS changed_by_username,
+	c.changed_at,
+	c.change_type,
+	c.field_changes,
+	COALESCE(n.title, c.notification_title, 'Deleted Notification') AS notification_title,
+	c.notification_type,
+	COALESCE(v.admin, c.vehicle_admin) AS vehicle_admin,
+	CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END AS is_deleted
+FROM shop_vehicle_notification_changes c
+INNER JOIN shop_members sm ON sm.shop_id = c.shop_id AND sm.user_id = $2
+LEFT JOIN users u ON c.changed_by = u.uid
+LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
+LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
+WHERE c.shop_id = $1
+ORDER BY c.changed_at DESC, c.id ASC
+LIMIT $3`
+
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shop snapshot changes: %w", err)
+	}
+	defer rows.Close()
+
+	changes := []response.NotificationChangeWithUsername{}
+	for rows.Next() {
+		change, err := scanNotificationChange(rows)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shop snapshot changes: %w", err)
+	}
+
+	return changes, nil
 }
 
 func timePtr(value time.Time) *time.Time {
@@ -427,6 +893,13 @@ func nullStringPtr(value sql.NullString) *string {
 		return nil
 	}
 	return &value.String
+}
+
+func nullBoolPtr(value sql.NullBool) *bool {
+	if !value.Valid {
+		return nil
+	}
+	return &value.Bool
 }
 
 func nullInt32Ptr(value sql.NullInt64) *int32 {

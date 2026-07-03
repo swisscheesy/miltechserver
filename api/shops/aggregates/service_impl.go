@@ -140,6 +140,9 @@ func (s *ServiceImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User,
 	options.ServicesLimit = normalizeLimit(options.ServicesLimit, defaultServicesLimit, maxServicesLimit)
 	result, err := s.repo.GetShopSnapshot(ctx, user, shopID, options)
 	if err != nil {
+		if errors.Is(err, shared.ErrShopAccessDenied) {
+			return nil, fmt.Errorf("%w: %w", ErrAccessDenied, err)
+		}
 		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
 	}
 	normalizeShopSnapshot(result)
