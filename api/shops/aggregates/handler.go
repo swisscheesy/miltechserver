@@ -90,6 +90,31 @@ func (handler Handler) getShopSnapshot(c *gin.Context) {
 	})
 }
 
+func (handler Handler) getBootstrap(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return
+	}
+
+	options, err := parseBootstrapOptions(c)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+
+	result, err := handler.service.GetBootstrap(c.Request.Context(), user, options)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "Shops bootstrap retrieved successfully",
+		Data:    result,
+	})
+}
+
 func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
 	servicesLimit, err := parseOptionalIntQuery(c, "services_limit")
 	if err != nil {
@@ -127,6 +152,16 @@ func parseShopSnapshotOptions(c *gin.Context) (ShopSnapshotOptions, error) {
 		MessageLimit:  messageLimit,
 		ChangesLimit:  changesLimit,
 		ServicesLimit: servicesLimit,
+	}, nil
+}
+
+func parseBootstrapOptions(c *gin.Context) (BootstrapOptions, error) {
+	equipmentLimitPerShop, err := parseOptionalIntQuery(c, "equipment_limit_per_shop")
+	if err != nil {
+		return BootstrapOptions{}, err
+	}
+	return BootstrapOptions{
+		EquipmentLimitPerShop: equipmentLimitPerShop,
 	}, nil
 }
 

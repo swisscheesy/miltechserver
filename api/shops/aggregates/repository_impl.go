@@ -479,8 +479,153 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 	return result, nil
 }
 
-func (repo *RepositoryImpl) GetBootstrap(context.Context, *bootstrap.User, BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
-	return nil, ErrAggregateUnavailable
+func (repo *RepositoryImpl) GetBootstrap(ctx context.Context, user *bootstrap.User, options BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
+	const query = `
+SELECT
+	s.id,
+	s.name,
+	s.details,
+	sm.role,
+	(sm.role = 'admin') AS is_admin,
+	s.admin_only_lists,
+	(SELECT COUNT(*) FROM shop_members m WHERE m.shop_id = s.id) AS member_count,
+	(SELECT COUNT(*) FROM shop_vehicle v WHERE v.shop_id = s.id) AS vehicle_count,
+	(SELECT COUNT(*) FROM shop_lists l WHERE l.shop_id = s.id) AS list_count,
+	(SELECT COUNT(*) FROM shop_messages msg WHERE msg.shop_id = s.id) AS message_count,
+	(SELECT COUNT(*) FROM shop_vehicle_notifications n WHERE n.shop_id = s.id) AS notification_count,
+	(SELECT COUNT(*) FROM shop_notification_items ni WHERE ni.shop_id = s.id) AS notification_item_count,
+	(SELECT COUNT(*) FROM equipment_services es WHERE es.shop_id = s.id AND es.is_completed = false) AS open_service_count,
+	(SELECT COUNT(*) FROM equipment_services es WHERE es.shop_id = s.id) AS service_count,
+	(SELECT COUNT(*) FROM shop_vehicle_notification_changes c WHERE c.shop_id = s.id) AS recent_change_count
+FROM shop_members sm
+INNER JOIN shops s ON s.id = sm.shop_id
+WHERE sm.user_id = $1
+ORDER BY s.created_at DESC NULLS LAST, s.id DESC`
+
+	rows, err := repo.db.QueryContext(ctx, query, user.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shops bootstrap summaries: %w", err)
+	}
+	defer rows.Close()
+
+	shops := []response.ShopBootstrapSummary{}
+	shopIndexes := make(map[string]int)
+
+	for rows.Next() {
+		var shop response.ShopBootstrapSummary
+		var details sql.NullString
+		err := rows.Scan(
+			&shop.ID,
+			&shop.Name,
+			&details,
+			&shop.Role,
+			&shop.IsAdmin,
+			&shop.Settings.AdminOnlyLists,
+			&shop.Counts.Members,
+			&shop.Counts.Vehicles,
+			&shop.Counts.Lists,
+			&shop.Counts.Messages,
+			&shop.Counts.Notifications,
+			&shop.Counts.NotificationItems,
+			&shop.Counts.OpenServices,
+			&shop.Counts.Services,
+			&shop.Counts.RecentChanges,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shops bootstrap summary: %w", err)
+		}
+		shop.Details = nullStringPtr(details)
+		shop.Equipment = []response.ShopEquipmentSummary{}
+		shopIndexes[shop.ID] = len(shops)
+		shops = append(shops, shop)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shops bootstrap summaries: %w", err)
+	}
+	if len(shops) == 0 {
+		return shops, nil
+	}
+
+	shopIDs := make([]string, len(shops))
+	for i, shop := range shops {
+		shopIDs[i] = shop.ID
+	}
+
+	equipmentByShop, err := repo.getBootstrapEquipment(ctx, shopIDs, options.EquipmentLimitPerShop)
+	if err != nil {
+		return nil, err
+	}
+	for shopID, equipment := range equipmentByShop {
+		shopIndex, ok := shopIndexes[shopID]
+		if ok {
+			shops[shopIndex].Equipment = equipment
+		}
+	}
+
+	return shops, nil
+}
+
+func (repo *RepositoryImpl) getBootstrapEquipment(ctx context.Context, shopIDs []string, equipmentLimitPerShop int) (map[string][]response.ShopEquipmentSummary, error) {
+	if len(shopIDs) == 0 {
+		return map[string][]response.ShopEquipmentSummary{}, nil
+	}
+
+	limitPlaceholder := len(shopIDs) + 1
+	query := fmt.Sprintf(`
+WITH ranked_equipment AS (
+	SELECT
+		shop_id,
+		id,
+		admin,
+		model,
+		serial,
+		niin,
+		ROW_NUMBER() OVER (
+			PARTITION BY shop_id
+			ORDER BY save_time DESC, id DESC
+		) AS equipment_rank
+	FROM shop_vehicle
+	WHERE shop_id IN (%s)
+)
+SELECT shop_id, id, admin, model, serial, niin
+FROM ranked_equipment
+WHERE equipment_rank <= $%d
+ORDER BY shop_id ASC, equipment_rank ASC`, placeholders(len(shopIDs)), limitPlaceholder)
+
+	args := make([]any, 0, len(shopIDs)+1)
+	for _, shopID := range shopIDs {
+		args = append(args, shopID)
+	}
+	args = append(args, equipmentLimitPerShop)
+
+	rows, err := repo.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query shops bootstrap equipment: %w", err)
+	}
+	defer rows.Close()
+
+	equipmentByShop := make(map[string][]response.ShopEquipmentSummary, len(shopIDs))
+	for rows.Next() {
+		var shopID string
+		var equipment response.ShopEquipmentSummary
+		err := rows.Scan(
+			&shopID,
+			&equipment.ID,
+			&equipment.Admin,
+			&equipment.Model,
+			&equipment.Serial,
+			&equipment.Niin,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan shops bootstrap equipment: %w", err)
+		}
+		equipmentByShop[shopID] = append(equipmentByShop[shopID], equipment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate shops bootstrap equipment: %w", err)
+	}
+
+	return equipmentByShop, nil
 }
 
 func (repo *RepositoryImpl) getShopSnapshotSummary(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopSnapshotSummary, error) {
