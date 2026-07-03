@@ -16,6 +16,8 @@ Query parameters: none.
 
 This endpoint returns every shop the authenticated user belongs to, with a compact list of equipment in each shop. It is intended for mobile overview screens that need a current, nested shop-and-equipment snapshot in one request.
 
+Related endpoints: additional additive Shops aggregate endpoints are documented in `docs/api/shops_api_efficiency_mobile.md`. This does not change or replace `GET /shops/equipment/overview`; the contract in this document remains unchanged.
+
 ## Features
 
 - Returns all shops where the authenticated user has a `shop_members` row.

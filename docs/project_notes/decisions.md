@@ -411,3 +411,21 @@ Based on the current project setup:
 - The endpoint performs one database round trip and limits rows through membership in the query.
 - Memory and bandwidth grow linearly with equipment count; gzip reduces transfer size but not DTO allocation.
 - If workloads exceed the accepted bound or p95 target, revisit the transport contract before speculative indexing or caching.
+
+### ADR-016: Add Backward-Compatible Shops Aggregate Read Endpoints (2026-07-03)
+
+**Context:**
+- Existing Shops clients can load complex screens by chaining multiple narrow endpoints.
+- The existing `GET /shops/equipment/overview` aggregate proved the set-based additive endpoint pattern.
+- Some current query shapes needed internal fixes without response-contract changes.
+
+**Decision:**
+- Keep all legacy endpoints active and backward compatible.
+- Add aggregate read endpoints for list trees, vehicle maintenance snapshots, shop snapshots, and Shops bootstrap.
+- Keep high-cardinality sections bounded and gzip aggregate payloads when requested.
+- Require representative `EXPLAIN (ANALYZE, BUFFERS)` evidence before adding new indexes.
+
+**Consequences:**
+- New clients can reduce round trips substantially.
+- Old clients continue using existing endpoints.
+- Aggregate endpoints must maintain dedicated top-level DTOs and avoid accidental response growth when reusing generated nested model shapes.
