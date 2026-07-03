@@ -2,6 +2,7 @@ package shops
 
 import (
 	"database/sql"
+	"miltechserver/api/shops/aggregates"
 	"miltechserver/api/shops/core"
 	"miltechserver/api/shops/lists"
 	listitems "miltechserver/api/shops/lists/items"
@@ -29,6 +30,7 @@ type Dependencies struct {
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	authorization := shared.NewShopAuthorization(deps.DB)
 
+	aggregatesRepository := aggregates.NewRepository(deps.DB)
 	coreRepository := core.NewRepository(deps.DB, deps.BlobClient, deps.Env)
 	settingsRepository := settings.NewRepository(deps.DB)
 	membersRepository := members.NewRepository(deps.DB, deps.BlobClient, deps.Env)
@@ -41,6 +43,7 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	notificationItemsRepository := notificationitems.NewRepository(deps.DB)
 	notificationChangesRepository := notificationchanges.NewRepository(deps.DB)
 
+	aggregatesService := aggregates.NewService(aggregatesRepository, authorization)
 	coreService := core.NewService(coreRepository, authorization)
 	settingsService := settings.NewService(settingsRepository, authorization)
 	membersService := members.NewService(membersRepository, inviteRepository, authorization)
@@ -53,6 +56,7 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	notificationItemsService := notificationitems.NewService(notificationItemsRepository)
 	notificationChangesService := notificationchanges.NewService(notificationChangesRepository)
 
+	aggregates.RegisterRoutes(router, aggregatesService)
 	core.RegisterRoutes(router, coreService)
 	settings.RegisterRoutes(router, settingsService)
 	members.RegisterRoutes(router, membersService)
