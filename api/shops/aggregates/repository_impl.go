@@ -17,31 +17,43 @@ type RepositoryImpl struct {
 	db *sql.DB
 }
 
-const (
-	maintenanceSnapshotNotificationLimit             = 50
-	shopSnapshotNotificationLimit                    = 50
-	shopSnapshotNotificationItemLimitPerNotification = 25
-)
-
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
-func (repo *RepositoryImpl) GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopListWithItems, error) {
+func (repo *RepositoryImpl) GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limits ListTreeLimits) ([]response.ShopListWithItems, error) {
 	const query = `
+WITH ranked_lists AS (
+	SELECT
+		l.id, l.shop_id, l.created_by, creator.username AS created_by_username, l.description, l.created_at, l.updated_at,
+		ROW_NUMBER() OVER (ORDER BY l.created_at DESC, l.id ASC) AS list_rank
+	FROM shop_lists l
+	INNER JOIN shop_members sm ON sm.shop_id = l.shop_id AND sm.user_id = $2
+	LEFT JOIN users creator ON creator.uid = l.created_by
+	WHERE l.shop_id = $1
+),
+ranked_items AS (
+	SELECT
+		i.id, i.list_id, i.niin, i.nomenclature, i.quantity, i.added_by, added.username AS added_by_username,
+		i.created_at, i.updated_at, i.nickname, i.unit_of_measure,
+		ROW_NUMBER() OVER (
+			PARTITION BY i.list_id
+			ORDER BY i.created_at ASC, i.id ASC
+		) AS item_rank
+	FROM shop_list_items i
+	INNER JOIN ranked_lists l ON l.id = i.list_id AND l.list_rank <= $3
+	LEFT JOIN users added ON added.uid = i.added_by
+)
 SELECT
-	l.id, l.shop_id, l.created_by, creator.username, l.description, l.created_at, l.updated_at,
-	i.id, i.list_id, i.niin, i.nomenclature, i.quantity, i.added_by, added.username,
+	l.id, l.shop_id, l.created_by, l.created_by_username, l.description, l.created_at, l.updated_at,
+	i.id, i.list_id, i.niin, i.nomenclature, i.quantity, i.added_by, i.added_by_username,
 	i.created_at, i.updated_at, i.nickname, i.unit_of_measure
-FROM shop_lists l
-INNER JOIN shop_members sm ON sm.shop_id = l.shop_id AND sm.user_id = $2
-LEFT JOIN users creator ON creator.uid = l.created_by
-LEFT JOIN shop_list_items i ON i.list_id = l.id
-LEFT JOIN users added ON added.uid = i.added_by
-WHERE l.shop_id = $1
-ORDER BY l.created_at DESC, l.id ASC, i.created_at ASC, i.id ASC`
+FROM ranked_lists l
+LEFT JOIN ranked_items i ON i.list_id = l.id AND i.item_rank <= $4
+WHERE l.list_rank <= $3
+ORDER BY l.list_rank ASC, i.item_rank ASC NULLS LAST, i.id ASC`
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID)
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limits.ListsLimit, limits.ItemsLimitPerList)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop lists with items: %w", err)
 	}
@@ -181,8 +193,8 @@ LIMIT 1`
 	return &vehicle, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context, vehicleID string) ([]response.VehicleNotificationWithItems, error) {
-	notifications, err := repo.getVehicleNotifications(ctx, vehicleID, maintenanceSnapshotNotificationLimit)
+func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context, vehicleID string, limits SnapshotLimits) ([]response.VehicleNotificationWithItems, error) {
+	notifications, err := repo.getVehicleNotifications(ctx, vehicleID, limits.NotificationsLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +207,7 @@ func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context
 		notificationIDs[i] = notification.ID
 	}
 
-	items, err := repo.getItemsByNotificationIDs(ctx, notificationIDs)
+	items, err := repo.getItemsByNotificationIDs(ctx, notificationIDs, limits.NotificationItemsLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -260,21 +272,39 @@ LIMIT $2`
 	return notifications, nil
 }
 
-func (repo *RepositoryImpl) getItemsByNotificationIDs(ctx context.Context, notificationIDs []string) ([]model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) getItemsByNotificationIDs(ctx context.Context, notificationIDs []string, perNotificationLimit int) ([]model.ShopNotificationItems, error) {
 	if len(notificationIDs) == 0 {
 		return []model.ShopNotificationItems{}, nil
 	}
 
+	itemLimitPlaceholder := len(notificationIDs) + 1
 	query := fmt.Sprintf(`
+WITH ranked_items AS (
+	SELECT
+		id,
+		shop_id,
+		notification_id,
+		niin,
+		nomenclature,
+		quantity,
+		save_time,
+		ROW_NUMBER() OVER (
+			PARTITION BY notification_id
+			ORDER BY save_time ASC, id ASC
+		) AS item_rank
+	FROM shop_notification_items
+	WHERE notification_id IN (%s)
+)
 SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
-FROM shop_notification_items
-WHERE notification_id IN (%s)
-ORDER BY save_time ASC, id ASC`, placeholders(len(notificationIDs)))
+FROM ranked_items
+WHERE item_rank <= $%d
+ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder)
 
-	args := make([]any, len(notificationIDs))
-	for i, id := range notificationIDs {
-		args[i] = id
+	args := make([]any, 0, len(notificationIDs)+1)
+	for _, id := range notificationIDs {
+		args = append(args, id)
 	}
+	args = append(args, perNotificationLimit)
 
 	rows, err := repo.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -434,21 +464,24 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 	}
 
 	if includes["vehicles"] {
-		vehicles, err := repo.getShopSnapshotVehicles(ctx, user, shopID)
+		vehicles, err := repo.getShopSnapshotVehicles(ctx, user, shopID, options.VehiclesLimit)
 		if err != nil {
 			return nil, err
 		}
 		result.Vehicles = vehicles
 	}
 	if includes["lists"] {
-		lists, err := repo.GetListsWithItems(ctx, user, shopID)
+		lists, err := repo.GetListsWithItems(ctx, user, shopID, ListTreeLimits{
+			ListsLimit:        options.ListsLimit,
+			ItemsLimitPerList: options.ItemsLimitPerList,
+		})
 		if err != nil {
 			return nil, err
 		}
 		result.Lists = lists
 	}
 	if includes["notifications"] {
-		notifications, err := repo.getShopNotificationsWithItems(ctx, user, shopID, shopSnapshotNotificationLimit)
+		notifications, err := repo.getShopNotificationsWithItems(ctx, user, shopID, options.NotificationsLimit, options.NotificationItemsLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -674,7 +707,7 @@ LIMIT 1`
 	return &summary, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotVehicles(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopVehicle, error) {
+func (repo *RepositoryImpl) getShopSnapshotVehicles(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicle, error) {
 	const query = `
 SELECT
 	v.id, v.creator_id, v.niin, v.admin, v.model, v.serial, v.uoc,
@@ -683,9 +716,10 @@ SELECT
 FROM shop_vehicle v
 INNER JOIN shop_members sm ON sm.shop_id = v.shop_id AND sm.user_id = $2
 WHERE v.shop_id = $1
-ORDER BY v.save_time DESC, v.id ASC`
+ORDER BY v.save_time DESC, v.id ASC
+LIMIT $3`
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID)
+	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot vehicles: %w", err)
 	}
@@ -727,8 +761,8 @@ ORDER BY v.save_time DESC, v.id ASC`
 	return vehicles, nil
 }
 
-func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.VehicleNotificationWithItems, error) {
-	notifications, err := repo.getShopSnapshotNotifications(ctx, user, shopID, limit)
+func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, user *bootstrap.User, shopID string, notificationLimit int, itemLimitPerNotification int) ([]response.VehicleNotificationWithItems, error) {
+	notifications, err := repo.getShopSnapshotNotifications(ctx, user, shopID, notificationLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -741,7 +775,7 @@ func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, u
 		notificationIDs[i] = notification.ID
 	}
 
-	items, err := repo.getSnapshotItemsByNotificationIDs(ctx, notificationIDs, shopSnapshotNotificationItemLimitPerNotification)
+	items, err := repo.getSnapshotItemsByNotificationIDs(ctx, notificationIDs, itemLimitPerNotification)
 	if err != nil {
 		return nil, err
 	}

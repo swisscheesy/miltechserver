@@ -59,7 +59,7 @@ type repositoryStubForService struct {
 	services      []response.EquipmentServiceResponse
 }
 
-func (r repositoryStubForService) GetListsWithItems(context.Context, *bootstrap.User, string) ([]response.ShopListWithItems, error) {
+func (r repositoryStubForService) GetListsWithItems(context.Context, *bootstrap.User, string, ListTreeLimits) ([]response.ShopListWithItems, error) {
 	return r.listsResp, r.listsErr
 }
 
@@ -67,7 +67,7 @@ func (r repositoryStubForService) GetVehicleByIDForMember(context.Context, *boot
 	return r.vehicleResp, r.vehicleErr
 }
 
-func (r repositoryStubForService) GetVehicleNotificationsWithItems(context.Context, string) ([]response.VehicleNotificationWithItems, error) {
+func (r repositoryStubForService) GetVehicleNotificationsWithItems(context.Context, string, SnapshotLimits) ([]response.VehicleNotificationWithItems, error) {
 	return r.notifications, nil
 }
 
@@ -93,7 +93,7 @@ func TestGetListsWithItemsMapsOnlyAccessDeniedAuthErrorsToAccessDenied(t *testin
 		authStubForService{requireShopMemberErr: shared.ErrShopAccessDenied},
 	)
 
-	_, err := service.GetListsWithItems(context.Background(), &bootstrap.User{UserID: "user-1"}, "shop-1")
+	_, err := service.GetListsWithItems(context.Background(), &bootstrap.User{UserID: "user-1"}, "shop-1", ListTreeLimits{})
 
 	require.ErrorIs(t, err, ErrAccessDenied)
 	require.NotErrorIs(t, err, ErrAggregateUnavailable)
@@ -105,7 +105,7 @@ func TestGetListsWithItemsMapsUnexpectedAuthErrorsToAggregateUnavailable(t *test
 		authStubForService{requireShopMemberErr: errors.New("membership lookup failed")},
 	)
 
-	_, err := service.GetListsWithItems(context.Background(), &bootstrap.User{UserID: "user-1"}, "shop-1")
+	_, err := service.GetListsWithItems(context.Background(), &bootstrap.User{UserID: "user-1"}, "shop-1", ListTreeLimits{})
 
 	require.ErrorIs(t, err, ErrAggregateUnavailable)
 	require.NotErrorIs(t, err, ErrAccessDenied)

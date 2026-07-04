@@ -72,6 +72,85 @@ func TestVehicleMaintenanceSnapshotBoundsNotifications(t *testing.T) {
 	require.Equal(t, float64(expectedNotificationLimit), counts["notification_items"])
 }
 
+func TestVehicleMaintenanceSnapshotBoundsNotificationItems(t *testing.T) {
+	const expectedItemLimit = 25
+
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Bounded Maintenance Items")
+	vehicleID := createVehicle(t, router, "user-1", shopID)
+	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
+	baseTime := time.Now().Add(-time.Hour).UTC()
+	for i := 0; i < expectedItemLimit+1; i++ {
+		_, err := testDB.Exec(
+			`INSERT INTO shop_notification_items (
+				id, shop_id, notification_id, niin, nomenclature, quantity, save_time
+			) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			fmt.Sprintf("maintenance-item-%02d", i),
+			shopID,
+			notificationID,
+			fmt.Sprintf("111111%03d", i),
+			fmt.Sprintf("Part %02d", i),
+			1,
+			baseTime.Add(time.Duration(i)*time.Second),
+		)
+		require.NoError(t, err)
+	}
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/vehicles/"+vehicleID+"/maintenance-snapshot", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	notifications := payload["notifications"].([]interface{})
+	require.Len(t, notifications, 1)
+	items := notifications[0].(map[string]interface{})["items"].([]interface{})
+	require.Len(t, items, expectedItemLimit)
+	counts := payload["counts"].(map[string]interface{})
+	require.Equal(t, float64(expectedItemLimit), counts["notification_items"])
+	limits := payload["limits"].(map[string]interface{})
+	require.Equal(t, float64(expectedItemLimit), limits["notification_items_per_notification"])
+}
+
+func TestVehicleMaintenanceSnapshotClampsNotificationItemsMaxCap(t *testing.T) {
+	const expectedMaxItemLimit = 100
+
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Max Maintenance Items")
+	vehicleID := createVehicle(t, router, "user-1", shopID)
+	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
+	baseTime := time.Now().Add(-time.Hour).UTC()
+	for i := 0; i < expectedMaxItemLimit+1; i++ {
+		_, err := testDB.Exec(
+			`INSERT INTO shop_notification_items (
+				id, shop_id, notification_id, niin, nomenclature, quantity, save_time
+			) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			fmt.Sprintf("maintenance-max-item-%03d", i),
+			shopID,
+			notificationID,
+			fmt.Sprintf("222222%03d", i),
+			fmt.Sprintf("Part %03d", i),
+			1,
+			baseTime.Add(time.Duration(i)*time.Second),
+		)
+		require.NoError(t, err)
+	}
+
+	path := "/api/v1/auth/shops/vehicles/" + vehicleID + "/maintenance-snapshot?notification_items_limit=999"
+	resp := doJSONRequest(t, router, http.MethodGet, path, nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	notifications := payload["notifications"].([]interface{})
+	require.Len(t, notifications, 1)
+	items := notifications[0].(map[string]interface{})["items"].([]interface{})
+	require.Len(t, items, expectedMaxItemLimit)
+	limits := payload["limits"].(map[string]interface{})
+	require.Equal(t, float64(expectedMaxItemLimit), limits["notification_items_per_notification"])
+}
+
 func createEquipmentService(t *testing.T, userID, shopID, equipmentID, listID, description string, serviceDate *time.Time, isCompleted bool) string {
 	t.Helper()
 

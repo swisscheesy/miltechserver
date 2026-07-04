@@ -20,7 +20,7 @@ type serviceStub struct {
 	err       error
 }
 
-func (s serviceStub) GetListsWithItems(context.Context, *bootstrap.User, string) (*response.ShopListsWithItemsResponse, error) {
+func (s serviceStub) GetListsWithItems(context.Context, *bootstrap.User, string, ListTreeLimits) (*response.ShopListsWithItemsResponse, error) {
 	return s.listsResp, s.err
 }
 func (s serviceStub) GetVehicleMaintenanceSnapshot(context.Context, *bootstrap.User, string, SnapshotLimits) (*response.VehicleMaintenanceSnapshotResponse, error) {
@@ -77,14 +77,46 @@ func TestListsWithItemsReturnsStandardResponse(t *testing.T) {
 	require.Empty(t, payload.Data.Lists)
 }
 
+func TestListsWithItemsRejectsInvalidSuppliedLimitValues(t *testing.T) {
+	for _, path := range []string{
+		"/api/v1/auth/shops/shop-1/lists-with-items?lists_limit=",
+		"/api/v1/auth/shops/shop-1/lists-with-items?items_limit=",
+		"/api/v1/auth/shops/shop-1/lists-with-items?lists_limit=0",
+		"/api/v1/auth/shops/shop-1/lists-with-items?items_limit=-1",
+	} {
+		t.Run(path, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.Use(func(c *gin.Context) {
+				c.Set("user", &bootstrap.User{UserID: "user-1"})
+				c.Next()
+			})
+			RegisterRoutes(router.Group("/api/v1/auth"), serviceStub{
+				listsResp: &response.ShopListsWithItemsResponse{
+					Lists: []response.ShopListWithItems{},
+				},
+			})
+
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, req)
+
+			require.Equal(t, http.StatusBadRequest, resp.Code)
+		})
+	}
+}
+
 func TestVehicleMaintenanceSnapshotRejectsInvalidSuppliedLimitValues(t *testing.T) {
 	for _, path := range []string{
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?services_limit=",
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?changes_limit=",
+		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?notification_items_limit=",
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?services_limit=0",
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?changes_limit=0",
+		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?notification_items_limit=0",
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?services_limit=-1",
 		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?changes_limit=-1",
+		"/api/v1/auth/shops/vehicles/vehicle-1/maintenance-snapshot?notification_items_limit=-1",
 	} {
 		t.Run(path, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)

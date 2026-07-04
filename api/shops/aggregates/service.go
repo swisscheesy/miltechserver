@@ -8,15 +8,27 @@ import (
 )
 
 type SnapshotLimits struct {
-	ServicesLimit int
-	ChangesLimit  int
+	NotificationsLimit     int
+	NotificationItemsLimit int
+	ServicesLimit          int
+	ChangesLimit           int
+}
+
+type ListTreeLimits struct {
+	ListsLimit        int
+	ItemsLimitPerList int
 }
 
 type ShopSnapshotOptions struct {
-	Includes      map[string]bool
-	MessageLimit  int
-	ChangesLimit  int
-	ServicesLimit int
+	Includes               map[string]bool
+	VehiclesLimit          int
+	ListsLimit             int
+	ItemsLimitPerList      int
+	NotificationsLimit     int
+	NotificationItemsLimit int
+	MessageLimit           int
+	ChangesLimit           int
+	ServicesLimit          int
 }
 
 type BootstrapOptions struct {
@@ -25,7 +37,7 @@ type BootstrapOptions struct {
 }
 
 type Service interface {
-	GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopListsWithItemsResponse, error)
+	GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limits ListTreeLimits) (*response.ShopListsWithItemsResponse, error)
 	GetVehicleMaintenanceSnapshot(ctx context.Context, user *bootstrap.User, vehicleID string, limits SnapshotLimits) (*response.VehicleMaintenanceSnapshotResponse, error)
 	GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error)
 	GetBootstrap(ctx context.Context, user *bootstrap.User, options BootstrapOptions) (*response.ShopsBootstrapResponse, error)

@@ -28,7 +28,14 @@ func (handler Handler) getListsWithItems(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
 		return
 	}
-	result, err := handler.service.GetListsWithItems(c.Request.Context(), user, c.Param("shop_id"))
+
+	limits, err := parseListTreeLimits(c)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+
+	result, err := handler.service.GetListsWithItems(c.Request.Context(), user, c.Param("shop_id"), limits)
 	if err != nil {
 		writeAggregateError(c, err)
 		return
@@ -116,6 +123,14 @@ func (handler Handler) getBootstrap(c *gin.Context) {
 }
 
 func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
+	notificationsLimit, err := parseOptionalIntQuery(c, "notification_limit")
+	if err != nil {
+		return SnapshotLimits{}, err
+	}
+	notificationItemsLimit, err := parseOptionalIntQuery(c, "notification_items_limit")
+	if err != nil {
+		return SnapshotLimits{}, err
+	}
 	servicesLimit, err := parseOptionalIntQuery(c, "services_limit")
 	if err != nil {
 		return SnapshotLimits{}, err
@@ -125,13 +140,50 @@ func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
 		return SnapshotLimits{}, err
 	}
 	return SnapshotLimits{
-		ServicesLimit: servicesLimit,
-		ChangesLimit:  changesLimit,
+		NotificationsLimit:     notificationsLimit,
+		NotificationItemsLimit: notificationItemsLimit,
+		ServicesLimit:          servicesLimit,
+		ChangesLimit:           changesLimit,
+	}, nil
+}
+
+func parseListTreeLimits(c *gin.Context) (ListTreeLimits, error) {
+	listsLimit, err := parseOptionalIntQuery(c, "lists_limit")
+	if err != nil {
+		return ListTreeLimits{}, err
+	}
+	itemsLimit, err := parseOptionalIntQuery(c, "items_limit")
+	if err != nil {
+		return ListTreeLimits{}, err
+	}
+	return ListTreeLimits{
+		ListsLimit:        listsLimit,
+		ItemsLimitPerList: itemsLimit,
 	}, nil
 }
 
 func parseShopSnapshotOptions(c *gin.Context) (ShopSnapshotOptions, error) {
 	includes, err := parseShopSnapshotIncludes(c)
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	vehiclesLimit, err := parseOptionalIntQuery(c, "vehicles_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	listsLimit, err := parseOptionalIntQuery(c, "lists_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	itemsLimit, err := parseOptionalIntQuery(c, "items_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	notificationsLimit, err := parseOptionalIntQuery(c, "notification_limit")
+	if err != nil {
+		return ShopSnapshotOptions{}, err
+	}
+	notificationItemsLimit, err := parseOptionalIntQuery(c, "notification_items_limit")
 	if err != nil {
 		return ShopSnapshotOptions{}, err
 	}
@@ -148,10 +200,15 @@ func parseShopSnapshotOptions(c *gin.Context) (ShopSnapshotOptions, error) {
 		return ShopSnapshotOptions{}, err
 	}
 	return ShopSnapshotOptions{
-		Includes:      includes,
-		MessageLimit:  messageLimit,
-		ChangesLimit:  changesLimit,
-		ServicesLimit: servicesLimit,
+		Includes:               includes,
+		VehiclesLimit:          vehiclesLimit,
+		ListsLimit:             listsLimit,
+		ItemsLimitPerList:      itemsLimit,
+		NotificationsLimit:     notificationsLimit,
+		NotificationItemsLimit: notificationItemsLimit,
+		MessageLimit:           messageLimit,
+		ChangesLimit:           changesLimit,
+		ServicesLimit:          servicesLimit,
 	}, nil
 }
 

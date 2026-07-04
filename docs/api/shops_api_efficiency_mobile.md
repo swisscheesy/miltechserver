@@ -14,8 +14,8 @@ These endpoints are additive read aggregates for mobile screens that currently n
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /shops/:shop_id/lists-with-items` | Return all lists for one shop with each list's items nested inline. |
-| `GET /shops/vehicles/:vehicle_id/maintenance-snapshot` | Return one vehicle with bounded maintenance notifications, recent changes, and services. |
+| `GET /shops/:shop_id/lists-with-items` | Return bounded lists for one shop with each returned list's bounded items nested inline. |
+| `GET /shops/vehicles/:vehicle_id/maintenance-snapshot` | Return one vehicle with bounded maintenance notifications, notification items, recent changes, and services. |
 | `GET /shops/:shop_id/snapshot` | Return a shop summary with selected related sections for a detail screen. |
 | `GET /shops/bootstrap` | Return all shops visible to the authenticated user with settings, counts, and bounded equipment summaries. |
 
@@ -47,13 +47,18 @@ Successful responses use the standard API envelope:
 
 Full path: `GET /api/v1/auth/shops/:shop_id/lists-with-items`
 
-Purpose: load all shop lists and their items in one request.
+Purpose: load bounded shop lists and their bounded items in one request.
 
 Authorization: authenticated user must be a member of the shop.
 
 Request body: none.
 
-Query parameters: none.
+### Query Parameters
+
+| Parameter | Type | Required | Default | Maximum | Invalid Values | Description |
+|-----------|------|----------|---------|---------|----------------|-------------|
+| `lists_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum lists returned. Values above `200` are capped to `200`. |
+| `items_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum items returned per returned list. Values above `200` are capped to `200`. |
 
 ### Path Parameters
 
@@ -69,7 +74,9 @@ Message: `Shop lists with items retrieved successfully`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `data.lists` | array | Lists in the shop. Empty array if the shop has no lists. |
+| `data.lists` | array | Bounded lists in the shop. Empty array if the shop has no lists. |
+| `data.counts` | object | Returned-section counts for this aggregate response. These are not total table counts. |
+| `data.limits` | object | Applied limits after defaulting and max-cap clamping. |
 | `data.lists[].id` | string | List ID. |
 | `data.lists[].shop_id` | string | Shop ID that owns the list. |
 | `data.lists[].created_by` | string | User ID that created the list. |
@@ -90,6 +97,20 @@ Message: `Shop lists with items retrieved successfully`
 | `data.lists[].items[].nickname` | string or null | Optional item nickname. |
 | `data.lists[].items[].unit_of_measure` | string or null | Optional unit of measure. |
 
+### `counts` Shape
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lists` | integer | Number of list objects returned. |
+| `items` | integer | Total number of nested list items returned across all returned lists. |
+
+### `limits` Shape
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lists` | integer | Applied maximum list count. |
+| `items_per_list` | integer | Applied maximum item count per returned list. |
+
 ### Success Response Example
 
 ```json
@@ -97,6 +118,14 @@ Message: `Shop lists with items retrieved successfully`
   "status": 200,
   "message": "Shop lists with items retrieved successfully",
   "data": {
+    "counts": {
+      "lists": 2,
+      "items": 1
+    },
+    "limits": {
+      "lists": 50,
+      "items_per_list": 50
+    },
     "lists": [
       {
         "id": "list-123",
@@ -157,15 +186,10 @@ Request body: none.
 
 | Parameter | Type | Required | Default | Maximum | Invalid Values | Description |
 |-----------|------|----------|---------|---------|----------------|-------------|
+| `notification_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum notifications returned. Values above `200` are capped to `200`. |
+| `notification_items_limit` | integer | No | `25` | `100` | Empty value, non-integer, `0`, negative | Maximum items returned per returned notification. Values above `100` are capped to `100`. |
 | `services_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum services returned. Values above `200` are capped to `200`. |
 | `changes_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum recent notification changes returned. Values above `200` are capped to `200`. |
-
-Bounded fixed sections:
-
-| Section | Limit |
-|---------|-------|
-| `notifications` | Most recent `50` notifications for the vehicle. |
-| `notifications[].items` | All items for the returned notifications. |
 
 ### Success Response
 
@@ -180,6 +204,7 @@ Message: `Vehicle maintenance snapshot retrieved successfully`
 | `data.recent_changes` | array | Bounded notification changes for the vehicle. |
 | `data.services` | array | Bounded equipment service records for the vehicle. |
 | `data.counts` | object | Counts for the returned aggregate sections. These are returned-section counts, not total table counts. |
+| `data.limits` | object | Applied limits after defaulting and max-cap clamping. |
 
 ### `counts` Shape
 
@@ -189,6 +214,15 @@ Message: `Vehicle maintenance snapshot retrieved successfully`
 | `notification_items` | integer | Number of nested notification items returned. |
 | `recent_changes` | integer | Number of recent change objects returned. |
 | `services` | integer | Number of service objects returned. |
+
+### `limits` Shape
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `notifications` | integer | Applied maximum notification count. |
+| `notification_items_per_notification` | integer | Applied maximum item count per returned notification. |
+| `services` | integer | Applied maximum service count. |
+| `recent_changes` | integer | Applied maximum recent change count. |
 
 ### Notification Change Object
 
@@ -302,6 +336,12 @@ The `recent_changes` arrays on this endpoint and `GET /shops/:shop_id/snapshot` 
       "notification_items": 1,
       "recent_changes": 1,
       "services": 1
+    },
+    "limits": {
+      "notifications": 50,
+      "notification_items_per_notification": 25,
+      "services": 50,
+      "recent_changes": 50
     }
   }
 }
@@ -328,23 +368,14 @@ Request body: none.
 | Parameter | Type | Required | Default | Maximum | Invalid Values | Description |
 |-----------|------|----------|---------|---------|----------------|-------------|
 | `include` | comma-separated string | No | `vehicles,lists,notifications,services` | Not applicable | Empty value or any value outside the allowed set | Controls which related arrays are populated. Allowed values: `vehicles`, `lists`, `notifications`, `messages`, `services`, `changes`. When supplied, only listed sections are populated; omitted sections return empty arrays. |
+| `vehicles_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum vehicles returned when `vehicles` is included. Values above `200` are capped to `200`. |
+| `lists_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum lists returned when `lists` is included. Values above `200` are capped to `200`. |
+| `items_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum list items returned per returned list when `lists` is included. Values above `200` are capped to `200`. |
+| `notification_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum notifications returned when `notifications` is included. Values above `200` are capped to `200`. |
+| `notification_items_limit` | integer | No | `25` | `100` | Empty value, non-integer, `0`, negative | Maximum notification items returned per returned notification when `notifications` is included. Values above `100` are capped to `100`. |
 | `message_limit` | integer | No | `20` | `100` | Empty value, non-integer, `0`, negative | Maximum messages returned when `messages` is included. Values above `100` are capped to `100`. |
 | `services_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum services returned when `services` is included. Values above `200` are capped to `200`. |
 | `changes_limit` | integer | No | `50` | `200` | Empty value, non-integer, `0`, negative | Maximum recent changes returned when `changes` is included. Values above `200` are capped to `200`. |
-
-Bounded fixed sections:
-
-| Section | Limit |
-|---------|-------|
-| `notifications` | Most recent `50` shop notifications. |
-| `notifications[].items` | Up to `25` items per returned notification. |
-
-Unbounded included sections:
-
-| Section | Notes |
-|---------|-------|
-| `vehicles` | Returns all vehicles in the shop. |
-| `lists` | Returns all lists in the shop with all list items. |
 
 ### Success Response
 
@@ -361,6 +392,7 @@ Message: `Shop snapshot retrieved successfully`
 | `data.messages` | array | Messages if included; otherwise `[]`. Messages are not part of the default include set. |
 | `data.services` | array | Services if included; otherwise `[]`. |
 | `data.recent_changes` | array | Recent changes if included; otherwise `[]`. Changes are not part of the default include set. |
+| `data.limits` | object | Applied limits after defaulting and max-cap clamping. |
 
 ### `shop.counts` Shape
 
@@ -374,6 +406,19 @@ These counts are shop-wide counts, not bounded section lengths.
 | `messages` | integer | Total shop messages. |
 | `notifications` | integer | Total shop notifications. |
 | `open_services` | integer | Total open equipment services. |
+
+### `limits` Shape
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `vehicles` | integer | Applied maximum vehicle count. |
+| `lists` | integer | Applied maximum list count. |
+| `items_per_list` | integer | Applied maximum list item count per returned list. |
+| `notifications` | integer | Applied maximum notification count. |
+| `notification_items_per_notification` | integer | Applied maximum notification item count per returned notification. |
+| `messages` | integer | Applied maximum message count. |
+| `services` | integer | Applied maximum service count. |
+| `recent_changes` | integer | Applied maximum recent change count. |
 
 ### Success Response Example
 
@@ -399,6 +444,16 @@ These counts are shop-wide counts, not bounded section lengths.
         "notifications": 12,
         "open_services": 5
       }
+    },
+    "limits": {
+      "vehicles": 50,
+      "lists": 50,
+      "items_per_list": 50,
+      "notifications": 50,
+      "notification_items_per_notification": 25,
+      "messages": 20,
+      "services": 50,
+      "recent_changes": 50
     },
     "vehicles": [
       {
@@ -497,6 +552,16 @@ These counts are shop-wide counts, not bounded section lengths.
         "notifications": 12,
         "open_services": 5
       }
+    },
+    "limits": {
+      "vehicles": 50,
+      "lists": 50,
+      "items_per_list": 50,
+      "notifications": 50,
+      "notification_items_per_notification": 25,
+      "messages": 1,
+      "services": 50,
+      "recent_changes": 50
     },
     "vehicles": [],
     "lists": [],
@@ -752,8 +817,8 @@ Compression support on these aggregate endpoints does not change compression beh
 ## Performance Notes
 
 - Aggregate payload size grows with the number of included sections and returned records.
-- High-cardinality sections are bounded where documented: vehicle maintenance notifications, shop snapshot notifications, shop snapshot notification items, messages, services, recent changes, and bootstrap equipment per shop.
-- `GET /shops/:shop_id/lists-with-items` returns all lists and all list items for the shop.
-- `GET /shops/:shop_id/snapshot` returns all vehicles and all lists with items when those sections are included.
+- High-cardinality sections are bounded where documented: list trees, vehicle maintenance notifications and items, shop snapshot vehicles, shop snapshot list trees, shop snapshot notifications and items, messages, services, recent changes, and bootstrap equipment per shop.
+- `GET /shops/:shop_id/lists-with-items` returns up to `lists_limit` lists and up to `items_limit` items per returned list.
+- `GET /shops/:shop_id/snapshot` returns bounded vehicles and bounded lists with bounded list items when those sections are included.
 - `GET /shops/bootstrap` returns all shops visible to the authenticated user, with equipment bounded per shop.
 - Request gzip for large aggregate screens to reduce transfer size. Gzip reduces bandwidth, but clients still need to decode the full JSON payload after decompression.

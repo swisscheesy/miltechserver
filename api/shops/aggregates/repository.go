@@ -9,9 +9,9 @@ import (
 )
 
 type Repository interface {
-	GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopListWithItems, error)
+	GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limits ListTreeLimits) ([]response.ShopListWithItems, error)
 	GetVehicleByIDForMember(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error)
-	GetVehicleNotificationsWithItems(ctx context.Context, vehicleID string) ([]response.VehicleNotificationWithItems, error)
+	GetVehicleNotificationsWithItems(ctx context.Context, vehicleID string, limits SnapshotLimits) ([]response.VehicleNotificationWithItems, error)
 	GetVehicleRecentChanges(ctx context.Context, vehicleID string, limit int) ([]response.NotificationChangeWithUsername, error)
 	GetVehicleServices(ctx context.Context, vehicleID string, limit int) ([]response.EquipmentServiceResponse, error)
 	GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error)
