@@ -16,6 +16,8 @@ type RepositoryImpl struct {
 	db *sql.DB
 }
 
+var errShopListNotFound = errors.New("shop list not found")
+
 func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
@@ -29,6 +31,7 @@ func (repo *RepositoryImpl) CreateVehicleNotification(user *bootstrap.User, noti
 		ShopVehicleNotifications.Description,
 		ShopVehicleNotifications.Type,
 		ShopVehicleNotifications.Completed,
+		ShopVehicleNotifications.AttachedShopList,
 		ShopVehicleNotifications.SaveTime,
 		ShopVehicleNotifications.LastUpdated,
 	).MODEL(notification).RETURNING(ShopVehicleNotifications.AllColumns)
@@ -151,22 +154,50 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	return &notification, nil
 }
 
-func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) error {
-	stmt := ShopVehicleNotifications.UPDATE(
-		ShopVehicleNotifications.Title,
-		ShopVehicleNotifications.Description,
-		ShopVehicleNotifications.Type,
-		ShopVehicleNotifications.Completed,
-		ShopVehicleNotifications.LastUpdated,
-	).SET(
-		ShopVehicleNotifications.Title.SET(String(notification.Title)),
-		ShopVehicleNotifications.Description.SET(String(notification.Description)),
-		ShopVehicleNotifications.Type.SET(String(notification.Type)),
-		ShopVehicleNotifications.Completed.SET(Bool(notification.Completed)),
-		ShopVehicleNotifications.LastUpdated.SET(TimestampzT(notification.LastUpdated)),
-	).WHERE(ShopVehicleNotifications.ID.EQ(String(notification.ID)))
+func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error {
+	notification := update.Notification
 
-	result, err := stmt.Exec(repo.db)
+	var result sql.Result
+	var err error
+	if update.AttachedShopListSet {
+		rawSQL := `
+			UPDATE shop_vehicle_notifications
+			SET title = $1,
+				description = $2,
+				type = $3,
+				completed = $4,
+				last_updated = $5,
+				attached_shop_list = $6
+			WHERE id = $7
+		`
+
+		result, err = repo.db.Exec(
+			rawSQL,
+			notification.Title,
+			notification.Description,
+			notification.Type,
+			notification.Completed,
+			notification.LastUpdated,
+			update.AttachedShopList,
+			notification.ID,
+		)
+	} else {
+		stmt := ShopVehicleNotifications.UPDATE(
+			ShopVehicleNotifications.Title,
+			ShopVehicleNotifications.Description,
+			ShopVehicleNotifications.Type,
+			ShopVehicleNotifications.Completed,
+			ShopVehicleNotifications.LastUpdated,
+		).SET(
+			ShopVehicleNotifications.Title.SET(String(notification.Title)),
+			ShopVehicleNotifications.Description.SET(String(notification.Description)),
+			ShopVehicleNotifications.Type.SET(String(notification.Type)),
+			ShopVehicleNotifications.Completed.SET(Bool(notification.Completed)),
+			ShopVehicleNotifications.LastUpdated.SET(TimestampzT(notification.LastUpdated)),
+		).WHERE(ShopVehicleNotifications.ID.EQ(String(notification.ID)))
+
+		result, err = stmt.Exec(repo.db)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to update vehicle notification: %w", err)
 	}
@@ -250,6 +281,24 @@ func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID s
 	}
 
 	return &vehicle, nil
+}
+
+func (repo *RepositoryImpl) GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error) {
+	stmt := SELECT(ShopLists.AllColumns).
+		FROM(ShopLists).
+		WHERE(ShopLists.ID.EQ(String(listID)))
+
+	var lists []model.ShopLists
+	err := stmt.Query(repo.db, &lists)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get shop list: %w", err)
+	}
+
+	if len(lists) == 0 {
+		return nil, errShopListNotFound
+	}
+
+	return &lists[0], nil
 }
 
 func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {

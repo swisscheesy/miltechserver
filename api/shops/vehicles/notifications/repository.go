@@ -12,9 +12,10 @@ type Repository interface {
 	GetVehicleNotificationsWithItems(user *bootstrap.User, vehicleID string) ([]response.VehicleNotificationWithItems, error)
 	GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error)
 	GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error)
-	UpdateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) error
+	UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error
 	DeleteVehicleNotification(user *bootstrap.User, notificationID string) error
 	CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error
 	GetShopVehicleByID(user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error)
+	GetShopListByID(user *bootstrap.User, listID string) (*model.ShopLists, error)
 	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
 }

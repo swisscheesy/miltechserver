@@ -35,12 +35,13 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	}
 
 	notification := model.ShopVehicleNotifications{
-		VehicleID:   req.VehicleID,
-		ShopID:      req.ShopID,
-		Title:       req.Title,
-		Description: req.Description,
-		Type:        req.Type,
-		Completed:   false,
+		VehicleID:        req.VehicleID,
+		ShopID:           req.ShopID,
+		Title:            req.Title,
+		Description:      req.Description,
+		Type:             req.Type,
+		Completed:        false,
+		AttachedShopList: req.AttachedShopList,
 	}
 
 	service := handler.service
@@ -199,16 +200,20 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 		return
 	}
 
-	notification := model.ShopVehicleNotifications{
-		ID:          req.NotificationID,
-		Title:       req.Title,
-		Description: req.Description,
-		Type:        req.Type,
-		Completed:   req.Completed,
+	update := VehicleNotificationUpdate{
+		Notification: model.ShopVehicleNotifications{
+			ID:          req.NotificationID,
+			Title:       req.Title,
+			Description: req.Description,
+			Type:        req.Type,
+			Completed:   req.Completed,
+		},
+		AttachedShopListSet: req.AttachedShopList.Set,
+		AttachedShopList:    req.AttachedShopList.Value,
 	}
 
 	service := handler.service
-	err := service.UpdateVehicleNotification(user, notification)
+	err := service.UpdateVehicleNotification(user, update)
 	if err != nil {
 		c.Error(err)
 		return

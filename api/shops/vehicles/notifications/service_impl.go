@@ -9,6 +9,7 @@ import (
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -33,6 +34,27 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
+func (service *ServiceImpl) validateAttachedShopList(user *bootstrap.User, shopID string, attachedShopList *string) error {
+	if attachedShopList == nil {
+		return nil
+	}
+	if strings.TrimSpace(*attachedShopList) == "" {
+		return errors.New("invalid attached_shop_list")
+	}
+
+	list, err := service.repo.GetShopListByID(user, *attachedShopList)
+	if err != nil {
+		if errors.Is(err, errShopListNotFound) {
+			return errors.New("invalid attached_shop_list")
+		}
+		return fmt.Errorf("failed to get attached shop list: %w", err)
+	}
+	if list.ShopID != shopID {
+		return errors.New("invalid attached_shop_list")
+	}
+	return nil
+}
+
 func (service *ServiceImpl) CreateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
@@ -54,6 +76,10 @@ func (service *ServiceImpl) CreateVehicleNotification(user *bootstrap.User, noti
 
 	notification.ID = uuid.New().String()
 	notification.ShopID = vehicle.ShopID
+	if err := service.validateAttachedShopList(user, notification.ShopID, notification.AttachedShopList); err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	notification.SaveTime = now
 	notification.LastUpdated = now
@@ -201,10 +227,12 @@ func (service *ServiceImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	return notification, nil
 }
 
-func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) error {
+func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
+
+	notification := update.Notification
 
 	currentNotification, err := service.repo.GetVehicleNotificationByID(user, notification.ID)
 	if err != nil {
@@ -225,6 +253,16 @@ func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, noti
 		return errors.New("access denied: user is not a member of this shop")
 	}
 
+	if update.AttachedShopListSet {
+		if err := service.validateAttachedShopList(user, currentNotification.ShopID, update.AttachedShopList); err != nil {
+			return err
+		}
+		update.Notification.AttachedShopList = update.AttachedShopList
+	} else {
+		update.Notification.AttachedShopList = currentNotification.AttachedShopList
+	}
+
+	notification = update.Notification
 	notification.LastUpdated = time.Now()
 
 	fieldChanges, err := buildFieldChanges(currentNotification, &notification)
@@ -235,7 +273,8 @@ func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, noti
 
 	changeType := determineChangeType(currentNotification, &notification)
 
-	err = service.repo.UpdateVehicleNotification(user, notification)
+	update.Notification = notification
+	err = service.repo.UpdateVehicleNotification(user, update)
 	if err != nil {
 		return fmt.Errorf("failed to update vehicle notification: %w", err)
 	}
@@ -351,6 +390,10 @@ func buildFieldChanges(old, new *model.ShopVehicleNotifications) (string, error)
 		changedFields = append(changedFields, "completed")
 	}
 
+	if !sameStringPtr(old.AttachedShopList, new.AttachedShopList) {
+		changedFields = append(changedFields, "attached_shop_list")
+	}
+
 	changeData["fields_changed"] = changedFields
 
 	jsonBytes, err := json.Marshal(changeData)
@@ -358,6 +401,13 @@ func buildFieldChanges(old, new *model.ShopVehicleNotifications) (string, error)
 		return "{}", fmt.Errorf("failed to marshal field changes: %w", err)
 	}
 	return string(jsonBytes), nil
+}
+
+func sameStringPtr(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func determineChangeType(old, new *model.ShopVehicleNotifications) string {

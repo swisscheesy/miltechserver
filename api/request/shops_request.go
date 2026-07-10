@@ -1,5 +1,30 @@
 package request
 
+import (
+	"bytes"
+	"encoding/json"
+)
+
+type NullableStringField struct {
+	Set   bool
+	Value *string
+}
+
+func (field *NullableStringField) UnmarshalJSON(data []byte) error {
+	field.Set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		field.Value = nil
+		return nil
+	}
+
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	field.Value = &value
+	return nil
+}
+
 type CreateShopRequest struct {
 	Name           string  `json:"name" binding:"required"`
 	Details        *string `json:"details"`
@@ -65,19 +90,21 @@ type UpdateShopVehicleRequest struct {
 }
 
 type CreateVehicleNotificationRequest struct {
-	ShopID      string `json:"shop_id" binding:"required"`
-	VehicleID   string `json:"vehicle_id" binding:"required"`
-	Title       string `json:"title" binding:"required"`
-	Description string `json:"description"`
-	Type        string `json:"type" binding:"required"` // M1, PM, MW
+	ShopID           string  `json:"shop_id" binding:"required"`
+	VehicleID        string  `json:"vehicle_id" binding:"required"`
+	Title            string  `json:"title" binding:"required"`
+	Description      string  `json:"description"`
+	Type             string  `json:"type" binding:"required"` // M1, PM, MW
+	AttachedShopList *string `json:"attached_shop_list"`
 }
 
 type UpdateVehicleNotificationRequest struct {
-	NotificationID string `json:"notification_id" binding:"required"`
-	Title          string `json:"title" binding:"required"`
-	Description    string `json:"description"`
-	Type           string `json:"type" binding:"required"`
-	Completed      bool   `json:"completed"`
+	NotificationID   string              `json:"notification_id" binding:"required"`
+	Title            string              `json:"title" binding:"required"`
+	Description      string              `json:"description"`
+	Type             string              `json:"type" binding:"required"`
+	Completed        bool                `json:"completed"`
+	AttachedShopList NullableStringField `json:"attached_shop_list"`
 }
 
 type AddNotificationItemRequest struct {

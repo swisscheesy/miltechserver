@@ -234,7 +234,7 @@ func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context
 
 func (repo *RepositoryImpl) getVehicleNotifications(ctx context.Context, vehicleID string, limit int) ([]model.ShopVehicleNotifications, error) {
 	const query = `
-SELECT id, shop_id, vehicle_id, title, description, type, completed, save_time, last_updated
+SELECT id, shop_id, vehicle_id, title, description, type, completed, save_time, last_updated, attached_shop_list
 FROM shop_vehicle_notifications
 WHERE vehicle_id = $1
 ORDER BY save_time DESC, id ASC
@@ -259,6 +259,7 @@ LIMIT NULLIF($2, 0)`
 			&notification.Completed,
 			&notification.SaveTime,
 			&notification.LastUpdated,
+			&notification.AttachedShopList,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan vehicle notification: %w", err)
@@ -866,7 +867,7 @@ ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificat
 
 func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicleNotifications, error) {
 	const query = `
-SELECT n.id, n.shop_id, n.vehicle_id, n.title, n.description, n.type, n.completed, n.save_time, n.last_updated
+SELECT n.id, n.shop_id, n.vehicle_id, n.title, n.description, n.type, n.completed, n.save_time, n.last_updated, n.attached_shop_list
 FROM shop_vehicle_notifications n
 INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2
 WHERE n.shop_id = $1
@@ -892,6 +893,7 @@ LIMIT NULLIF($3, 0)`
 			&notification.Completed,
 			&notification.SaveTime,
 			&notification.LastUpdated,
+			&notification.AttachedShopList,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan shop snapshot notification: %w", err)

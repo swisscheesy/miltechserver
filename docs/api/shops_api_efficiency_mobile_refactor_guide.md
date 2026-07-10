@@ -249,6 +249,12 @@ It can reduce or replace separate calls to:
 | `recent_changes` | array | Recent changes if included; otherwise `[]`. Not included by default. |
 | `limits` | object | Applied limits. `null` means no cap was supplied for that section. |
 
+### Notification Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attached_shop_list` | string or null | Optional id of the `shop_lists` row attached to this notification. |
+
 ### Shop Snapshot Success Example
 
 ```json
@@ -335,6 +341,7 @@ It can reduce or replace separate calls to:
           "id": "notification-123",
           "shop_id": "shop-123",
           "vehicle_id": "vehicle-123",
+          "attached_shop_list": "list-123",
           "title": "Quarterly PM",
           "description": "Quarterly service due",
           "type": "PM",
@@ -563,6 +570,12 @@ Keep using existing vehicle, notification, notification item, and equipment-serv
 | `counts` | object | Returned-section counts. |
 | `limits` | object | Applied limits. `null` means no cap was supplied for that section. |
 
+### Notification Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attached_shop_list` | string or null | Optional id of the `shop_lists` row attached to this notification. |
+
 ### Notification Change Shape
 
 | Field | Type | Nullable | Description |
@@ -611,6 +624,7 @@ Keep using existing vehicle, notification, notification item, and equipment-serv
           "id": "notification-123",
           "shop_id": "shop-123",
           "vehicle_id": "vehicle-123",
+          "attached_shop_list": null,
           "title": "Quarterly PM",
           "description": "Quarterly service due",
           "type": "PM",

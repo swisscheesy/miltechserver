@@ -18,7 +18,19 @@ func TestShopSnapshotDefaultIncludes(t *testing.T) {
 	vehicleID := createVehicle(t, router, "user-1", shopID)
 	listID := createList(t, router, "user-1", shopID)
 	createListItem(t, router, "user-1", listID, "123456789", "Part")
-	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
+	notificationBody := map[string]interface{}{
+		"shop_id":            shopID,
+		"vehicle_id":         vehicleID,
+		"title":              "PM",
+		"description":        "desc",
+		"type":               "PM",
+		"attached_shop_list": listID,
+	}
+	createNotificationResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", notificationBody, "user-1")
+	require.Equal(t, http.StatusCreated, createNotificationResp.Code)
+	notificationData := decodeMap(t, decodeStandardResponse(t, createNotificationResp.Body).Data)
+	notificationID, ok := notificationData["id"].(string)
+	require.True(t, ok)
 	require.NotEmpty(t, notificationID)
 	serviceDate := time.Now().AddDate(0, 0, 2)
 	createEquipmentService(t, "user-1", shopID, vehicleID, "", "Service", &serviceDate, false)
@@ -30,7 +42,10 @@ func TestShopSnapshotDefaultIncludes(t *testing.T) {
 	require.Equal(t, shopID, shop["id"])
 	require.Len(t, payload["vehicles"].([]interface{}), 1)
 	require.Len(t, payload["lists"].([]interface{}), 1)
-	require.Len(t, payload["notifications"].([]interface{}), 1)
+	notifications := payload["notifications"].([]interface{})
+	require.Len(t, notifications, 1)
+	notification := notifications[0].(map[string]interface{})["notification"].(map[string]interface{})
+	require.Equal(t, listID, notification["attached_shop_list"])
 	require.Len(t, payload["services"].([]interface{}), 1)
 }
 

@@ -206,6 +206,12 @@ Message: `Vehicle maintenance snapshot retrieved successfully`
 | `data.counts` | object | Counts for the returned aggregate sections. These are returned-section counts, not total table counts. |
 | `data.limits` | object | Applied limits after optional omission and max-cap clamping. `null` means no cap was supplied for that section. |
 
+### Notification Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attached_shop_list` | string or null | Optional id of the `shop_lists` row attached to this notification. |
+
 ### `counts` Shape
 
 | Field | Type | Description |
@@ -274,6 +280,7 @@ The `recent_changes` arrays on this endpoint and `GET /shops/:shop_id/snapshot` 
           "id": "notification-123",
           "shop_id": "shop-123",
           "vehicle_id": "vehicle-123",
+          "attached_shop_list": null,
           "title": "Quarterly PM",
           "description": "Quarterly service due",
           "type": "PM",
@@ -394,6 +401,12 @@ Message: `Shop snapshot retrieved successfully`
 | `data.recent_changes` | array | Recent changes if included; otherwise `[]`. Changes are not part of the default include set. |
 | `data.limits` | object | Applied limits after optional omission and max-cap clamping. `null` means no cap was supplied for that section. |
 
+### Notification Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `attached_shop_list` | string or null | Optional id of the `shop_lists` row attached to this notification. |
+
 ### `shop.counts` Shape
 
 These counts are shop-wide counts, not bounded section lengths.
@@ -492,6 +505,7 @@ These counts are shop-wide counts, not bounded section lengths.
           "id": "notification-123",
           "shop_id": "shop-123",
           "vehicle_id": "vehicle-123",
+          "attached_shop_list": "list-123",
           "title": "Quarterly PM",
           "description": "Quarterly service due",
           "type": "PM",

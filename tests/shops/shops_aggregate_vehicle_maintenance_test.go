@@ -17,7 +17,21 @@ func TestVehicleMaintenanceSnapshot(t *testing.T) {
 
 	shopID := createShop(t, router, "user-1", "Maintenance Snapshot")
 	vehicleID := createVehicle(t, router, "user-1", shopID)
-	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
+	listID := createList(t, router, "user-1", shopID)
+	notificationBody := map[string]interface{}{
+		"shop_id":            shopID,
+		"vehicle_id":         vehicleID,
+		"title":              "PM",
+		"description":        "desc",
+		"type":               "PM",
+		"attached_shop_list": listID,
+	}
+	createNotificationResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", notificationBody, "user-1")
+	require.Equal(t, http.StatusCreated, createNotificationResp.Code)
+	notificationData := decodeMap(t, decodeStandardResponse(t, createNotificationResp.Body).Data)
+	notificationID, ok := notificationData["id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, notificationID)
 	itemBody := map[string]any{"notification_id": notificationID, "niin": "123456789", "nomenclature": "Filter", "quantity": 1}
 	addItemResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/notifications/items", itemBody, "user-1")
 	require.Equal(t, http.StatusCreated, addItemResp.Code)
@@ -29,7 +43,10 @@ func TestVehicleMaintenanceSnapshot(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 	require.NotNil(t, payload["vehicle"])
-	require.Len(t, payload["notifications"].([]interface{}), 1)
+	notifications := payload["notifications"].([]interface{})
+	require.Len(t, notifications, 1)
+	notification := notifications[0].(map[string]interface{})["notification"].(map[string]interface{})
+	require.Equal(t, listID, notification["attached_shop_list"])
 	require.Len(t, payload["services"].([]interface{}), 1)
 	counts := payload["counts"].(map[string]interface{})
 	require.Equal(t, float64(1), counts["notifications"])
