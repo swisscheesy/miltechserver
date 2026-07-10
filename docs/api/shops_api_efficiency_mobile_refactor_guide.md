@@ -42,7 +42,7 @@ Use the new endpoints when the screen needs the combined payload. Keep existing 
 
 | Screen or workflow | New endpoint | Can replace or reduce calls to |
 |--------------------|--------------|--------------------------------|
-| Shops landing screen | `GET /shops/bootstrap` | `GET /shops/user-data`, repeated per-shop setup calls, and some uses of `GET /shops/equipment/overview` when bounded equipment summaries are enough. |
+| Shops landing screen | `GET /shops/bootstrap` | `GET /shops/user-data`, repeated per-shop setup calls, and some uses of `GET /shops/equipment/overview` when shop settings/counts plus compact equipment summaries are enough. |
 | Shop detail/dashboard | `GET /shops/:shop_id/snapshot` | `GET /shops/:shop_id`, `GET /shops/:shop_id/vehicles`, `GET /shops/:shop_id/lists`, `GET /shops/:shop_id/notifications`, `GET /shops/:shop_id/equipment-services`, and optional message/change preview calls. |
 | Shop list tree | `GET /shops/:shop_id/lists-with-items` | `GET /shops/:shop_id/lists` plus repeated `GET /shops/lists/:list_id/items`. |
 | Vehicle maintenance screen | `GET /shops/vehicles/:vehicle_id/maintenance-snapshot` | `GET /shops/vehicles/:vehicle_id`, `GET /shops/vehicles/:vehicle_id/notifications-with-items`, `GET /shops/vehicles/:vehicle_id/notifications/changes`, and relevant equipment-service list calls. |
@@ -71,15 +71,15 @@ Example:
 
 ## Limits And Counts
 
-The aggregate endpoints intentionally bound high-cardinality arrays by default. Limits protect mobile payload size and server query size.
+Limit parameters are optional. When a limit parameter is omitted, the server returns all objects for that section. When a limit parameter is supplied, the server validates it and caps values above the documented maximum.
 
 Rules:
 
 - Limit query parameters are optional.
-- Missing limit parameters use server defaults.
+- Missing limit parameters return all objects for that section.
 - Values above the maximum are capped to the maximum.
 - Empty, non-integer, zero, or negative limit values return `400 Bad Request`.
-- `limits` objects show the applied limits after defaulting and max-cap clamping.
+- `limits` objects show the applied limits after optional omission and max-cap clamping. `null` means no cap was supplied for that section.
 - Returned-section `counts` count records included in that response.
 - `shop.counts` and bootstrap `counts` are shop-wide totals, not bounded array lengths.
 
@@ -97,15 +97,15 @@ Returns only shops where the authenticated user is a member.
 
 ### Query Parameters
 
-| Parameter | Type | Required | Default | Maximum | Description |
-|-----------|------|----------|---------|---------|-------------|
-| `equipment_limit_per_shop` | integer | No | `50` | `250` | Maximum compact equipment records returned per shop. |
+| Parameter | Type | Required | Omitted Behavior | Maximum When Supplied | Description |
+|-----------|------|----------|------------------|-----------------------|-------------|
+| `equipment_limit_per_shop` | integer | No | Return all compact equipment records per shop. | `250` | Maximum compact equipment records returned per shop when supplied. |
 
 ### Use This To Replace
 
-Use this for the Shops landing screen when mobile needs shop identity, role, settings, counts, and a bounded equipment preview in one call.
+Use this for the Shops landing screen when mobile needs shop identity, role, settings, counts, and compact equipment summaries in one call.
 
-It can reduce or replace loading `GET /shops/user-data` plus follow-up per-shop setup calls. It can also replace some uses of `GET /shops/equipment/overview` when the screen only needs bounded equipment previews.
+It can reduce or replace loading `GET /shops/user-data` plus follow-up per-shop setup calls. It can also replace some uses of `GET /shops/equipment/overview` when the screen can use the bootstrap shop/count/settings shape.
 
 Keep using `GET /shops/equipment/overview` when the screen specifically needs the existing unbounded compact equipment overview contract.
 
@@ -209,17 +209,17 @@ Request body: none.
 
 ### Query Parameters
 
-| Parameter | Type | Required | Default | Maximum | Description |
-|-----------|------|----------|---------|---------|-------------|
+| Parameter | Type | Required | Omitted Behavior | Maximum When Supplied | Description |
+|-----------|------|----------|------------------|-----------------------|-------------|
 | `include` | comma-separated string | No | `vehicles,lists,notifications,services` | Not applicable | Controls which related arrays are populated. Allowed values are `vehicles`, `lists`, `notifications`, `messages`, `services`, `changes`. |
-| `vehicles_limit` | integer | No | `50` | `200` | Maximum vehicles returned when `vehicles` is included. |
-| `lists_limit` | integer | No | `50` | `200` | Maximum lists returned when `lists` is included. |
-| `items_limit` | integer | No | `50` | `200` | Maximum list items returned per returned list when `lists` is included. |
-| `notification_limit` | integer | No | `50` | `200` | Maximum notifications returned when `notifications` is included. |
-| `notification_items_limit` | integer | No | `25` | `100` | Maximum notification items returned per returned notification. |
-| `message_limit` | integer | No | `20` | `100` | Maximum messages returned when `messages` is included. |
-| `services_limit` | integer | No | `50` | `200` | Maximum services returned when `services` is included. |
-| `changes_limit` | integer | No | `50` | `200` | Maximum recent changes returned when `changes` is included. |
+| `vehicles_limit` | integer | No | Return all vehicles. | `200` | Maximum vehicles returned when supplied and `vehicles` is included. |
+| `lists_limit` | integer | No | Return all lists. | `200` | Maximum lists returned when supplied and `lists` is included. |
+| `items_limit` | integer | No | Return all list items per returned list. | `200` | Maximum list items returned per returned list when supplied and `lists` is included. |
+| `notification_limit` | integer | No | Return all notifications. | `200` | Maximum notifications returned when supplied and `notifications` is included. |
+| `notification_items_limit` | integer | No | Return all notification items per returned notification. | `100` | Maximum notification items returned per returned notification when supplied. |
+| `message_limit` | integer | No | Return all messages. | `100` | Maximum messages returned when supplied and `messages` is included. |
+| `services_limit` | integer | No | Return all services. | `200` | Maximum services returned when supplied and `services` is included. |
+| `changes_limit` | integer | No | Return all recent changes. | `200` | Maximum recent changes returned when supplied and `changes` is included. |
 
 ### Use This To Replace
 
@@ -241,13 +241,13 @@ It can reduce or replace separate calls to:
 | Field | Type | Description |
 |-------|------|-------------|
 | `shop` | object | Shop summary, role, settings, and shop-wide counts. |
-| `vehicles` | array | Bounded vehicles if included; otherwise `[]`. |
-| `lists` | array | Bounded lists with bounded items if included; otherwise `[]`. |
-| `notifications` | array | Bounded notifications with bounded items if included; otherwise `[]`. |
-| `messages` | array | Bounded messages if included; otherwise `[]`. Not included by default. |
-| `services` | array | Bounded services if included; otherwise `[]`. |
-| `recent_changes` | array | Bounded recent changes if included; otherwise `[]`. Not included by default. |
-| `limits` | object | Applied limits. |
+| `vehicles` | array | Vehicles if included; otherwise `[]`. |
+| `lists` | array | Lists with items if included; otherwise `[]`. |
+| `notifications` | array | Notifications with items if included; otherwise `[]`. |
+| `messages` | array | Messages if included; otherwise `[]`. Not included by default. |
+| `services` | array | Services if included; otherwise `[]`. |
+| `recent_changes` | array | Recent changes if included; otherwise `[]`. Not included by default. |
+| `limits` | object | Applied limits. `null` means no cap was supplied for that section. |
 
 ### Shop Snapshot Success Example
 
@@ -275,14 +275,14 @@ It can reduce or replace separate calls to:
       }
     },
     "limits": {
-      "vehicles": 50,
-      "lists": 50,
-      "items_per_list": 50,
-      "notifications": 50,
-      "notification_items_per_notification": 25,
-      "messages": 20,
-      "services": 50,
-      "recent_changes": 50
+      "vehicles": null,
+      "lists": null,
+      "items_per_list": null,
+      "notifications": null,
+      "notification_items_per_notification": null,
+      "messages": null,
+      "services": null,
+      "recent_changes": null
     },
     "vehicles": [
       {
@@ -397,14 +397,14 @@ Full path example: `GET /api/v1/auth/shops/shop-123/snapshot?include=messages&me
       }
     },
     "limits": {
-      "vehicles": 50,
-      "lists": 50,
-      "items_per_list": 50,
-      "notifications": 50,
-      "notification_items_per_notification": 25,
+      "vehicles": null,
+      "lists": null,
+      "items_per_list": null,
+      "notifications": null,
+      "notification_items_per_notification": null,
       "messages": 1,
-      "services": 50,
-      "recent_changes": 50
+      "services": null,
+      "recent_changes": null
     },
     "vehicles": [],
     "lists": [],
@@ -429,7 +429,7 @@ Full path example: `GET /api/v1/auth/shops/shop-123/snapshot?include=messages&me
 
 ## Endpoint: `GET /shops/:shop_id/lists-with-items`
 
-Purpose: load a bounded shop list tree in one request.
+Purpose: load a shop list tree in one request.
 
 Full path: `GET /api/v1/auth/shops/:shop_id/lists-with-items`
 
@@ -439,10 +439,10 @@ Request body: none.
 
 ### Query Parameters
 
-| Parameter | Type | Required | Default | Maximum | Description |
-|-----------|------|----------|---------|---------|-------------|
-| `lists_limit` | integer | No | `50` | `200` | Maximum lists returned. |
-| `items_limit` | integer | No | `50` | `200` | Maximum items returned per returned list. |
+| Parameter | Type | Required | Omitted Behavior | Maximum When Supplied | Description |
+|-----------|------|----------|------------------|-----------------------|-------------|
+| `lists_limit` | integer | No | Return all lists. | `200` | Maximum lists returned when supplied. |
+| `items_limit` | integer | No | Return all items per returned list. | `200` | Maximum items returned per returned list when supplied. |
 
 ### Use This To Replace
 
@@ -459,11 +459,11 @@ Keep using the narrow list and list-item endpoints for list create, update, dele
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `lists` | array | Bounded list objects. |
+| `lists` | array | List objects. |
 | `counts.lists` | integer | Number of list objects returned. |
 | `counts.items` | integer | Number of nested list item objects returned. |
-| `limits.lists` | integer | Applied maximum list count. |
-| `limits.items_per_list` | integer | Applied maximum item count per returned list. |
+| `limits.lists` | integer or null | Effective list cap. `null` means all lists were returned. |
+| `limits.items_per_list` | integer or null | Effective item cap per returned list. `null` means all items were returned for each returned list. |
 
 ### Lists With Items Success Example
 
@@ -477,8 +477,8 @@ Keep using the narrow list and list-item endpoints for list create, update, dele
       "items": 1
     },
     "limits": {
-      "lists": 50,
-      "items_per_list": 50
+      "lists": null,
+      "items_per_list": null
     },
     "lists": [
       {
@@ -532,12 +532,12 @@ Request body: none.
 
 ### Query Parameters
 
-| Parameter | Type | Required | Default | Maximum | Description |
-|-----------|------|----------|---------|---------|-------------|
-| `notification_limit` | integer | No | `50` | `200` | Maximum notifications returned. |
-| `notification_items_limit` | integer | No | `25` | `100` | Maximum items returned per returned notification. |
-| `services_limit` | integer | No | `50` | `200` | Maximum equipment services returned. |
-| `changes_limit` | integer | No | `50` | `200` | Maximum recent notification changes returned. |
+| Parameter | Type | Required | Omitted Behavior | Maximum When Supplied | Description |
+|-----------|------|----------|------------------|-----------------------|-------------|
+| `notification_limit` | integer | No | Return all notifications. | `200` | Maximum notifications returned when supplied. |
+| `notification_items_limit` | integer | No | Return all items per returned notification. | `100` | Maximum items returned per returned notification when supplied. |
+| `services_limit` | integer | No | Return all services. | `200` | Maximum equipment services returned when supplied. |
+| `changes_limit` | integer | No | Return all recent changes. | `200` | Maximum recent notification changes returned when supplied. |
 
 ### Use This To Replace
 
@@ -557,11 +557,11 @@ Keep using existing vehicle, notification, notification item, and equipment-serv
 | Field | Type | Description |
 |-------|------|-------------|
 | `vehicle` | object | Vehicle record. |
-| `notifications` | array | Bounded notifications with bounded items. |
-| `recent_changes` | array | Bounded notification changes for the vehicle. |
-| `services` | array | Bounded equipment service records for the vehicle. |
+| `notifications` | array | Notifications with items. |
+| `recent_changes` | array | Notification changes for the vehicle. |
+| `services` | array | Equipment service records for the vehicle. |
 | `counts` | object | Returned-section counts. |
-| `limits` | object | Applied limits. |
+| `limits` | object | Applied limits. `null` means no cap was supplied for that section. |
 
 ### Notification Change Shape
 
@@ -675,10 +675,10 @@ Keep using existing vehicle, notification, notification item, and equipment-serv
       "services": 1
     },
     "limits": {
-      "notifications": 50,
-      "notification_items_per_notification": 25,
-      "services": 50,
-      "recent_changes": 50
+      "notifications": null,
+      "notification_items_per_notification": null,
+      "services": null,
+      "recent_changes": null
     }
   }
 }
@@ -785,7 +785,7 @@ This does not change compression behavior for existing Shops endpoints.
 - Keep existing mutation endpoints for writes.
 - Treat empty arrays as valid data. The aggregate service normalizes empty sections to `[]`.
 - Treat unknown future fields as forward-compatible additions.
-- Use the `limits` object to understand what was applied after server defaulting and max-cap clamping.
+- Use the `limits` object to understand what was applied after optional omission and max-cap clamping. `null` means the client did not request a cap for that section.
 - Do not assume returned array length equals total records. Use shop-wide `counts` where documented, and returned-section `counts` only as response counts.
 - Request gzip for large aggregate screens to reduce transfer size.
 
@@ -803,4 +803,3 @@ These existing endpoints still use their prior contracts:
 | `GET /shops/:shop_id/vehicles` | Still available for vehicle-only reads. |
 | `GET /shops/vehicles/:vehicle_id/notifications-with-items` | Still available for vehicle notification reads. |
 | `GET /shops/:shop_id/equipment-services` | Still available for equipment-service list reads. |
-

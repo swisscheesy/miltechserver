@@ -12,24 +12,15 @@ import (
 )
 
 const (
-	defaultVehiclesLimit                         = 50
-	defaultListsLimit                            = 50
-	defaultListItemsLimitPerList                 = 50
-	defaultNotificationsLimit                    = 50
-	defaultNotificationItemsLimitPerNotification = 25
-	defaultServicesLimit                         = 50
-	defaultChangesLimit                          = 50
-	defaultMessageLimit                          = 20
-	defaultEquipmentLimitPerShop                 = 50
-	maxVehiclesLimit                             = 200
-	maxListsLimit                                = 200
-	maxListItemsLimitPerList                     = 200
-	maxNotificationsLimit                        = 200
-	maxNotificationItemsLimitPerNotification     = 100
-	maxServicesLimit                             = 200
-	maxChangesLimit                              = 200
-	maxMessageLimit                              = 100
-	maxEquipmentLimitPerShop                     = 250
+	maxVehiclesLimit                         = 200
+	maxListsLimit                            = 200
+	maxListItemsLimitPerList                 = 200
+	maxNotificationsLimit                    = 200
+	maxNotificationItemsLimitPerNotification = 100
+	maxServicesLimit                         = 200
+	maxChangesLimit                          = 200
+	maxMessageLimit                          = 100
+	maxEquipmentLimitPerShop                 = 250
 )
 
 type ServiceImpl struct {
@@ -41,10 +32,7 @@ func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	return &ServiceImpl{repo: repo, auth: auth}
 }
 
-func normalizeLimit(value, defaultValue, maxValue int) int {
-	if value <= 0 {
-		return defaultValue
-	}
+func normalizeOptionalLimit(value, maxValue int) int {
 	if value > maxValue {
 		return maxValue
 	}
@@ -53,9 +41,16 @@ func normalizeLimit(value, defaultValue, maxValue int) int {
 
 func normalizeListTreeLimits(limits ListTreeLimits) ListTreeLimits {
 	return ListTreeLimits{
-		ListsLimit:        normalizeLimit(limits.ListsLimit, defaultListsLimit, maxListsLimit),
-		ItemsLimitPerList: normalizeLimit(limits.ItemsLimitPerList, defaultListItemsLimitPerList, maxListItemsLimitPerList),
+		ListsLimit:        normalizeOptionalLimit(limits.ListsLimit, maxListsLimit),
+		ItemsLimitPerList: normalizeOptionalLimit(limits.ItemsLimitPerList, maxListItemsLimitPerList),
 	}
+}
+
+func optionalLimitPtr(value int) *int {
+	if value == 0 {
+		return nil
+	}
+	return &value
 }
 
 func (s *ServiceImpl) requireShopMember(user *bootstrap.User, shopID string) error {
@@ -99,8 +94,8 @@ func (s *ServiceImpl) GetListsWithItems(ctx context.Context, user *bootstrap.Use
 			Items: itemCount,
 		},
 		Limits: response.ShopListsWithItemsLimits{
-			Lists:        limits.ListsLimit,
-			ItemsPerList: limits.ItemsLimitPerList,
+			Lists:        optionalLimitPtr(limits.ListsLimit),
+			ItemsPerList: optionalLimitPtr(limits.ItemsLimitPerList),
 		},
 	}, nil
 }
@@ -109,10 +104,10 @@ func (s *ServiceImpl) GetVehicleMaintenanceSnapshot(ctx context.Context, user *b
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
-	limits.NotificationsLimit = normalizeLimit(limits.NotificationsLimit, defaultNotificationsLimit, maxNotificationsLimit)
-	limits.NotificationItemsLimit = normalizeLimit(limits.NotificationItemsLimit, defaultNotificationItemsLimitPerNotification, maxNotificationItemsLimitPerNotification)
-	limits.ServicesLimit = normalizeLimit(limits.ServicesLimit, defaultServicesLimit, maxServicesLimit)
-	limits.ChangesLimit = normalizeLimit(limits.ChangesLimit, defaultChangesLimit, maxChangesLimit)
+	limits.NotificationsLimit = normalizeOptionalLimit(limits.NotificationsLimit, maxNotificationsLimit)
+	limits.NotificationItemsLimit = normalizeOptionalLimit(limits.NotificationItemsLimit, maxNotificationItemsLimitPerNotification)
+	limits.ServicesLimit = normalizeOptionalLimit(limits.ServicesLimit, maxServicesLimit)
+	limits.ChangesLimit = normalizeOptionalLimit(limits.ChangesLimit, maxChangesLimit)
 	vehicle, err := s.repo.GetVehicleByIDForMember(ctx, user, vehicleID)
 	if err != nil {
 		if errors.Is(err, shared.ErrVehicleAccessDenied) {
@@ -160,10 +155,10 @@ func (s *ServiceImpl) GetVehicleMaintenanceSnapshot(ctx context.Context, user *b
 			Services:          int64(len(services)),
 		},
 		Limits: response.VehicleMaintenanceSnapshotLimits{
-			Notifications:                    limits.NotificationsLimit,
-			NotificationItemsPerNotification: limits.NotificationItemsLimit,
-			Services:                         limits.ServicesLimit,
-			RecentChanges:                    limits.ChangesLimit,
+			Notifications:                    optionalLimitPtr(limits.NotificationsLimit),
+			NotificationItemsPerNotification: optionalLimitPtr(limits.NotificationItemsLimit),
+			Services:                         optionalLimitPtr(limits.ServicesLimit),
+			RecentChanges:                    optionalLimitPtr(limits.ChangesLimit),
 		},
 	}, nil
 }
@@ -175,14 +170,14 @@ func (s *ServiceImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User,
 	if err := s.requireShopMember(user, shopID); err != nil {
 		return nil, err
 	}
-	options.VehiclesLimit = normalizeLimit(options.VehiclesLimit, defaultVehiclesLimit, maxVehiclesLimit)
-	options.ListsLimit = normalizeLimit(options.ListsLimit, defaultListsLimit, maxListsLimit)
-	options.ItemsLimitPerList = normalizeLimit(options.ItemsLimitPerList, defaultListItemsLimitPerList, maxListItemsLimitPerList)
-	options.NotificationsLimit = normalizeLimit(options.NotificationsLimit, defaultNotificationsLimit, maxNotificationsLimit)
-	options.NotificationItemsLimit = normalizeLimit(options.NotificationItemsLimit, defaultNotificationItemsLimitPerNotification, maxNotificationItemsLimitPerNotification)
-	options.MessageLimit = normalizeLimit(options.MessageLimit, defaultMessageLimit, maxMessageLimit)
-	options.ChangesLimit = normalizeLimit(options.ChangesLimit, defaultChangesLimit, maxChangesLimit)
-	options.ServicesLimit = normalizeLimit(options.ServicesLimit, defaultServicesLimit, maxServicesLimit)
+	options.VehiclesLimit = normalizeOptionalLimit(options.VehiclesLimit, maxVehiclesLimit)
+	options.ListsLimit = normalizeOptionalLimit(options.ListsLimit, maxListsLimit)
+	options.ItemsLimitPerList = normalizeOptionalLimit(options.ItemsLimitPerList, maxListItemsLimitPerList)
+	options.NotificationsLimit = normalizeOptionalLimit(options.NotificationsLimit, maxNotificationsLimit)
+	options.NotificationItemsLimit = normalizeOptionalLimit(options.NotificationItemsLimit, maxNotificationItemsLimitPerNotification)
+	options.MessageLimit = normalizeOptionalLimit(options.MessageLimit, maxMessageLimit)
+	options.ChangesLimit = normalizeOptionalLimit(options.ChangesLimit, maxChangesLimit)
+	options.ServicesLimit = normalizeOptionalLimit(options.ServicesLimit, maxServicesLimit)
 	result, err := s.repo.GetShopSnapshot(ctx, user, shopID, options)
 	if err != nil {
 		if errors.Is(err, shared.ErrShopAccessDenied) {
@@ -192,14 +187,14 @@ func (s *ServiceImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User,
 	}
 	normalizeShopSnapshot(result)
 	result.Limits = response.ShopSnapshotLimits{
-		Vehicles:                         options.VehiclesLimit,
-		Lists:                            options.ListsLimit,
-		ItemsPerList:                     options.ItemsLimitPerList,
-		Notifications:                    options.NotificationsLimit,
-		NotificationItemsPerNotification: options.NotificationItemsLimit,
-		Messages:                         options.MessageLimit,
-		Services:                         options.ServicesLimit,
-		RecentChanges:                    options.ChangesLimit,
+		Vehicles:                         optionalLimitPtr(options.VehiclesLimit),
+		Lists:                            optionalLimitPtr(options.ListsLimit),
+		ItemsPerList:                     optionalLimitPtr(options.ItemsLimitPerList),
+		Notifications:                    optionalLimitPtr(options.NotificationsLimit),
+		NotificationItemsPerNotification: optionalLimitPtr(options.NotificationItemsLimit),
+		Messages:                         optionalLimitPtr(options.MessageLimit),
+		Services:                         optionalLimitPtr(options.ServicesLimit),
+		RecentChanges:                    optionalLimitPtr(options.ChangesLimit),
 	}
 	return result, nil
 }
@@ -208,7 +203,7 @@ func (s *ServiceImpl) GetBootstrap(ctx context.Context, user *bootstrap.User, op
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
-	options.EquipmentLimitPerShop = normalizeLimit(options.EquipmentLimitPerShop, defaultEquipmentLimitPerShop, maxEquipmentLimitPerShop)
+	options.EquipmentLimitPerShop = normalizeOptionalLimit(options.EquipmentLimitPerShop, maxEquipmentLimitPerShop)
 	shops, err := s.repo.GetBootstrap(ctx, user, options)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)

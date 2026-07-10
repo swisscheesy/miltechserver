@@ -114,8 +114,8 @@ type ShopListsWithItemsCounts struct {
 }
 
 type ShopListsWithItemsLimits struct {
-	Lists        int `json:"lists"`
-	ItemsPerList int `json:"items_per_list"`
+	Lists        *int `json:"lists"`
+	ItemsPerList *int `json:"items_per_list"`
 }
 
 type ShopAggregateSettings struct {
@@ -181,21 +181,21 @@ type VehicleMaintenanceSnapshotResponse struct {
 }
 
 type ShopSnapshotLimits struct {
-	Vehicles                         int `json:"vehicles"`
-	Lists                            int `json:"lists"`
-	ItemsPerList                     int `json:"items_per_list"`
-	Notifications                    int `json:"notifications"`
-	NotificationItemsPerNotification int `json:"notification_items_per_notification"`
-	Messages                         int `json:"messages"`
-	Services                         int `json:"services"`
-	RecentChanges                    int `json:"recent_changes"`
+	Vehicles                         *int `json:"vehicles"`
+	Lists                            *int `json:"lists"`
+	ItemsPerList                     *int `json:"items_per_list"`
+	Notifications                    *int `json:"notifications"`
+	NotificationItemsPerNotification *int `json:"notification_items_per_notification"`
+	Messages                         *int `json:"messages"`
+	Services                         *int `json:"services"`
+	RecentChanges                    *int `json:"recent_changes"`
 }
 
 type VehicleMaintenanceSnapshotLimits struct {
-	Notifications                    int `json:"notifications"`
-	NotificationItemsPerNotification int `json:"notification_items_per_notification"`
-	Services                         int `json:"services"`
-	RecentChanges                    int `json:"recent_changes"`
+	Notifications                    *int `json:"notifications"`
+	NotificationItemsPerNotification *int `json:"notification_items_per_notification"`
+	Services                         *int `json:"services"`
+	RecentChanges                    *int `json:"recent_changes"`
 }
 
 type ShopsBootstrapResponse struct {

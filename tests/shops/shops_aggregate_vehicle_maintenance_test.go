@@ -37,16 +37,16 @@ func TestVehicleMaintenanceSnapshot(t *testing.T) {
 	require.Equal(t, float64(1), counts["services"])
 }
 
-func TestVehicleMaintenanceSnapshotBoundsNotifications(t *testing.T) {
-	const expectedNotificationLimit = 50
+func TestVehicleMaintenanceSnapshotReturnsAllNotificationsWhenLimitOmitted(t *testing.T) {
+	const expectedNotificationCount = 51
 
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
 	router := newTestRouter(t)
 
-	shopID := createShop(t, router, "user-1", "Bounded Maintenance Snapshot")
+	shopID := createShop(t, router, "user-1", "Unbounded Maintenance Snapshot")
 	vehicleID := createVehicle(t, router, "user-1", shopID)
-	for i := 0; i < expectedNotificationLimit+1; i++ {
+	for i := 0; i < expectedNotificationCount; i++ {
 		notificationID := createNotification(t, router, "user-1", shopID, vehicleID, fmt.Sprintf("PM-%02d", i))
 		itemBody := map[string]any{
 			"notification_id": notificationID,
@@ -62,28 +62,30 @@ func TestVehicleMaintenanceSnapshotBoundsNotifications(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.Code)
 	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 	notifications := payload["notifications"].([]interface{})
-	require.Len(t, notifications, expectedNotificationLimit)
+	require.Len(t, notifications, expectedNotificationCount)
 	for _, notification := range notifications {
 		notificationWithItems := notification.(map[string]interface{})
 		require.Len(t, notificationWithItems["items"].([]interface{}), 1)
 	}
 	counts := payload["counts"].(map[string]interface{})
-	require.Equal(t, float64(expectedNotificationLimit), counts["notifications"])
-	require.Equal(t, float64(expectedNotificationLimit), counts["notification_items"])
+	require.Equal(t, float64(expectedNotificationCount), counts["notifications"])
+	require.Equal(t, float64(expectedNotificationCount), counts["notification_items"])
+	limits := payload["limits"].(map[string]interface{})
+	require.Nil(t, limits["notifications"])
 }
 
-func TestVehicleMaintenanceSnapshotBoundsNotificationItems(t *testing.T) {
-	const expectedItemLimit = 25
+func TestVehicleMaintenanceSnapshotReturnsAllNotificationItemsWhenLimitOmitted(t *testing.T) {
+	const expectedItemCount = 26
 
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
 	router := newTestRouter(t)
 
-	shopID := createShop(t, router, "user-1", "Bounded Maintenance Items")
+	shopID := createShop(t, router, "user-1", "Unbounded Maintenance Items")
 	vehicleID := createVehicle(t, router, "user-1", shopID)
 	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
 	baseTime := time.Now().Add(-time.Hour).UTC()
-	for i := 0; i < expectedItemLimit+1; i++ {
+	for i := 0; i < expectedItemCount; i++ {
 		_, err := testDB.Exec(
 			`INSERT INTO shop_notification_items (
 				id, shop_id, notification_id, niin, nomenclature, quantity, save_time
@@ -105,11 +107,11 @@ func TestVehicleMaintenanceSnapshotBoundsNotificationItems(t *testing.T) {
 	notifications := payload["notifications"].([]interface{})
 	require.Len(t, notifications, 1)
 	items := notifications[0].(map[string]interface{})["items"].([]interface{})
-	require.Len(t, items, expectedItemLimit)
+	require.Len(t, items, expectedItemCount)
 	counts := payload["counts"].(map[string]interface{})
-	require.Equal(t, float64(expectedItemLimit), counts["notification_items"])
+	require.Equal(t, float64(expectedItemCount), counts["notification_items"])
 	limits := payload["limits"].(map[string]interface{})
-	require.Equal(t, float64(expectedItemLimit), limits["notification_items_per_notification"])
+	require.Nil(t, limits["notification_items_per_notification"])
 }
 
 func TestVehicleMaintenanceSnapshotClampsNotificationItemsMaxCap(t *testing.T) {

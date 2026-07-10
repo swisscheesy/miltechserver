@@ -29,3 +29,45 @@ func TestShopsBootstrapReturnsOnlyAuthenticatedUserShops(t *testing.T) {
 	require.Equal(t, visibleShopID, shop["id"])
 	require.Len(t, shop["equipment"].([]interface{}), 1)
 }
+
+func TestShopsBootstrapReturnsAllEquipmentWhenLimitOmitted(t *testing.T) {
+	const expectedEquipmentCount = 51
+
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Unbounded Bootstrap")
+	insertAggregateVehicles(t, shopID, "user-1", expectedEquipmentCount)
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/bootstrap", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	shops := payload["shops"].([]interface{})
+	require.Len(t, shops, 1)
+	shop := shops[0].(map[string]interface{})
+	require.Equal(t, shopID, shop["id"])
+	require.Len(t, shop["equipment"].([]interface{}), expectedEquipmentCount)
+}
+
+func TestShopsBootstrapClampsSuppliedEquipmentLimit(t *testing.T) {
+	const expectedMaxEquipmentLimit = 250
+
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Max Bootstrap")
+	insertAggregateVehicles(t, shopID, "user-1", expectedMaxEquipmentLimit+1)
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/bootstrap?equipment_limit_per_shop=999", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	shops := payload["shops"].([]interface{})
+	require.Len(t, shops, 1)
+	shop := shops[0].(map[string]interface{})
+	require.Equal(t, shopID, shop["id"])
+	require.Len(t, shop["equipment"].([]interface{}), expectedMaxEquipmentLimit)
+}

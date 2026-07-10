@@ -41,7 +41,7 @@ ranked_items AS (
 			ORDER BY i.created_at ASC, i.id ASC
 		) AS item_rank
 	FROM shop_list_items i
-	INNER JOIN ranked_lists l ON l.id = i.list_id AND l.list_rank <= $3
+	INNER JOIN ranked_lists l ON l.id = i.list_id AND ($3 = 0 OR l.list_rank <= $3)
 	LEFT JOIN users added ON added.uid = i.added_by
 )
 SELECT
@@ -49,8 +49,8 @@ SELECT
 	i.id, i.list_id, i.niin, i.nomenclature, i.quantity, i.added_by, i.added_by_username,
 	i.created_at, i.updated_at, i.nickname, i.unit_of_measure
 FROM ranked_lists l
-LEFT JOIN ranked_items i ON i.list_id = l.id AND i.item_rank <= $4
-WHERE l.list_rank <= $3
+LEFT JOIN ranked_items i ON i.list_id = l.id AND ($4 = 0 OR i.item_rank <= $4)
+WHERE $3 = 0 OR l.list_rank <= $3
 ORDER BY l.list_rank ASC, i.item_rank ASC NULLS LAST, i.id ASC`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limits.ListsLimit, limits.ItemsLimitPerList)
@@ -238,7 +238,7 @@ SELECT id, shop_id, vehicle_id, title, description, type, completed, save_time, 
 FROM shop_vehicle_notifications
 WHERE vehicle_id = $1
 ORDER BY save_time DESC, id ASC
-LIMIT $2`
+LIMIT NULLIF($2, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -297,8 +297,8 @@ WITH ranked_items AS (
 )
 SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
 FROM ranked_items
-WHERE item_rank <= $%d
-ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder)
+WHERE ($%d = 0 OR item_rank <= $%d)
+ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder, itemLimitPlaceholder)
 
 	args := make([]any, 0, len(notificationIDs)+1)
 	for _, id := range notificationIDs {
@@ -358,7 +358,7 @@ LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 WHERE c.vehicle_id = $1
 ORDER BY c.changed_at DESC, c.id ASC
-LIMIT $2`
+LIMIT NULLIF($2, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -392,7 +392,7 @@ FROM equipment_services es
 LEFT JOIN users u ON u.uid = es.created_by
 WHERE es.equipment_id = $1
 ORDER BY es.service_date DESC NULLS LAST, es.created_at DESC, es.id ASC
-LIMIT $2`
+LIMIT NULLIF($2, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -622,8 +622,8 @@ WITH ranked_equipment AS (
 )
 SELECT shop_id, id, admin, model, serial, niin
 FROM ranked_equipment
-WHERE equipment_rank <= $%d
-ORDER BY shop_id ASC, equipment_rank ASC`, placeholders(len(shopIDs)), limitPlaceholder)
+WHERE ($%d = 0 OR equipment_rank <= $%d)
+ORDER BY shop_id ASC, equipment_rank ASC`, placeholders(len(shopIDs)), limitPlaceholder, limitPlaceholder)
 
 	args := make([]any, 0, len(shopIDs)+1)
 	for _, shopID := range shopIDs {
@@ -717,7 +717,7 @@ FROM shop_vehicle v
 INNER JOIN shop_members sm ON sm.shop_id = v.shop_id AND sm.user_id = $2
 WHERE v.shop_id = $1
 ORDER BY v.save_time DESC, v.id ASC
-LIMIT $3`
+LIMIT NULLIF($3, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -825,8 +825,8 @@ WITH ranked_items AS (
 )
 SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
 FROM ranked_items
-WHERE item_rank <= $%d
-ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder)
+WHERE ($%d = 0 OR item_rank <= $%d)
+ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder, itemLimitPlaceholder)
 
 	args := make([]any, 0, len(notificationIDs)+1)
 	for _, id := range notificationIDs {
@@ -871,7 +871,7 @@ FROM shop_vehicle_notifications n
 INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2
 WHERE n.shop_id = $1
 ORDER BY n.save_time DESC, n.id ASC
-LIMIT $3`
+LIMIT NULLIF($3, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -912,7 +912,7 @@ FROM shop_messages msg
 INNER JOIN shop_members sm ON sm.shop_id = msg.shop_id AND sm.user_id = $2
 WHERE msg.shop_id = $1
 ORDER BY msg.created_at DESC, msg.id ASC
-LIMIT $3`
+LIMIT NULLIF($3, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -965,7 +965,7 @@ INNER JOIN shop_members sm ON sm.shop_id = es.shop_id AND sm.user_id = $2
 LEFT JOIN users u ON u.uid = es.created_by
 WHERE es.shop_id = $1
 ORDER BY es.service_date ASC NULLS LAST, es.created_at DESC, es.id ASC
-LIMIT $3`
+LIMIT NULLIF($3, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -1033,7 +1033,7 @@ LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 WHERE c.shop_id = $1
 ORDER BY c.changed_at DESC, c.id ASC
-LIMIT $3`
+LIMIT NULLIF($3, 0)`
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {

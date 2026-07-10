@@ -49,18 +49,18 @@ func TestShopSnapshotIncludeMessages(t *testing.T) {
 	require.Empty(t, payload["vehicles"].([]interface{}))
 }
 
-func TestShopSnapshotBoundsNotificationItems(t *testing.T) {
-	const expectedItemLimit = 25
+func TestShopSnapshotReturnsAllNotificationItemsWhenLimitOmitted(t *testing.T) {
+	const expectedItemCount = 30
 
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
 	router := newTestRouter(t)
 
-	shopID := createShop(t, router, "user-1", "Bounded Items Snapshot")
+	shopID := createShop(t, router, "user-1", "Unbounded Items Snapshot")
 	vehicleID := createVehicle(t, router, "user-1", shopID)
 	notificationID := createNotification(t, router, "user-1", shopID, vehicleID, "PM")
 	baseTime := time.Now().Add(-time.Hour).UTC()
-	for i := 0; i < expectedItemLimit+5; i++ {
+	for i := 0; i < expectedItemCount; i++ {
 		_, err := testDB.Exec(
 			`INSERT INTO shop_notification_items (
 				id, shop_id, notification_id, niin, nomenclature, quantity, save_time
@@ -82,41 +82,41 @@ func TestShopSnapshotBoundsNotificationItems(t *testing.T) {
 	notifications := payload["notifications"].([]interface{})
 	require.Len(t, notifications, 1)
 	items := notifications[0].(map[string]interface{})["items"].([]interface{})
-	require.Len(t, items, expectedItemLimit)
+	require.Len(t, items, expectedItemCount)
 	require.Equal(t, "000000000", items[0].(map[string]interface{})["niin"])
-	require.Equal(t, "000000024", items[expectedItemLimit-1].(map[string]interface{})["niin"])
+	require.Equal(t, "000000029", items[expectedItemCount-1].(map[string]interface{})["niin"])
 }
 
-func TestShopSnapshotAppliesDefaultCapsForVehiclesAndLists(t *testing.T) {
+func TestShopSnapshotReturnsAllVehiclesAndListsWhenLimitsOmitted(t *testing.T) {
 	const (
-		expectedVehicleLimit = 50
-		expectedListLimit    = 50
-		expectedItemLimit    = 50
+		expectedVehicleCount = 51
+		expectedListCount    = 51
+		expectedItemCount    = 51
 	)
 
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
 	router := newTestRouter(t)
 
-	shopID := createShop(t, router, "user-1", "Default Capped Snapshot")
-	insertAggregateVehicles(t, shopID, "user-1", expectedVehicleLimit+1)
-	insertAggregateLists(t, shopID, "user-1", expectedListLimit+1, 1)
-	cappedItemListID := insertAggregateList(t, shopID, "user-1", "snapshot-capped-item-list", time.Now().Add(time.Hour))
-	insertAggregateListItems(t, cappedItemListID, "user-1", expectedItemLimit+1)
+	shopID := createShop(t, router, "user-1", "Unbounded Snapshot")
+	insertAggregateVehicles(t, shopID, "user-1", expectedVehicleCount)
+	insertAggregateLists(t, shopID, "user-1", expectedListCount-1, 1)
+	unboundedItemListID := insertAggregateList(t, shopID, "user-1", "snapshot-unbounded-item-list", time.Now().Add(time.Hour))
+	insertAggregateListItems(t, unboundedItemListID, "user-1", expectedItemCount)
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/snapshot", nil, "user-1")
 	require.Equal(t, http.StatusOK, resp.Code)
 	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 	limits := payload["limits"].(map[string]interface{})
-	require.Equal(t, float64(expectedVehicleLimit), limits["vehicles"])
-	require.Equal(t, float64(expectedListLimit), limits["lists"])
-	require.Equal(t, float64(expectedItemLimit), limits["items_per_list"])
-	require.Len(t, payload["vehicles"].([]interface{}), expectedVehicleLimit)
+	require.Nil(t, limits["vehicles"])
+	require.Nil(t, limits["lists"])
+	require.Nil(t, limits["items_per_list"])
+	require.Len(t, payload["vehicles"].([]interface{}), expectedVehicleCount)
 	lists := payload["lists"].([]interface{})
-	require.Len(t, lists, expectedListLimit)
+	require.Len(t, lists, expectedListCount)
 	firstList := lists[0].(map[string]interface{})
-	require.Equal(t, cappedItemListID, firstList["id"])
-	require.Len(t, firstList["items"].([]interface{}), expectedItemLimit)
+	require.Equal(t, unboundedItemListID, firstList["id"])
+	require.Len(t, firstList["items"].([]interface{}), expectedItemCount)
 }
 
 func TestShopSnapshotClampsMaxCapsForVehiclesAndLists(t *testing.T) {

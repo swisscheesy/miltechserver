@@ -66,33 +66,33 @@ func TestListsWithItemsAggregatePreservesEmptyLists(t *testing.T) {
 	require.Empty(t, list["items"].([]interface{}))
 }
 
-func TestListsWithItemsAggregateAppliesDefaultCaps(t *testing.T) {
+func TestListsWithItemsAggregateReturnsAllWhenLimitsOmitted(t *testing.T) {
 	const (
-		expectedListLimit = 50
-		expectedItemLimit = 50
+		expectedListCount = 51
+		expectedItemCount = 51
 	)
 
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
 	router := newTestRouter(t)
 
-	shopID := createShop(t, router, "user-1", "Default Capped Lists")
-	insertAggregateLists(t, shopID, "user-1", expectedListLimit+1, 1)
-	cappedItemListID := insertAggregateList(t, shopID, "user-1", "default-capped-item-list", time.Now().Add(time.Hour))
-	insertAggregateListItems(t, cappedItemListID, "user-1", expectedItemLimit+1)
+	shopID := createShop(t, router, "user-1", "Unbounded Lists")
+	insertAggregateLists(t, shopID, "user-1", expectedListCount-1, 1)
+	unboundedItemListID := insertAggregateList(t, shopID, "user-1", "unbounded-item-list", time.Now().Add(time.Hour))
+	insertAggregateListItems(t, unboundedItemListID, "user-1", expectedItemCount)
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/lists-with-items", nil, "user-1")
 	require.Equal(t, http.StatusOK, resp.Code)
 
 	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 	limits := payload["limits"].(map[string]interface{})
-	require.Equal(t, float64(expectedListLimit), limits["lists"])
-	require.Equal(t, float64(expectedItemLimit), limits["items_per_list"])
+	require.Nil(t, limits["lists"])
+	require.Nil(t, limits["items_per_list"])
 	lists := payload["lists"].([]interface{})
-	require.Len(t, lists, expectedListLimit)
+	require.Len(t, lists, expectedListCount)
 	firstList := lists[0].(map[string]interface{})
-	require.Equal(t, cappedItemListID, firstList["id"])
-	require.Len(t, firstList["items"].([]interface{}), expectedItemLimit)
+	require.Equal(t, unboundedItemListID, firstList["id"])
+	require.Len(t, firstList["items"].([]interface{}), expectedItemCount)
 }
 
 func TestListsWithItemsAggregateClampsMaxCaps(t *testing.T) {

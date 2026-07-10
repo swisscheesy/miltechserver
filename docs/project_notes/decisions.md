@@ -422,7 +422,7 @@ Based on the current project setup:
 **Decision:**
 - Keep all legacy endpoints active and backward compatible.
 - Add aggregate read endpoints for list trees, vehicle maintenance snapshots, shop snapshots, and Shops bootstrap.
-- Keep high-cardinality sections in new aggregate endpoints bounded by default, including list trees, shop-snapshot vehicles, notification items, messages, services, recent changes, and bootstrap equipment per shop. Existing legacy endpoint contracts remain unchanged.
+- Make high-cardinality section limits optional on new aggregate endpoints: omitted limit parameters return all rows for that section, while supplied limit parameters are positive integers capped by endpoint-specific maximums. Existing legacy endpoint contracts remain unchanged.
 - Require representative `EXPLAIN (ANALYZE, BUFFERS)` evidence before adding new indexes.
 
 **Consequences:**
