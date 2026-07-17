@@ -429,3 +429,31 @@ Based on the current project setup:
 - New clients can reduce round trips substantially.
 - Old clients continue using existing endpoints.
 - Aggregate endpoints must maintain dedicated top-level DTOs and avoid accidental response growth when reusing generated nested model shapes.
+
+### ADR-017: PMCS SBS Inspection History (2026-07-16)
+
+**Context:**
+- `pmcs_sbs_faults` keyed faults by `(equipment_id, guide_manual, section_id, item_index)` with no inspection-event dimension — saving a fault always overwrote the prior state for that checklist item, and a clean (zero-fault) inspection left no trace at all
+- Users need a historical view of every PMCS performed on a vehicle: the date it was performed and the faults found during it, including clean passes
+- A 2026-06-21 design (`docs/OLD/superpowers/plans/2026-06-21-pmcs-sbs-faults-only.md`) deliberately removed a prior `pmcs_sbs_equipment` + `pmcs_sbs_completions` pair of tables to simplify the feature to "faults only" — this ADR reintroduces an inspection-event concept, reversing part of that simplification, because the product requirement now demands it
+- The mobile client already autosaves faults one at a time with no start/submit workflow; a full explicit lifecycle (start/finish endpoints, in_progress/completed status) would be a much bigger behavior change than the requirement called for
+
+**Decision:**
+- Add `pmcs_sbs_inspections` as the parent of `pmcs_sbs_faults`, FK'd to `shop_vehicle` with `ON DELETE CASCADE`, carrying `guide_manual`, `performed_date`, and `created_by`
+- The client generates the inspection id (UUID) and sends it with every fault save in that session — this is what distinguishes a new inspection from a continuation of the last one, not a server-side heuristic like date-bucketing
+- Inspection creation is a hybrid of implicit and explicit: saving a fault implicitly creates its parent inspection if one doesn't exist yet (preserving today's autosave contract), and a separate explicit `PUT .../pmcs/:pmcs_id` endpoint exists for the zero-fault clean-completion case
+- `performed_date` is client-supplied, not a server write-timestamp, since field techs may inspect offline and sync later
+- `guide_manual` is immutable after an inspection's first creation; a mismatched `guide_manual` (or a `pmcs_id` reused under a different `equipment_id`) on a later request is rejected with `ErrInspectionConflict` (409) rather than silently accepted
+- No existing `pmcs_sbs_faults` data is migrated — the rows were current-state-only snapshots with no date-performed concept
+
+**Alternatives considered:**
+- Full explicit start/finish lifecycle with an in_progress/completed status (rejected: bigger behavior change than the mobile autosave pattern needed; also considered a single atomic submit-everything-at-the-end call, rejected for the same reason)
+- One inspection per calendar day, bucketed server-side (rejected: would incorrectly merge two real inspections performed on the same vehicle on the same day)
+- Embedding faults as a JSONB array on the inspection row instead of a separate table (rejected: breaks the existing per-fault autosave contract — concurrent shop members editing different faults on the same inspection would race on read-modify-write of the same JSON blob, and per-fault CHECK constraints can't be enforced on individual JSONB array elements)
+- Migrating existing fault rows into synthetic "legacy" inspection records (rejected: the data was not judged valuable enough to justify the migration complexity)
+
+**Consequences:**
+- Equipment can now have unlimited PMCS inspections over time, each independently listing its own faults, including inspections with zero faults
+- The fault API's identity changed from `(equipment_id, guide_manual, section_id, item_index)` to `(pmcs_id, section_id, item_index)` — a breaking change for API consumers, documented in `docs/api/pmcs_sbs_inspections_mobile.md`
+- The Flutter mobile client requires a corresponding Drift schema migration (add `pmcs_id` to its local `PmcsSbsFaultsTable` mirror) and client-side generation/tracking of the inspection UUID per session before this can ship end-to-end — tracked as a follow-up in the `miltech` repo, out of scope for this server-side change
+- Every write to `pmcs_sbs_faults` now goes through a transaction that also touches `pmcs_sbs_inspections` (to implicitly create the parent row), adding one extra `INSERT ... ON CONFLICT` per fault save compared to the old single-table upsert

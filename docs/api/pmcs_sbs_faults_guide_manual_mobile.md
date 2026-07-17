@@ -1,5 +1,7 @@
 # PMCS SBS Faults Guide Scope API Changes
 
+> **Superseded** — faults are now scoped to a `pmcs_id` (inspection), not a bare `(equipment_id, guide_manual)` pair. See `docs/api/pmcs_sbs_inspections_mobile.md` for the current contract.
+
 This document covers the PMCS SBS fault API changes for mobile clients.
 
 ## Summary
