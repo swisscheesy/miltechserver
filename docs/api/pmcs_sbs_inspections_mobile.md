@@ -34,7 +34,7 @@ different `equipment_id`) for an existing inspection returns `409`.
 | `GET` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id` | Get one inspection plus its full faults array. |
 | `DELETE` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id` | Delete an inspection and all its faults. |
 | `GET` | `/pmcs-sbs/equipment/:equipment_id/pmcs` | List inspection history for a vehicle (most recent first). Optional `guide_manual` filter, `limit`/`offset` pagination (default limit 1000, max 1000). |
-| `PUT` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults` | Save (create/update) one fault. Creates the inspection implicitly on first use of a new `pmcs_id`. |
+| `PUT` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults` | Save (create/update) one fault. Creates the inspection implicitly on first use of a new `pmcs_id`. Every call must include `guide_manual` and `performed_date` (not just fault fields), since each save re-applies the same create-or-update-inspection logic as the `PUT .../pmcs/:pmcs_id` endpoint. |
 | `DELETE` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults` | Delete one fault. |
 | `DELETE` | `/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults/bulk` | Delete up to 100 faults from one inspection. |
 
@@ -68,6 +68,8 @@ different `equipment_id`) for an existing inspection returns `409`.
 | Field | Type | Notes |
 |-------|------|-------|
 | `pmcs_id` | string (UUID) | The inspection this fault belongs to. |
+| `guide_manual` | string | Required on every save (not just the first); immutable per `pmcs_id`, same rule as the Inspection Object. |
+| `performed_date` | string | ISO timestamp; required on every save, client-supplied. |
 | `section_id` | string | Required for save/delete. |
 | `item_index` | integer | Required for save/delete; must be `0` or greater. |
 | `item_no` | string | Required for save. |
