@@ -9,327 +9,347 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRepositoryMemberCanListSaveAndDeleteFaults(t *testing.T) {
+func TestRepositoryEnsureInspectionCreatesRecord(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-member")
+	user := testUser("pmcs-insp-create")
 	ensureUser(t, testDB, user)
 	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A1")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B1")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
-	saved, err := repo.UpsertFault(user, sampleFault(vehicleID))
+	inspection := sampleInspection(vehicleID, user.UserID)
+	saved, err := repo.EnsureInspection(user, inspection)
+
 	require.NoError(t, err)
+	require.Equal(t, inspection.ID, saved.ID)
 	require.Equal(t, vehicleID, saved.EquipmentID)
-	require.Equal(t, "leak", saved.FaultText)
-
-	list, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json")
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-	require.Equal(t, "before", list[0].SectionID)
-
-	err = repo.DeleteFault(user, pmcs_sbs_progress.FaultKey{
-		EquipmentID: vehicleID,
-		GuideManual: "pmcs_sbs/hmmwv/file.json",
-		SectionID:   "before",
-		ItemIndex:   0,
-	})
-	require.NoError(t, err)
-
-	list, err = repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json")
-	require.NoError(t, err)
-	require.Empty(t, list)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", saved.GuideManual)
+	require.NotNil(t, saved.CreatedBy)
+	require.Equal(t, user.UserID, *saved.CreatedBy)
 }
 
-func TestRepositoryNonMemberCannotAccessFaults(t *testing.T) {
+func TestRepositoryEnsureInspectionIsIdempotentAndUpdatesPerformedDate(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	owner := testUser("pmcs-fault-owner")
-	other := testUser("pmcs-fault-other")
+	user := testUser("pmcs-insp-idem")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B2")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	first, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	corrected := inspection
+	corrected.PerformedDate = first.PerformedDate.Add(-24 * time.Hour)
+	second, err := repo.EnsureInspection(user, corrected)
+
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+	require.True(t, second.PerformedDate.Before(first.PerformedDate))
+}
+
+func TestRepositoryEnsureInspectionRejectsGuideManualMismatch(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-insp-conflict")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B3")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	mismatched := inspection
+	mismatched.GuideManual = "pmcs_sbs/hmmwv/other.json"
+	_, err = repo.EnsureInspection(user, mismatched)
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
+}
+
+func TestRepositoryEnsureInspectionDeniesNonMember(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	owner := testUser("pmcs-insp-owner")
+	other := testUser("pmcs-insp-other")
 	ensureUser(t, testDB, owner)
 	ensureUser(t, testDB, other)
 	shopID := createShopWithMember(t, testDB, owner, "admin")
-	vehicleID := createShopVehicle(t, testDB, shopID, owner, "A2")
+	vehicleID := createShopVehicle(t, testDB, shopID, owner, "B4")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
-	_, err := repo.ListFaults(other, vehicleID, "pmcs_sbs/hmmwv/file.json")
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+	_, err := repo.EnsureInspection(other, sampleInspection(vehicleID, other.UserID))
 
-	_, err = repo.UpsertFault(other, sampleFault(vehicleID))
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
-
-	err = repo.DeleteFault(other, pmcs_sbs_progress.FaultKey{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0})
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
 }
 
-func TestRepositoryMissingVehicleReturnsNotFound(t *testing.T) {
+func TestRepositoryUpsertFaultCreatesInspectionImplicitly(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-missing")
-	ensureUser(t, testDB, user)
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	_, err := repo.ListFaults(user, "missing-vehicle", "pmcs_sbs/hmmwv/file.json")
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
-
-	_, err = repo.UpsertFault(user, sampleFault("missing-vehicle"))
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
-
-	err = repo.DeleteFault(user, pmcs_sbs_progress.FaultKey{EquipmentID: "missing-vehicle", GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0})
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
-}
-
-func TestRepositoryAnyShopMemberCanManageFaults(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	owner := testUser("pmcs-fault-shop-owner")
-	member := testUser("pmcs-fault-shop-member")
-	ensureUser(t, testDB, owner)
-	ensureUser(t, testDB, member)
-	shopID := createShopWithMember(t, testDB, owner, "admin")
-	addShopMember(t, testDB, shopID, member, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, owner, "A3")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	_, err := repo.UpsertFault(member, sampleFault(vehicleID))
-	require.NoError(t, err)
-
-	list, err := repo.ListFaults(member, vehicleID, "pmcs_sbs/hmmwv/file.json")
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-}
-
-func TestRepositoryFaultsAreScopedByGuideManual(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-guide-scope")
+	user := testUser("pmcs-fault-implicit")
 	ensureUser(t, testDB, user)
 	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A7")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B5")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
-	firstManualFault := sampleFault(vehicleID)
-	firstManualFault.GuideManual = "pmcs_sbs/hmmwv/first.json"
-	firstManualFault.FaultText = "first manual leak"
-	_, err := repo.UpsertFault(user, firstManualFault)
+	inspection := sampleInspection(vehicleID, user.UserID)
+	fault := sampleFault(inspection.ID)
+
+	saved, err := repo.UpsertFault(user, inspection, fault)
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, saved.PmcsID)
+
+	fetched, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Equal(t, inspection.GuideManual, fetched.GuideManual)
+	require.Len(t, faults, 1)
+	require.Equal(t, "leak", faults[0].FaultText)
+}
+
+func TestRepositoryUpsertFaultReusesExistingInspectionForSamePmcsID(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-fault-reuse")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B6")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	first := sampleFault(inspection.ID)
+	_, err := repo.UpsertFault(user, inspection, first)
 	require.NoError(t, err)
 
-	secondManualFault := sampleFault(vehicleID)
-	secondManualFault.GuideManual = "pmcs_sbs/hmmwv/second.json"
-	secondManualFault.FaultText = "second manual leak"
-	_, err = repo.UpsertFault(user, secondManualFault)
+	second := sampleFault(inspection.ID)
+	second.SectionID = "during"
+	second.ItemIndex = 1
+	second.FaultText = "second fault"
+	_, err = repo.UpsertFault(user, inspection, second)
 	require.NoError(t, err)
 
-	firstList, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/first.json")
+	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
-	require.Len(t, firstList, 1)
-	require.Equal(t, "first manual leak", firstList[0].FaultText)
+	require.Len(t, faults, 2)
+}
 
-	secondList, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/second.json")
+func TestRepositoryUpsertFaultRejectsGuideManualMismatch(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-fault-conflict")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B7")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.UpsertFault(user, inspection, sampleFault(inspection.ID))
 	require.NoError(t, err)
-	require.Len(t, secondList, 1)
-	require.Equal(t, "second manual leak", secondList[0].FaultText)
 
-	err = repo.DeleteFault(user, pmcs_sbs_progress.FaultKey{
-		EquipmentID: vehicleID,
-		GuideManual: "pmcs_sbs/hmmwv/first.json",
-		SectionID:   "before",
-		ItemIndex:   0,
+	mismatched := inspection
+	mismatched.GuideManual = "pmcs_sbs/hmmwv/other.json"
+	_, err = repo.UpsertFault(user, mismatched, sampleFault(inspection.ID))
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
+}
+
+func TestRepositoryGetInspectionReturnsFaultsOrderedBySectionAndItem(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-get-order")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B8")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	late := sampleFault(inspection.ID)
+	late.SectionID = "during"
+	late.ItemIndex = 2
+	_, err := repo.UpsertFault(user, inspection, late)
+	require.NoError(t, err)
+
+	early := sampleFault(inspection.ID)
+	early.SectionID = "before"
+	early.ItemIndex = 0
+	_, err = repo.UpsertFault(user, inspection, early)
+	require.NoError(t, err)
+
+	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Len(t, faults, 2)
+	require.Equal(t, "before", faults[0].SectionID)
+	require.Equal(t, "during", faults[1].SectionID)
+}
+
+func TestRepositoryGetInspectionReturnsCleanInspectionWithEmptyFaults(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-get-clean")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B9")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	fetched, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, fetched.ID)
+	require.Empty(t, faults)
+}
+
+func TestRepositoryGetInspectionRejectsCrossVehiclePmcsID(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-get-crossveh")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B10")
+	otherVehicleID := createShopVehicle(t, testDB, shopID, user, "B11")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	_, _, err = repo.GetInspection(user, otherVehicleID, inspection.ID)
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
+}
+
+func TestRepositoryListInspectionsOrdersByPerformedDateDescWithFaultCounts(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-list-order")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B12")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	older := sampleInspection(vehicleID, user.UserID)
+	older.PerformedDate = time.Now().UTC().Add(-48 * time.Hour)
+	_, err := repo.EnsureInspection(user, older)
+	require.NoError(t, err)
+
+	newer := sampleInspection(vehicleID, user.UserID)
+	newer.PerformedDate = time.Now().UTC()
+	_, err = repo.UpsertFault(user, newer, sampleFault(newer.ID))
+	require.NoError(t, err)
+
+	summaries, err := repo.ListInspections(user, vehicleID, "", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, summaries, 2)
+	require.Equal(t, newer.ID, summaries[0].ID)
+	require.Equal(t, 1, summaries[0].FaultCount)
+	require.Equal(t, older.ID, summaries[1].ID)
+	require.Equal(t, 0, summaries[1].FaultCount)
+}
+
+func TestRepositoryListInspectionsFiltersByGuideManual(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-list-filter")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B13")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	first := sampleInspection(vehicleID, user.UserID)
+	first.GuideManual = "pmcs_sbs/hmmwv/first.json"
+	_, err := repo.EnsureInspection(user, first)
+	require.NoError(t, err)
+
+	second := sampleInspection(vehicleID, user.UserID)
+	second.GuideManual = "pmcs_sbs/hmmwv/second.json"
+	_, err = repo.EnsureInspection(user, second)
+	require.NoError(t, err)
+
+	summaries, err := repo.ListInspections(user, vehicleID, "pmcs_sbs/hmmwv/first.json", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.Equal(t, first.ID, summaries[0].ID)
+}
+
+func TestRepositoryDeleteInspectionCascadesFaultsButNotSiblings(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-delete-cascade")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B14")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	toDelete := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.UpsertFault(user, toDelete, sampleFault(toDelete.ID))
+	require.NoError(t, err)
+
+	sibling := sampleInspection(vehicleID, user.UserID)
+	_, err = repo.UpsertFault(user, sibling, sampleFault(sibling.ID))
+	require.NoError(t, err)
+
+	err = repo.DeleteInspection(user, vehicleID, toDelete.ID)
+	require.NoError(t, err)
+
+	var faultCount int
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, toDelete.ID).Scan(&faultCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, faultCount)
+
+	_, siblingFaults, err := repo.GetInspection(user, vehicleID, sibling.ID)
+	require.NoError(t, err)
+	require.Len(t, siblingFaults, 1)
+}
+
+func TestRepositoryDeleteFaultAndBulkDeleteFaultsScopedToInspection(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-delete-fault")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B15")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	first := sampleFault(inspection.ID)
+	first.SectionID = "before"
+	first.ItemIndex = 0
+	_, err := repo.UpsertFault(user, inspection, first)
+	require.NoError(t, err)
+
+	second := sampleFault(inspection.ID)
+	second.SectionID = "during"
+	second.ItemIndex = 1
+	_, err = repo.UpsertFault(user, inspection, second)
+	require.NoError(t, err)
+
+	err = repo.DeleteFault(user, vehicleID, pmcs_sbs_progress.FaultKey{PmcsID: inspection.ID, SectionID: "before", ItemIndex: 0})
+	require.NoError(t, err)
+
+	deletedCount, err := repo.DeleteFaults(user, vehicleID, inspection.ID, []pmcs_sbs_progress.FaultKey{
+		{PmcsID: inspection.ID, SectionID: "during", ItemIndex: 1},
+		{PmcsID: inspection.ID, SectionID: "missing", ItemIndex: 99},
 	})
 	require.NoError(t, err)
+	require.Equal(t, int64(1), deletedCount)
 
-	firstList, err = repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/first.json")
+	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
-	require.Empty(t, firstList)
-
-	secondList, err = repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/second.json")
-	require.NoError(t, err)
-	require.Len(t, secondList, 1)
-	require.Equal(t, "second manual leak", secondList[0].FaultText)
+	require.Empty(t, faults)
 }
 
-func TestRepositoryFaultUpsertPreservesCreatedAt(t *testing.T) {
+func TestRepositoryVehicleDeleteCascadesInspectionsAndFaults(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-update")
+	user := testUser("pmcs-vehicle-cascade")
 	ensureUser(t, testDB, user)
 	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A4")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B16")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
-	first, err := repo.UpsertFault(user, sampleFault(vehicleID))
-	require.NoError(t, err)
-	time.Sleep(time.Millisecond)
-
-	updatedFault := sampleFault(vehicleID)
-	updatedFault.FaultText = "updated leak"
-	updatedFault.CorrectiveAction = "tightened"
-	second, err := repo.UpsertFault(user, updatedFault)
-	require.NoError(t, err)
-
-	require.Equal(t, first.CreatedAt, second.CreatedAt)
-	require.True(t, second.UpdatedAt.After(first.UpdatedAt))
-	require.Equal(t, "updated leak", second.FaultText)
-	require.Equal(t, "tightened", second.CorrectiveAction)
-}
-
-func TestRepositoryDeleteFaultIsIdempotentForAccessibleVehicle(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-delete-missing")
-	ensureUser(t, testDB, user)
-	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A5")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	err := repo.DeleteFault(user, pmcs_sbs_progress.FaultKey{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0})
-
-	require.NoError(t, err)
-}
-
-func TestRepositoryVehicleDeleteCascadesFaults(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-cascade")
-	ensureUser(t, testDB, user)
-	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A6")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-	_, err := repo.UpsertFault(user, sampleFault(vehicleID))
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.UpsertFault(user, inspection, sampleFault(inspection.ID))
 	require.NoError(t, err)
 
 	_, err = testDB.Exec(`DELETE FROM shop_vehicle WHERE id=$1`, vehicleID)
 	require.NoError(t, err)
 
-	var count int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE equipment_id=$1`, vehicleID).Scan(&count)
+	var inspectionCount, faultCount int
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE equipment_id=$1`, vehicleID).Scan(&inspectionCount)
 	require.NoError(t, err)
-	require.Equal(t, 0, count)
-}
+	require.Equal(t, 0, inspectionCount)
 
-func TestRepositoryDeleteFaultsDeletesMultipleAndReportsCount(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-bulk-delete")
-	ensureUser(t, testDB, user)
-	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A8")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	first := sampleFault(vehicleID)
-	first.SectionID = "before"
-	first.ItemIndex = 0
-	first.ItemNo = "1"
-	_, err := repo.UpsertFault(user, first)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
 	require.NoError(t, err)
-
-	second := sampleFault(vehicleID)
-	second.SectionID = "during"
-	second.ItemIndex = 3
-	second.ItemNo = "4"
-	second.FaultText = "during leak"
-	_, err = repo.UpsertFault(user, second)
-	require.NoError(t, err)
-
-	third := sampleFault(vehicleID)
-	third.SectionID = "after"
-	third.ItemIndex = 1
-	third.ItemNo = "2"
-	third.FaultText = "after leak"
-	_, err = repo.UpsertFault(user, third)
-	require.NoError(t, err)
-
-	deletedCount, err := repo.DeleteFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json", []pmcs_sbs_progress.FaultKey{
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0},
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "during", ItemIndex: 3},
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(2), deletedCount)
-
-	list, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json")
-	require.NoError(t, err)
-	require.Len(t, list, 1)
-	require.Equal(t, "after", list[0].SectionID)
-}
-
-func TestRepositoryDeleteFaultsIsIdempotentAndReportsExistingRowsOnly(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-bulk-idem")
-	ensureUser(t, testDB, user)
-	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A9")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	_, err := repo.UpsertFault(user, sampleFault(vehicleID))
-	require.NoError(t, err)
-
-	deletedCount, err := repo.DeleteFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json", []pmcs_sbs_progress.FaultKey{
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0},
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "missing", ItemIndex: 99},
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), deletedCount)
-
-	deletedCount, err = repo.DeleteFaults(user, vehicleID, "pmcs_sbs/hmmwv/file.json", []pmcs_sbs_progress.FaultKey{
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0},
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "missing", ItemIndex: 99},
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(0), deletedCount)
-}
-
-func TestRepositoryDeleteFaultsPreservesOtherManualsAndVehicles(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-fault-bulk-scope")
-	ensureUser(t, testDB, user)
-	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "A10")
-	otherVehicleID := createShopVehicle(t, testDB, shopID, user, "A11")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-
-	firstManualFault := sampleFault(vehicleID)
-	firstManualFault.GuideManual = "pmcs_sbs/hmmwv/first.json"
-	_, err := repo.UpsertFault(user, firstManualFault)
-	require.NoError(t, err)
-
-	secondManualFault := sampleFault(vehicleID)
-	secondManualFault.GuideManual = "pmcs_sbs/hmmwv/second.json"
-	secondManualFault.FaultText = "second manual leak"
-	_, err = repo.UpsertFault(user, secondManualFault)
-	require.NoError(t, err)
-
-	otherVehicleFault := sampleFault(otherVehicleID)
-	otherVehicleFault.GuideManual = "pmcs_sbs/hmmwv/first.json"
-	otherVehicleFault.FaultText = "other vehicle leak"
-	_, err = repo.UpsertFault(user, otherVehicleFault)
-	require.NoError(t, err)
-
-	deletedCount, err := repo.DeleteFaults(user, vehicleID, "pmcs_sbs/hmmwv/first.json", []pmcs_sbs_progress.FaultKey{
-		{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/first.json", SectionID: "before", ItemIndex: 0},
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(1), deletedCount)
-
-	firstList, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/first.json")
-	require.NoError(t, err)
-	require.Empty(t, firstList)
-
-	secondList, err := repo.ListFaults(user, vehicleID, "pmcs_sbs/hmmwv/second.json")
-	require.NoError(t, err)
-	require.Len(t, secondList, 1)
-	require.Equal(t, "second manual leak", secondList[0].FaultText)
-
-	otherVehicleList, err := repo.ListFaults(user, otherVehicleID, "pmcs_sbs/hmmwv/first.json")
-	require.NoError(t, err)
-	require.Len(t, otherVehicleList, 1)
-	require.Equal(t, "other vehicle leak", otherVehicleList[0].FaultText)
-}
-
-func TestRepositoryDeleteFaultsDeniesNonMemberAndMissingVehicle(t *testing.T) {
-	clearPmcsSbsTables(t, testDB)
-	owner := testUser("pmcs-fault-bulk-owner")
-	other := testUser("pmcs-fault-bulk-other")
-	ensureUser(t, testDB, owner)
-	ensureUser(t, testDB, other)
-	shopID := createShopWithMember(t, testDB, owner, "admin")
-	vehicleID := createShopVehicle(t, testDB, shopID, owner, "A12")
-	repo := pmcs_sbs_progress.NewRepository(testDB)
-	keys := []pmcs_sbs_progress.FaultKey{{EquipmentID: vehicleID, GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0}}
-
-	_, err := repo.DeleteFaults(other, vehicleID, "pmcs_sbs/hmmwv/file.json", keys)
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
-
-	_, err = repo.DeleteFaults(owner, "missing-vehicle", "pmcs_sbs/hmmwv/file.json", []pmcs_sbs_progress.FaultKey{{EquipmentID: "missing-vehicle", GuideManual: "pmcs_sbs/hmmwv/file.json", SectionID: "before", ItemIndex: 0}})
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+	require.Equal(t, 0, faultCount)
 }

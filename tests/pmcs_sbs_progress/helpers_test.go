@@ -39,6 +39,7 @@ func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 	_, err := db.Exec(
 		`TRUNCATE TABLE
 			pmcs_sbs_faults,
+			pmcs_sbs_inspections,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,
 			shop_vehicle,
@@ -124,11 +125,21 @@ func createShopVehicle(t *testing.T, db *sql.DB, shopID string, creator *bootstr
 	return vehicleID
 }
 
-func sampleFault(equipmentID string) model.PmcsSbsFaults {
+func sampleInspection(equipmentID string, createdBy string) model.PmcsSbsInspections {
+	createdByCopy := createdBy
+	return model.PmcsSbsInspections{
+		ID:            uuid.New(),
+		EquipmentID:   equipmentID,
+		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		PerformedDate: time.Now().UTC(),
+		CreatedBy:     &createdByCopy,
+	}
+}
+
+func sampleFault(pmcsID uuid.UUID) model.PmcsSbsFaults {
 	now := time.Now().UTC()
 	return model.PmcsSbsFaults{
-		EquipmentID:      equipmentID,
-		GuideManual:      "pmcs_sbs/hmmwv/file.json",
+		PmcsID:           pmcsID,
 		SectionID:        "before",
 		ItemIndex:        0,
 		ItemNo:           "1",
