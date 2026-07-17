@@ -8,6 +8,8 @@ import (
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
+
+	"github.com/google/uuid"
 )
 
 type ServiceImpl struct {
@@ -19,8 +21,25 @@ func NewService(repository Repository) *ServiceImpl {
 }
 
 const maxBulkDeleteFaults = 100
+const defaultListInspectionsLimit = 1000
 
-func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error) {
+func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	inspection, err := service.validateInspectionRequest(equipmentID, pmcsID, user.UserID, req)
+	if err != nil {
+		return nil, err
+	}
+	saved, err := service.repository.EnsureInspection(user, inspection)
+	if err != nil {
+		return nil, err
+	}
+	resp := mapInspection(*saved, nil)
+	return &resp, nil
+}
+
+func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -28,32 +47,87 @@ func (service *ServiceImpl) ListFaults(user *bootstrap.User, equipmentID string,
 	if err != nil {
 		return nil, err
 	}
-	trimmedGuideManual, err := validateGuideManual(guideManual)
+	parsedPmcsID, err := validatePmcsID(pmcsID)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := service.repository.ListFaults(user, trimmedEquipmentID, trimmedGuideManual)
+	inspection, faults, err := service.repository.GetInspection(user, trimmedEquipmentID, parsedPmcsID)
 	if err != nil {
 		return nil, err
 	}
-
-	faults := make([]FaultResponse, 0, len(rows))
-	for _, row := range rows {
-		faults = append(faults, mapFault(row))
-	}
-	return &FaultListResponse{Faults: faults, Count: len(faults)}, nil
+	resp := mapInspection(*inspection, faults)
+	return &resp, nil
 }
 
-func (service *ServiceImpl) UpsertFault(user *bootstrap.User, equipmentID string, req FaultRequest) (*FaultResponse, error) {
+func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
-	row, err := service.validateFaultRequest(equipmentID, req)
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
 		return nil, err
 	}
-	saved, err := service.repository.UpsertFault(user, row)
+
+	guideManual := strings.TrimSpace(req.GuideManual)
+	if guideManual != "" {
+		guideManual, err = validateGuideManual(guideManual)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	limit := req.Limit
+	if limit <= 0 {
+		limit = defaultListInspectionsLimit
+	}
+	offset := req.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
+	summaries, err := service.repository.ListInspections(user, trimmedEquipmentID, guideManual, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	responses := make([]InspectionSummaryResponse, 0, len(summaries))
+	for _, summary := range summaries {
+		responses = append(responses, InspectionSummaryResponse{
+			ID:            summary.ID,
+			GuideManual:   summary.GuideManual,
+			PerformedDate: summary.PerformedDate,
+			FaultCount:    summary.FaultCount,
+			CreatedAt:     summary.CreatedAt,
+		})
+	}
+	return &InspectionListResponse{Inspections: responses, Count: len(responses)}, nil
+}
+
+func (service *ServiceImpl) DeleteInspection(user *bootstrap.User, equipmentID string, pmcsID string) error {
+	if !hasAuthenticatedUser(user) {
+		return ErrUnauthorized
+	}
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+	if err != nil {
+		return err
+	}
+	parsedPmcsID, err := validatePmcsID(pmcsID)
+	if err != nil {
+		return err
+	}
+	return service.repository.DeleteInspection(user, trimmedEquipmentID, parsedPmcsID)
+}
+
+func (service *ServiceImpl) UpsertFault(user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	inspection, fault, err := service.validateFaultRequest(equipmentID, pmcsID, user.UserID, req)
+	if err != nil {
+		return nil, err
+	}
+	saved, err := service.repository.UpsertFault(user, inspection, fault)
 	if err != nil {
 		return nil, err
 	}
@@ -61,57 +135,86 @@ func (service *ServiceImpl) UpsertFault(user *bootstrap.User, equipmentID string
 	return &resp, nil
 }
 
-func (service *ServiceImpl) DeleteFault(user *bootstrap.User, equipmentID string, req DeleteFaultRequest) error {
+func (service *ServiceImpl) DeleteFault(user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error {
 	if !hasAuthenticatedUser(user) {
 		return ErrUnauthorized
 	}
-	key, err := service.validateDeleteFaultRequest(equipmentID, req)
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
 		return err
 	}
-	return service.repository.DeleteFault(user, key)
+	key, err := service.validateDeleteFaultRequest(pmcsID, req)
+	if err != nil {
+		return err
+	}
+	return service.repository.DeleteFault(user, trimmedEquipmentID, key)
 }
 
-func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
+func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
-	trimmedEquipmentID, guideManual, keys, err := service.validateBulkDeleteFaultRequest(equipmentID, req)
+	trimmedEquipmentID, parsedPmcsID, keys, err := service.validateBulkDeleteFaultRequest(equipmentID, pmcsID, req)
 	if err != nil {
 		return nil, err
 	}
-	deletedCount, err := service.repository.DeleteFaults(user, trimmedEquipmentID, guideManual, keys)
+	deletedCount, err := service.repository.DeleteFaults(user, trimmedEquipmentID, parsedPmcsID, keys)
 	if err != nil {
 		return nil, err
 	}
 	return &BulkDeleteFaultResponse{RequestedCount: len(keys), DeletedCount: int(deletedCount)}, nil
 }
 
-func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRequest) (model.PmcsSbsFaults, error) {
+func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID string, userID string, req InspectionRequest) (model.PmcsSbsInspections, error) {
 	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
-		return model.PmcsSbsFaults{}, err
+		return model.PmcsSbsInspections{}, err
+	}
+	parsedPmcsID, err := validatePmcsID(pmcsID)
+	if err != nil {
+		return model.PmcsSbsInspections{}, err
+	}
+	guideManual, err := validateGuideManual(req.GuideManual)
+	if err != nil {
+		return model.PmcsSbsInspections{}, err
+	}
+	if req.PerformedDate.IsZero() {
+		return model.PmcsSbsInspections{}, ErrInvalidRequest
+	}
+
+	createdBy := strings.TrimSpace(userID)
+	return model.PmcsSbsInspections{
+		ID:            parsedPmcsID,
+		EquipmentID:   trimmedEquipmentID,
+		GuideManual:   guideManual,
+		PerformedDate: req.PerformedDate.UTC(),
+		CreatedBy:     &createdBy,
+	}, nil
+}
+
+func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID string, userID string, req FaultRequest) (model.PmcsSbsInspections, model.PmcsSbsFaults, error) {
+	inspection, err := service.validateInspectionRequest(equipmentID, pmcsID, userID, InspectionRequest{
+		GuideManual:   req.GuideManual,
+		PerformedDate: req.PerformedDate,
+	})
+	if err != nil {
+		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, err
 	}
 
 	sectionID := strings.TrimSpace(req.SectionID)
-	guideManual, err := validateGuideManual(req.GuideManual)
-	if err != nil {
-		return model.PmcsSbsFaults{}, err
-	}
 	itemNo := strings.TrimSpace(req.ItemNo)
 	status, validStatus := normalizeFaultStatus(req.Status)
 	faultText := strings.TrimSpace(req.FaultText)
 	if sectionID == "" || itemNo == "" || req.ItemIndex < 0 || faultText == "" {
-		return model.PmcsSbsFaults{}, ErrInvalidRequest
+		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, ErrInvalidRequest
 	}
 	if !validStatus {
-		return model.PmcsSbsFaults{}, ErrInvalidStatus
+		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, ErrInvalidStatus
 	}
 
 	now := time.Now().UTC()
-	return model.PmcsSbsFaults{
-		EquipmentID:      trimmedEquipmentID,
-		GuideManual:      guideManual,
+	fault := model.PmcsSbsFaults{
+		PmcsID:           inspection.ID,
 		SectionID:        sectionID,
 		ItemIndex:        req.ItemIndex,
 		ItemNo:           itemNo,
@@ -120,53 +223,49 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, req FaultRe
 		CorrectiveAction: strings.TrimSpace(req.CorrectiveAction),
 		CreatedAt:        now,
 		UpdatedAt:        now,
-	}, nil
+	}
+	return inspection, fault, nil
 }
 
-func (service *ServiceImpl) validateDeleteFaultRequest(equipmentID string, req DeleteFaultRequest) (FaultKey, error) {
-	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+func (service *ServiceImpl) validateDeleteFaultRequest(pmcsID string, req DeleteFaultRequest) (FaultKey, error) {
+	parsedPmcsID, err := validatePmcsID(pmcsID)
 	if err != nil {
 		return FaultKey{}, err
 	}
-
 	sectionID := strings.TrimSpace(req.SectionID)
-	guideManual, err := validateGuideManual(req.GuideManual)
-	if err != nil {
-		return FaultKey{}, err
-	}
 	if sectionID == "" || req.ItemIndex < 0 {
 		return FaultKey{}, ErrInvalidRequest
 	}
-	return FaultKey{EquipmentID: trimmedEquipmentID, GuideManual: guideManual, SectionID: sectionID, ItemIndex: req.ItemIndex}, nil
+	return FaultKey{PmcsID: parsedPmcsID, SectionID: sectionID, ItemIndex: req.ItemIndex}, nil
 }
 
-func (service *ServiceImpl) validateBulkDeleteFaultRequest(equipmentID string, req BulkDeleteFaultRequest) (string, string, []FaultKey, error) {
+func (service *ServiceImpl) validateBulkDeleteFaultRequest(equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (string, uuid.UUID, []FaultKey, error) {
 	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
-		return "", "", nil, err
+		return "", uuid.UUID{}, nil, err
 	}
-	guideManual, err := validateGuideManual(req.GuideManual)
+	parsedPmcsID, err := validatePmcsID(pmcsID)
 	if err != nil {
-		return "", "", nil, err
+		return "", uuid.UUID{}, nil, err
 	}
 	if len(req.Faults) == 0 || len(req.Faults) > maxBulkDeleteFaults {
-		return "", "", nil, ErrInvalidRequest
+		return "", uuid.UUID{}, nil, ErrInvalidRequest
 	}
 	keys := make([]FaultKey, 0, len(req.Faults))
 	seen := make(map[string]struct{}, len(req.Faults))
 	for _, fault := range req.Faults {
 		sectionID := strings.TrimSpace(fault.SectionID)
 		if sectionID == "" || fault.ItemIndex < 0 {
-			return "", "", nil, ErrInvalidRequest
+			return "", uuid.UUID{}, nil, ErrInvalidRequest
 		}
 		duplicateKey := fmt.Sprintf("%s\x00%d", sectionID, fault.ItemIndex)
 		if _, exists := seen[duplicateKey]; exists {
-			return "", "", nil, ErrInvalidRequest
+			return "", uuid.UUID{}, nil, ErrInvalidRequest
 		}
 		seen[duplicateKey] = struct{}{}
-		keys = append(keys, FaultKey{EquipmentID: trimmedEquipmentID, GuideManual: guideManual, SectionID: sectionID, ItemIndex: fault.ItemIndex})
+		keys = append(keys, FaultKey{PmcsID: parsedPmcsID, SectionID: sectionID, ItemIndex: fault.ItemIndex})
 	}
-	return trimmedEquipmentID, guideManual, keys, nil
+	return trimmedEquipmentID, parsedPmcsID, keys, nil
 }
 
 func validateEquipmentID(equipmentID string) (string, error) {
@@ -175,6 +274,18 @@ func validateEquipmentID(equipmentID string) (string, error) {
 		return "", ErrInvalidID
 	}
 	return trimmedEquipmentID, nil
+}
+
+func validatePmcsID(pmcsID string) (uuid.UUID, error) {
+	trimmed := strings.TrimSpace(pmcsID)
+	if trimmed == "" {
+		return uuid.UUID{}, ErrInvalidPmcsID
+	}
+	parsed, err := uuid.Parse(trimmed)
+	if err != nil {
+		return uuid.UUID{}, ErrInvalidPmcsID
+	}
+	return parsed, nil
 }
 
 func validateGuideManual(guideManual string) (string, error) {
@@ -208,8 +319,7 @@ func normalizeFaultStatus(status string) (string, bool) {
 
 func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	return FaultResponse{
-		EquipmentID:      row.EquipmentID,
-		GuideManual:      row.GuideManual,
+		PmcsID:           row.PmcsID,
 		SectionID:        row.SectionID,
 		ItemIndex:        row.ItemIndex,
 		ItemNo:           row.ItemNo,
@@ -218,5 +328,22 @@ func mapFault(row model.PmcsSbsFaults) FaultResponse {
 		CorrectiveAction: row.CorrectiveAction,
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
+	}
+}
+
+func mapInspection(row model.PmcsSbsInspections, faultRows []model.PmcsSbsFaults) InspectionResponse {
+	faults := make([]FaultResponse, 0, len(faultRows))
+	for _, faultRow := range faultRows {
+		faults = append(faults, mapFault(faultRow))
+	}
+	return InspectionResponse{
+		ID:            row.ID,
+		EquipmentID:   row.EquipmentID,
+		GuideManual:   row.GuideManual,
+		PerformedDate: row.PerformedDate,
+		CreatedBy:     row.CreatedBy,
+		CreatedAt:     row.CreatedAt,
+		UpdatedAt:     row.UpdatedAt,
+		Faults:        faults,
 	}
 }

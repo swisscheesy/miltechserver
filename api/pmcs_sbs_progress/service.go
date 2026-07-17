@@ -3,8 +3,12 @@ package pmcs_sbs_progress
 import "miltechserver/bootstrap"
 
 type Service interface {
-	ListFaults(user *bootstrap.User, equipmentID string, guideManual string) (*FaultListResponse, error)
-	UpsertFault(user *bootstrap.User, equipmentID string, req FaultRequest) (*FaultResponse, error)
-	DeleteFault(user *bootstrap.User, equipmentID string, req DeleteFaultRequest) error
-	DeleteFaults(user *bootstrap.User, equipmentID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error)
+	EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error)
+	GetInspection(user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error)
+	ListInspections(user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error)
+	DeleteInspection(user *bootstrap.User, equipmentID string, pmcsID string) error
+
+	UpsertFault(user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error)
+	DeleteFault(user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error
+	DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error)
 }
