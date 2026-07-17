@@ -75,7 +75,7 @@ type InspectionSummaryResponse struct {
 
 type InspectionListResponse struct {
 	Inspections []InspectionSummaryResponse `json:"inspections"`
-	Count       int                          `json:"count"`
+	Count       int                         `json:"count"`
 }
 
 type BulkDeleteFaultResponse struct {

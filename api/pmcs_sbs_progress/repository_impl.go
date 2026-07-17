@@ -88,22 +88,29 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		return []InspectionSummary{}, nil
 	}
 
-	countByID := make(map[uuid.UUID]int, len(inspections))
+	ids := make([]Expression, 0, len(inspections))
 	for _, inspection := range inspections {
-		countByID[inspection.ID] = 0
+		ids = append(ids, UUID(inspection.ID))
 	}
 
-	// Count faults for each inspection
-	for _, inspection := range inspections {
-		var count int
-		err := repo.db.QueryRow(
-			`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id = $1`,
-			inspection.ID,
-		).Scan(&count)
-		if err != nil {
-			return nil, fmt.Errorf("count pmcs sbs faults: %w", err)
-		}
-		countByID[inspection.ID] = count
+	var counts []struct {
+		PmcsID uuid.UUID `sql:"pmcs_id"`
+		Total  int32     `sql:"total"`
+	}
+	countStmt := SELECT(
+		PmcsSbsFaults.PmcsID.AS("pmcs_id"),
+		COUNT(PmcsSbsFaults.PmcsID).AS("total"),
+	).FROM(PmcsSbsFaults).
+		WHERE(PmcsSbsFaults.PmcsID.IN(ids...)).
+		GROUP_BY(PmcsSbsFaults.PmcsID)
+
+	if err := countStmt.Query(repo.db, &counts); err != nil {
+		return nil, fmt.Errorf("count pmcs sbs faults: %w", err)
+	}
+
+	countByID := make(map[uuid.UUID]int, len(counts))
+	for _, c := range counts {
+		countByID[c.PmcsID] = int(c.Total)
 	}
 
 	summaries := make([]InspectionSummary, 0, len(inspections))
