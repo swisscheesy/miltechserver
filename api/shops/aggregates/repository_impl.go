@@ -1153,7 +1153,33 @@ func scanNotificationChange(scanner rowScanner) (response.NotificationChangeWith
 }
 
 func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *bootstrap.User) ([]response.EquipmentWithPmcsHistory, error) {
-	type equipmentRow struct {
+	equipmentStmt := SELECT(
+		ShopVehicle.ID.AS("id"),
+		ShopVehicle.ShopID.AS("shop_id"),
+		ShopVehicle.Admin.AS("admin"),
+		ShopVehicle.Model.AS("model"),
+		ShopVehicle.Serial.AS("serial"),
+		ShopVehicle.Niin.AS("niin"),
+	).FROM(
+		ShopVehicle.INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)),
+	).WHERE(
+		ShopMembers.UserID.EQ(String(user.UserID)),
+	).ORDER_BY(
+		ShopVehicle.SaveTime.DESC(),
+		ShopVehicle.ID.DESC(),
+	)
+
+	// NOTE: the destination must be an anonymous struct, not a named local type.
+	// go-jet's query result mapper derives its column-matching key from the destination
+	// struct's reflect.Type.Name(): a named type causes jet to require dot-prefixed column
+	// aliases (e.g. "equipmentrow.id", the convention used for embedded/nested table structs),
+	// while an anonymous struct type (Name() == "") matches plain bare-field-name aliases like
+	// "id" directly. Since this query aliases columns as plain names via .AS("id") etc., a named
+	// struct here silently matches zero columns and returns zero rows with no error. Verified via
+	// isolated repro against the live DB: identical query + fields, only named vs. anonymous type,
+	// produced 0 vs 2 rows. This matches the working pattern already used a few lines below
+	// (the `counts` query) and in pmcs_sbs_progress/repository_impl.go's requireVehicleAccess.
+	var equipmentRows []struct {
 		ID     string `sql:"id"`
 		ShopID string `sql:"shop_id"`
 		Admin  string `sql:"admin"`
@@ -1161,36 +1187,8 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		Serial string `sql:"serial"`
 		Niin   string `sql:"niin"`
 	}
-
-	const query = `
-SELECT
-	sv.id,
-	sv.shop_id,
-	sv.admin,
-	sv.model,
-	sv.serial,
-	sv.niin
-FROM shop_vehicle sv
-INNER JOIN shop_members sm ON sm.shop_id = sv.shop_id
-WHERE sm.user_id = $1
-ORDER BY sv.save_time DESC NULLS LAST, sv.id DESC`
-
-	var equipmentRows []equipmentRow
-	rows, err := repo.db.QueryContext(ctx, query, user.UserID)
-	if err != nil {
+	if err := equipmentStmt.QueryContext(ctx, repo.db, &equipmentRows); err != nil {
 		return nil, fmt.Errorf("failed to query equipment for pmcs history: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var row equipmentRow
-		if err := rows.Scan(&row.ID, &row.ShopID, &row.Admin, &row.Model, &row.Serial, &row.Niin); err != nil {
-			return nil, fmt.Errorf("failed to scan equipment row: %w", err)
-		}
-		equipmentRows = append(equipmentRows, row)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating equipment rows: %w", err)
 	}
 	if len(equipmentRows) == 0 {
 		return []response.EquipmentWithPmcsHistory{}, nil
