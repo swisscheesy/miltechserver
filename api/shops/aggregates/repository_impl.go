@@ -8,9 +8,13 @@ import (
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
+	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+
+	. "github.com/go-jet/jet/v2/postgres"
+	"github.com/google/uuid"
 )
 
 type RepositoryImpl struct {
@@ -1146,4 +1150,121 @@ func scanNotificationChange(scanner rowScanner) (response.NotificationChangeWith
 	}
 
 	return change, nil
+}
+
+func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *bootstrap.User) ([]response.EquipmentWithPmcsHistory, error) {
+	type equipmentRow struct {
+		ID     string `sql:"id"`
+		ShopID string `sql:"shop_id"`
+		Admin  string `sql:"admin"`
+		Model  string `sql:"model"`
+		Serial string `sql:"serial"`
+		Niin   string `sql:"niin"`
+	}
+
+	const query = `
+SELECT
+	sv.id,
+	sv.shop_id,
+	sv.admin,
+	sv.model,
+	sv.serial,
+	sv.niin
+FROM shop_vehicle sv
+INNER JOIN shop_members sm ON sm.shop_id = sv.shop_id
+WHERE sm.user_id = $1
+ORDER BY sv.save_time DESC NULLS LAST, sv.id DESC`
+
+	var equipmentRows []equipmentRow
+	rows, err := repo.db.QueryContext(ctx, query, user.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query equipment for pmcs history: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var row equipmentRow
+		if err := rows.Scan(&row.ID, &row.ShopID, &row.Admin, &row.Model, &row.Serial, &row.Niin); err != nil {
+			return nil, fmt.Errorf("failed to scan equipment row: %w", err)
+		}
+		equipmentRows = append(equipmentRows, row)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating equipment rows: %w", err)
+	}
+	if len(equipmentRows) == 0 {
+		return []response.EquipmentWithPmcsHistory{}, nil
+	}
+
+	equipmentIDs := make([]Expression, 0, len(equipmentRows))
+	for _, row := range equipmentRows {
+		equipmentIDs = append(equipmentIDs, String(row.ID))
+	}
+
+	var inspections []model.PmcsSbsInspections
+	inspectionsStmt := SELECT(PmcsSbsInspections.AllColumns).
+		FROM(PmcsSbsInspections).
+		WHERE(PmcsSbsInspections.EquipmentID.IN(equipmentIDs...)).
+		ORDER_BY(PmcsSbsInspections.EquipmentID.ASC(), PmcsSbsInspections.PerformedDate.DESC())
+
+	if err := inspectionsStmt.QueryContext(ctx, repo.db, &inspections); err != nil {
+		return nil, fmt.Errorf("failed to query pmcs inspections for equipment history: %w", err)
+	}
+
+	faultCountByInspectionID := make(map[uuid.UUID]int)
+	if len(inspections) > 0 {
+		inspectionIDs := make([]Expression, 0, len(inspections))
+		for _, inspection := range inspections {
+			inspectionIDs = append(inspectionIDs, UUID(inspection.ID))
+		}
+
+		var counts []struct {
+			PmcsID uuid.UUID `sql:"pmcs_id"`
+			Total  int32     `sql:"total"`
+		}
+		countStmt := SELECT(
+			PmcsSbsFaults.PmcsID.AS("pmcs_id"),
+			COUNT(PmcsSbsFaults.PmcsID).AS("total"),
+		).FROM(PmcsSbsFaults).
+			WHERE(PmcsSbsFaults.PmcsID.IN(inspectionIDs...)).
+			GROUP_BY(PmcsSbsFaults.PmcsID)
+
+		if err := countStmt.QueryContext(ctx, repo.db, &counts); err != nil {
+			return nil, fmt.Errorf("failed to count pmcs faults for equipment history: %w", err)
+		}
+		for _, count := range counts {
+			faultCountByInspectionID[count.PmcsID] = int(count.Total)
+		}
+	}
+
+	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
+	for _, inspection := range inspections {
+		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
+			ID:            inspection.ID,
+			GuideManual:   inspection.GuideManual,
+			PerformedDate: inspection.PerformedDate,
+			FaultCount:    faultCountByInspectionID[inspection.ID],
+			CreatedAt:     inspection.CreatedAt,
+		})
+	}
+
+	equipment := make([]response.EquipmentWithPmcsHistory, 0, len(equipmentRows))
+	for _, row := range equipmentRows {
+		history := historyByEquipmentID[row.ID]
+		if history == nil {
+			history = []response.PmcsHistorySummary{}
+		}
+		equipment = append(equipment, response.EquipmentWithPmcsHistory{
+			ShopEquipmentSummary: response.ShopEquipmentSummary{
+				ID:     row.ID,
+				Admin:  row.Admin,
+				Model:  row.Model,
+				Serial: row.Serial,
+				Niin:   row.Niin,
+			},
+			ShopID:         row.ShopID,
+			HistoricalPmcs: history,
+		})
+	}
+	return equipment, nil
 }

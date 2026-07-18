@@ -4,6 +4,8 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ShopWithStats struct {
@@ -211,4 +213,23 @@ type ShopBootstrapSummary struct {
 	Settings  ShopAggregateSettings  `json:"settings"`
 	Counts    ShopAggregateCounts    `json:"counts"`
 	Equipment []ShopEquipmentSummary `json:"equipment"`
+}
+
+type EquipmentPmcsHistoryResponse struct {
+	Equipment []EquipmentWithPmcsHistory `json:"equipment"`
+	Count     int                        `json:"count"`
+}
+
+type EquipmentWithPmcsHistory struct {
+	ShopEquipmentSummary
+	ShopID         string               `json:"shop_id"`
+	HistoricalPmcs []PmcsHistorySummary `json:"historical_pmcs"`
+}
+
+type PmcsHistorySummary struct {
+	ID            uuid.UUID `json:"id"`
+	GuideManual   string    `json:"guide_manual"`
+	PerformedDate time.Time `json:"performed_date"`
+	FaultCount    int       `json:"fault_count"`
+	CreatedAt     time.Time `json:"created_at"`
 }

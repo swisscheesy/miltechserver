@@ -16,6 +16,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -307,4 +308,30 @@ func createMessage(t *testing.T, router *gin.Engine, userID string, shopID strin
 	require.NotEmpty(t, messageID)
 
 	return messageID
+}
+
+func createPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, guideManual string, performedDate time.Time) string {
+	t.Helper()
+
+	id := uuid.New().String()
+	now := time.Now().UTC()
+	_, err := db.Exec(
+		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, guide_manual, performed_date, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $5)`,
+		id, equipmentID, guideManual, performedDate, now,
+	)
+	require.NoError(t, err)
+	return id
+}
+
+func createPmcsFault(t *testing.T, db *sql.DB, pmcsID string, sectionID string, itemIndex int) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	_, err := db.Exec(
+		`INSERT INTO pmcs_sbs_faults (pmcs_id, section_id, item_index, item_no, status, fault_text, corrective_action, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
+		pmcsID, sectionID, itemIndex, "1", "x", "test fault", "", now,
+	)
+	require.NoError(t, err)
 }
