@@ -122,6 +122,25 @@ func (handler Handler) getBootstrap(c *gin.Context) {
 	})
 }
 
+func (handler Handler) getEquipmentPmcsHistory(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return
+	}
+
+	result, err := handler.service.GetEquipmentPmcsHistory(c.Request.Context(), user)
+	if err != nil {
+		writeAggregateError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "Equipment PMCS history retrieved successfully",
+		Data:    result,
+	})
+}
+
 func parseSnapshotLimits(c *gin.Context) (SnapshotLimits, error) {
 	notificationsLimit, err := parseOptionalIntQuery(c, "notification_limit")
 	if err != nil {

@@ -16,8 +16,10 @@ import (
 )
 
 type serviceStub struct {
-	listsResp *response.ShopListsWithItemsResponse
-	err       error
+	listsResp            *response.ShopListsWithItemsResponse
+	equipmentHistoryResp *response.EquipmentPmcsHistoryResponse
+	equipmentHistoryErr  error
+	err                  error
 }
 
 func (s serviceStub) GetListsWithItems(context.Context, *bootstrap.User, string, ListTreeLimits) (*response.ShopListsWithItemsResponse, error) {
@@ -31,6 +33,9 @@ func (s serviceStub) GetShopSnapshot(context.Context, *bootstrap.User, string, S
 }
 func (s serviceStub) GetBootstrap(context.Context, *bootstrap.User, BootstrapOptions) (*response.ShopsBootstrapResponse, error) {
 	return nil, errors.New("unexpected bootstrap call")
+}
+func (s serviceStub) GetEquipmentPmcsHistory(context.Context, *bootstrap.User) (*response.EquipmentPmcsHistoryResponse, error) {
+	return s.equipmentHistoryResp, s.equipmentHistoryErr
 }
 
 func TestListsWithItemsRequiresUser(t *testing.T) {
@@ -134,4 +139,50 @@ func TestVehicleMaintenanceSnapshotRejectsInvalidSuppliedLimitValues(t *testing.
 			require.Equal(t, http.StatusBadRequest, resp.Code)
 		})
 	}
+}
+
+func TestEquipmentPmcsHistoryRequiresUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	RegisterRoutes(router.Group("/api/v1/auth"), serviceStub{})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusUnauthorized, resp.Code)
+}
+
+func TestEquipmentPmcsHistoryReturnsStandardResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("user", &bootstrap.User{UserID: "user-1"})
+		c.Next()
+	})
+	RegisterRoutes(router.Group("/api/v1/auth"), serviceStub{
+		equipmentHistoryResp: &response.EquipmentPmcsHistoryResponse{
+			Equipment: []response.EquipmentWithPmcsHistory{},
+			Count:     0,
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil)
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	var payload struct {
+		Status int `json:"status"`
+		Data   struct {
+			Equipment []response.EquipmentWithPmcsHistory `json:"equipment"`
+			Count     int                                 `json:"count"`
+		} `json:"data"`
+		Message string `json:"message"`
+	}
+	err := json.Unmarshal(resp.Body.Bytes(), &payload)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, payload.Status)
+	require.Equal(t, "Equipment PMCS history retrieved successfully", payload.Message)
+	require.Empty(t, payload.Data.Equipment)
 }

@@ -3,6 +3,7 @@ package shops_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -94,4 +95,47 @@ func TestGetEquipmentPmcsHistoryRepositoryHonorsCanceledContext(t *testing.T) {
 
 	require.Error(t, err)
 	require.True(t, errors.Is(err, context.Canceled), err.Error())
+}
+
+func TestEquipmentPmcsHistoryEndpoint(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "history-user")
+	ensureUser(t, testDB, "other-user")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "history-user", "History Shop")
+	hiddenShopID := createShop(t, router, "other-user", "Hidden Shop")
+	vehicleID := createVehicle(t, router, "history-user", shopID)
+	_ = createVehicle(t, router, "other-user", hiddenShopID)
+	_, err := testDB.Exec(`UPDATE shop_vehicle SET admin='A1', model='M1152A1', serial='SER-1', niin='000000001' WHERE id=$1`, vehicleID)
+	require.NoError(t, err)
+
+	performedDate := time.Date(2026, time.July, 16, 14, 30, 0, 0, time.UTC)
+	inspectionID := createPmcsInspection(t, testDB, vehicleID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", performedDate)
+	createPmcsFault(t, testDB, inspectionID, "before", 0)
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil, "history-user")
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	equipment := payload["equipment"].([]interface{})
+	require.Len(t, equipment, 1)
+
+	entry := equipment[0].(map[string]interface{})
+	require.Equal(t, vehicleID, entry["id"])
+	require.Equal(t, shopID, entry["shop_id"])
+	require.Equal(t, "A1", entry["admin"])
+
+	history := entry["historical_pmcs"].([]interface{})
+	require.Len(t, history, 1)
+	inspection := history[0].(map[string]interface{})
+	require.Equal(t, inspectionID, inspection["id"])
+	require.Equal(t, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", inspection["guide_manual"])
+	require.Equal(t, float64(1), inspection["fault_count"])
+}
+
+func TestEquipmentPmcsHistoryEndpointRequiresAuthentication(t *testing.T) {
+	router := newTestRouter(t)
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil, "")
+	require.Equal(t, http.StatusUnauthorized, resp.Code)
 }

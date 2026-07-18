@@ -219,6 +219,25 @@ func (s *ServiceImpl) GetBootstrap(ctx context.Context, user *bootstrap.User, op
 	return &response.ShopsBootstrapResponse{Shops: shops}, nil
 }
 
+func (s *ServiceImpl) GetEquipmentPmcsHistory(ctx context.Context, user *bootstrap.User) (*response.EquipmentPmcsHistoryResponse, error) {
+	if user == nil {
+		return nil, ErrUnauthorized
+	}
+	equipment, err := s.repo.GetEquipmentPmcsHistory(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
+	}
+	if equipment == nil {
+		equipment = []response.EquipmentWithPmcsHistory{}
+	}
+	for i := range equipment {
+		if equipment[i].HistoricalPmcs == nil {
+			equipment[i].HistoricalPmcs = []response.PmcsHistorySummary{}
+		}
+	}
+	return &response.EquipmentPmcsHistoryResponse{Equipment: equipment, Count: len(equipment)}, nil
+}
+
 func normalizeShopSnapshot(result *response.ShopSnapshotResponse) {
 	if result == nil {
 		return

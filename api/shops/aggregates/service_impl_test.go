@@ -50,13 +50,15 @@ func (a authStubForService) RequireShopAdmin(*bootstrap.User, string) error {
 }
 
 type repositoryStubForService struct {
-	listsResp     []response.ShopListWithItems
-	listsErr      error
-	vehicleResp   *model.ShopVehicle
-	vehicleErr    error
-	notifications []response.VehicleNotificationWithItems
-	changes       []response.NotificationChangeWithUsername
-	services      []response.EquipmentServiceResponse
+	listsResp            []response.ShopListWithItems
+	listsErr             error
+	vehicleResp          *model.ShopVehicle
+	vehicleErr           error
+	notifications        []response.VehicleNotificationWithItems
+	changes              []response.NotificationChangeWithUsername
+	services             []response.EquipmentServiceResponse
+	equipmentHistoryResp []response.EquipmentWithPmcsHistory
+	equipmentHistoryErr  error
 }
 
 func (r repositoryStubForService) GetListsWithItems(context.Context, *bootstrap.User, string, ListTreeLimits) ([]response.ShopListWithItems, error) {
@@ -85,6 +87,10 @@ func (r repositoryStubForService) GetShopSnapshot(context.Context, *bootstrap.Us
 
 func (r repositoryStubForService) GetBootstrap(context.Context, *bootstrap.User, BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
 	return nil, errors.New("unexpected GetBootstrap call")
+}
+
+func (r repositoryStubForService) GetEquipmentPmcsHistory(context.Context, *bootstrap.User) ([]response.EquipmentWithPmcsHistory, error) {
+	return r.equipmentHistoryResp, r.equipmentHistoryErr
 }
 
 func TestGetListsWithItemsMapsOnlyAccessDeniedAuthErrorsToAccessDenied(t *testing.T) {
@@ -154,5 +160,50 @@ func TestGetVehicleMaintenanceSnapshotHandlesNilVehicle(t *testing.T) {
 	require.NotPanics(t, func() {
 		_, err = service.GetVehicleMaintenanceSnapshot(context.Background(), &bootstrap.User{UserID: "user-1"}, "vehicle-1", SnapshotLimits{})
 	})
+	require.ErrorIs(t, err, ErrAggregateUnavailable)
+}
+
+func TestGetEquipmentPmcsHistoryRequiresAuth(t *testing.T) {
+	service := NewService(repositoryStubForService{}, authStubForService{})
+
+	_, err := service.GetEquipmentPmcsHistory(context.Background(), nil)
+
+	require.ErrorIs(t, err, ErrUnauthorized)
+}
+
+func TestGetEquipmentPmcsHistoryReturnsRepositoryResult(t *testing.T) {
+	expected := []response.EquipmentWithPmcsHistory{
+		{
+			ShopEquipmentSummary: response.ShopEquipmentSummary{ID: "vehicle-1", Admin: "A1", Model: "M1", Serial: "S1", Niin: "N1"},
+			ShopID:               "shop-1",
+			HistoricalPmcs:       []response.PmcsHistorySummary{{GuideManual: "pmcs_sbs/hmmwv/file.json"}},
+		},
+	}
+	service := NewService(repositoryStubForService{equipmentHistoryResp: expected}, authStubForService{})
+
+	result, err := service.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "user-1"})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Count)
+	require.Equal(t, expected, result.Equipment)
+}
+
+func TestGetEquipmentPmcsHistoryNormalizesNilSlices(t *testing.T) {
+	service := NewService(repositoryStubForService{equipmentHistoryResp: []response.EquipmentWithPmcsHistory{
+		{ShopEquipmentSummary: response.ShopEquipmentSummary{ID: "vehicle-1"}, ShopID: "shop-1", HistoricalPmcs: nil},
+	}}, authStubForService{})
+
+	result, err := service.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "user-1"})
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Equipment[0].HistoricalPmcs)
+	require.Empty(t, result.Equipment[0].HistoricalPmcs)
+}
+
+func TestGetEquipmentPmcsHistoryWrapsRepositoryError(t *testing.T) {
+	service := NewService(repositoryStubForService{equipmentHistoryErr: errors.New("db exploded")}, authStubForService{})
+
+	_, err := service.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "user-1"})
+
 	require.ErrorIs(t, err, ErrAggregateUnavailable)
 }

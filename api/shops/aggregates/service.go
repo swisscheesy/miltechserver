@@ -41,4 +41,5 @@ type Service interface {
 	GetVehicleMaintenanceSnapshot(ctx context.Context, user *bootstrap.User, vehicleID string, limits SnapshotLimits) (*response.VehicleMaintenanceSnapshotResponse, error)
 	GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error)
 	GetBootstrap(ctx context.Context, user *bootstrap.User, options BootstrapOptions) (*response.ShopsBootstrapResponse, error)
+	GetEquipmentPmcsHistory(ctx context.Context, user *bootstrap.User) (*response.EquipmentPmcsHistoryResponse, error)
 }
