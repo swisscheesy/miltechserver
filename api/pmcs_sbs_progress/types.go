@@ -59,7 +59,7 @@ type InspectionResponse struct {
 	EquipmentID   string          `json:"equipment_id"`
 	GuideManual   string          `json:"guide_manual"`
 	PerformedDate time.Time       `json:"performed_date"`
-	CreatedBy     *string         `json:"created_by,omitempty"`
+	PerformedBy   *string         `json:"performed_by,omitempty"`
 	CreatedAt     time.Time       `json:"created_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
 	Faults        []FaultResponse `json:"faults"`

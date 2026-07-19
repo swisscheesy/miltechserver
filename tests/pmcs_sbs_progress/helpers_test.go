@@ -125,14 +125,14 @@ func createShopVehicle(t *testing.T, db *sql.DB, shopID string, creator *bootstr
 	return vehicleID
 }
 
-func sampleInspection(equipmentID string, createdBy string) model.PmcsSbsInspections {
-	createdByCopy := createdBy
+func sampleInspection(equipmentID string, performedBy string) model.PmcsSbsInspections {
+	performedByCopy := performedBy
 	return model.PmcsSbsInspections{
 		ID:            uuid.New(),
 		EquipmentID:   equipmentID,
 		GuideManual:   "pmcs_sbs/hmmwv/file.json",
 		PerformedDate: time.Now().UTC(),
-		CreatedBy:     &createdByCopy,
+		PerformedBy:   &performedByCopy,
 	}
 }
 

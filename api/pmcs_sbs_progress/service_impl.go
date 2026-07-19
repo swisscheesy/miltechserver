@@ -182,13 +182,13 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 		return model.PmcsSbsInspections{}, ErrInvalidRequest
 	}
 
-	createdBy := strings.TrimSpace(userID)
+	performedBy := strings.TrimSpace(userID)
 	return model.PmcsSbsInspections{
 		ID:            parsedPmcsID,
 		EquipmentID:   trimmedEquipmentID,
 		GuideManual:   guideManual,
 		PerformedDate: req.PerformedDate.UTC(),
-		CreatedBy:     &createdBy,
+		PerformedBy:   &performedBy,
 	}, nil
 }
 
@@ -341,7 +341,7 @@ func mapInspection(row model.PmcsSbsInspections, faultRows []model.PmcsSbsFaults
 		EquipmentID:   row.EquipmentID,
 		GuideManual:   row.GuideManual,
 		PerformedDate: row.PerformedDate,
-		CreatedBy:     row.CreatedBy,
+		PerformedBy:   row.PerformedBy,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 		Faults:        faults,

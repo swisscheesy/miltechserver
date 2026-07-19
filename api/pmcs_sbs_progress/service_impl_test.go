@@ -140,13 +140,13 @@ func TestEnsureInspectionRejectsInvalidValues(t *testing.T) {
 }
 
 func TestEnsureInspectionMapsResponse(t *testing.T) {
-	createdBy := "user-1"
+	performedBy := "user-1"
 	stub := &repoStub{inspection: &model.PmcsSbsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
 		GuideManual:   "pmcs_sbs/hmmwv/file.json",
 		PerformedDate: time.Now().UTC(),
-		CreatedBy:     &createdBy,
+		PerformedBy:   &performedBy,
 	}}
 	svc := NewService(stub)
 
@@ -158,8 +158,8 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, samplePmcsID(), resp.ID)
 	require.Equal(t, "vehicle-1", stub.capturedInspection.EquipmentID)
-	require.NotNil(t, stub.capturedInspection.CreatedBy)
-	require.Equal(t, "user-1", *stub.capturedInspection.CreatedBy)
+	require.NotNil(t, stub.capturedInspection.PerformedBy)
+	require.Equal(t, "user-1", *stub.capturedInspection.PerformedBy)
 	require.Empty(t, resp.Faults)
 }
 

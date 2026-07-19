@@ -24,8 +24,8 @@ func TestRepositoryEnsureInspectionCreatesRecord(t *testing.T) {
 	require.Equal(t, inspection.ID, saved.ID)
 	require.Equal(t, vehicleID, saved.EquipmentID)
 	require.Equal(t, "pmcs_sbs/hmmwv/file.json", saved.GuideManual)
-	require.NotNil(t, saved.CreatedBy)
-	require.Equal(t, user.UserID, *saved.CreatedBy)
+	require.NotNil(t, saved.PerformedBy)
+	require.Equal(t, user.UserID, *saved.PerformedBy)
 }
 
 func TestRepositoryEnsureInspectionIsIdempotentAndUpdatesPerformedDate(t *testing.T) {

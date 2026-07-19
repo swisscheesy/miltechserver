@@ -328,9 +328,9 @@ func (repo *RepositoryImpl) requireInspectionOwnership(queryable qrm.Queryable, 
 // qrm.Queryable.
 func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
 	now := time.Now().UTC()
-	var createdByExpr Expression = NULL
-	if inspection.CreatedBy != nil {
-		createdByExpr = String(*inspection.CreatedBy)
+	var performedByExpr Expression = NULL
+	if inspection.PerformedBy != nil {
+		performedByExpr = String(*inspection.PerformedBy)
 	}
 
 	stmt := PmcsSbsInspections.INSERT(
@@ -338,7 +338,7 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		PmcsSbsInspections.EquipmentID,
 		PmcsSbsInspections.GuideManual,
 		PmcsSbsInspections.PerformedDate,
-		PmcsSbsInspections.CreatedBy,
+		PmcsSbsInspections.PerformedBy,
 		PmcsSbsInspections.CreatedAt,
 		PmcsSbsInspections.UpdatedAt,
 	).VALUES(
@@ -346,7 +346,7 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		String(inspection.EquipmentID),
 		String(inspection.GuideManual),
 		TimestampzT(inspection.PerformedDate),
-		createdByExpr,
+		performedByExpr,
 		TimestampzT(now),
 		TimestampzT(now),
 	).ON_CONFLICT(PmcsSbsInspections.ID).DO_UPDATE(
