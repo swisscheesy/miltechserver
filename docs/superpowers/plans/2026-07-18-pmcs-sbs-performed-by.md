@@ -181,12 +181,9 @@ go build ./.gen/... 2>&1 | head -20
 ```
 Expected: no errors (this only builds the generated package in isolation; `miltechserver/api/...` won't build again until Task 3 renames its own references — that's expected and fine here).
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Do not commit — `.gen/miltech_ng/` is gitignored and untracked by convention**
 
-```bash
-git add .gen/miltech_ng/public/model/pmcs_sbs_inspections.go .gen/miltech_ng/public/table/pmcs_sbs_inspections.go
-git commit -m "chore(pmcs-sbs): regenerate jet models for performed_by rename"
-```
+`.gitignore:162` excludes `miltech_ng/`, and none of the ~218 files under `.gen/miltech_ng/` have ever been tracked in this repo — not even when `pmcs_sbs_inspections` itself was first created. The Dockerfile's `COPY . .` build step relies on `.gen/` already being present on disk locally, not on git tracking it. Leave the two regenerated files as local, untracked, on-disk changes (`git status` will show them as untracked/ignored, not staged) — later tasks and this session's tests read them directly from disk. Do not `git add -f` them.
 
 ---
 
