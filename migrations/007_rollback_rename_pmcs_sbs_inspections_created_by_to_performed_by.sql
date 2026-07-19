@@ -1,0 +1,4 @@
+-- Rollback: 007_rollback_rename_pmcs_sbs_inspections_created_by_to_performed_by.sql
+
+ALTER TABLE pmcs_sbs_inspections RENAME CONSTRAINT fk_pmcs_sbs_inspections_performed_by TO fk_pmcs_sbs_inspections_created_by;
+ALTER TABLE pmcs_sbs_inspections RENAME COLUMN performed_by TO created_by;
