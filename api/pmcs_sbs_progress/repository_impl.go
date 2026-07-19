@@ -30,20 +30,26 @@ func (repo *RepositoryImpl) EnsureInspection(user *bootstrap.User, inspection mo
 	return ensureInspection(repo.db, inspection)
 }
 
-func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*model.PmcsSbsInspections, []model.PmcsSbsFaults, error) {
+func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, error) {
 	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
 		return nil, nil, err
 	}
 
-	var inspection model.PmcsSbsInspections
-	stmt := SELECT(PmcsSbsInspections.AllColumns).
-		FROM(PmcsSbsInspections).
+	var row struct {
+		model.PmcsSbsInspections
+		PerformedByUsername *string `sql:"performed_by_username"`
+	}
+	stmt := SELECT(
+		PmcsSbsInspections.AllColumns,
+		Users.Username.AS("performed_by_username"),
+	).
+		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(
 			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
 				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
 		)
 
-	if err := stmt.Query(repo.db, &inspection); err != nil {
+	if err := stmt.Query(repo.db, &row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
 			return nil, nil, ErrInspectionNotFound
 		}
@@ -60,7 +66,7 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		return nil, nil, fmt.Errorf("list pmcs sbs inspection faults: %w", err)
 	}
 
-	return &inspection, faults, nil
+	return &InspectionDetail{PmcsSbsInspections: row.PmcsSbsInspections, PerformedByUsername: row.PerformedByUsername}, faults, nil
 }
 
 func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID string, guideManual string, limit int, offset int) ([]InspectionSummary, error) {
@@ -318,6 +324,24 @@ func (repo *RepositoryImpl) requireInspectionOwnership(queryable qrm.Queryable, 
 		return ErrInspectionNotFound
 	}
 	return nil
+}
+
+func (repo *RepositoryImpl) LookupUsername(userID string) (*string, error) {
+	var row struct {
+		Username *string `sql:"username"`
+	}
+	stmt := SELECT(Users.Username.AS("username")).
+		FROM(Users).
+		WHERE(Users.UID.EQ(String(userID))).
+		LIMIT(1)
+
+	if err := stmt.Query(repo.db, &row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("lookup username: %w", err)
+	}
+	return row.Username, nil
 }
 
 // ensureInspection inserts the inspection if it doesn't exist yet, or, if a

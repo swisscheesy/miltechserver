@@ -35,8 +35,28 @@ func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID s
 	if err != nil {
 		return nil, err
 	}
-	resp := mapInspection(*saved, nil)
+	performedByUsername, err := service.resolvePerformedByUsername(user, saved.PerformedBy)
+	if err != nil {
+		return nil, err
+	}
+	resp := mapInspection(*saved, performedByUsername, nil)
 	return &resp, nil
+}
+
+// resolvePerformedByUsername avoids a DB round trip in the common case: when
+// the sticky performed_by owner is the caller themselves, their username is
+// already on the auth token (bootstrap.User.Username). Only when a save
+// touches an inspection whose sticky owner is a *different* user does this
+// fall back to a single-row lookup.
+func (service *ServiceImpl) resolvePerformedByUsername(user *bootstrap.User, performedBy *string) (*string, error) {
+	if performedBy == nil {
+		return nil, nil
+	}
+	if *performedBy == user.UserID {
+		username := user.Username
+		return &username, nil
+	}
+	return service.repository.LookupUsername(*performedBy)
 }
 
 func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
@@ -52,11 +72,11 @@ func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		return nil, err
 	}
 
-	inspection, faults, err := service.repository.GetInspection(user, trimmedEquipmentID, parsedPmcsID)
+	detail, faults, err := service.repository.GetInspection(user, trimmedEquipmentID, parsedPmcsID)
 	if err != nil {
 		return nil, err
 	}
-	resp := mapInspection(*inspection, faults)
+	resp := mapInspection(detail.PmcsSbsInspections, detail.PerformedByUsername, faults)
 	return &resp, nil
 }
 
@@ -331,19 +351,20 @@ func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	}
 }
 
-func mapInspection(row model.PmcsSbsInspections, faultRows []model.PmcsSbsFaults) InspectionResponse {
+func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, faultRows []model.PmcsSbsFaults) InspectionResponse {
 	faults := make([]FaultResponse, 0, len(faultRows))
 	for _, faultRow := range faultRows {
 		faults = append(faults, mapFault(faultRow))
 	}
 	return InspectionResponse{
-		ID:            row.ID,
-		EquipmentID:   row.EquipmentID,
-		GuideManual:   row.GuideManual,
-		PerformedDate: row.PerformedDate,
-		PerformedBy:   row.PerformedBy,
-		CreatedAt:     row.CreatedAt,
-		UpdatedAt:     row.UpdatedAt,
-		Faults:        faults,
+		ID:                  row.ID,
+		EquipmentID:         row.EquipmentID,
+		GuideManual:         row.GuideManual,
+		PerformedDate:       row.PerformedDate,
+		PerformedBy:         row.PerformedBy,
+		PerformedByUsername: performedByUsername,
+		CreatedAt:           row.CreatedAt,
+		UpdatedAt:           row.UpdatedAt,
+		Faults:              faults,
 	}
 }

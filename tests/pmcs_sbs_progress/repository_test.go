@@ -213,6 +213,57 @@ func TestRepositoryGetInspectionRejectsCrossVehiclePmcsID(t *testing.T) {
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
 }
 
+func TestRepositoryGetInspectionIncludesPerformedByUsername(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-get-username")
+	user.Username = "jsmith"
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B17")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	detail, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.NotNil(t, detail.PerformedBy)
+	require.Equal(t, user.UserID, *detail.PerformedBy)
+	require.NotNil(t, detail.PerformedByUsername)
+	require.Equal(t, "jsmith", *detail.PerformedByUsername)
+}
+
+func TestRepositoryGetInspectionReturnsNilUsernameWhenPerformerDeleted(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	performer := testUser("pmcs-del-performer")
+	viewer := testUser("pmcs-get-deleted-viewer")
+	ensureUser(t, testDB, performer)
+	ensureUser(t, testDB, viewer)
+	// viewer, not performer, creates the shop and the vehicle: shops.created_by
+	// is a NO ACTION (restrict) foreign key to users(uid), and
+	// shop_vehicle.creator_id is NOT NULL despite its ON DELETE SET NULL
+	// action, so the row we're about to delete below can't be the creator of
+	// either. performer only appears as a shop_members row (CASCADE) and as
+	// the inspection's performed_by (SET NULL).
+	shopID := createShopWithMember(t, testDB, viewer, "member")
+	addShopMember(t, testDB, shopID, performer, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, viewer, "B18")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, performer.UserID)
+	_, err := repo.EnsureInspection(performer, inspection)
+	require.NoError(t, err)
+
+	_, err = testDB.Exec(`DELETE FROM users WHERE uid=$1`, performer.UserID)
+	require.NoError(t, err)
+
+	detail, _, err := repo.GetInspection(viewer, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Nil(t, detail.PerformedBy)
+	require.Nil(t, detail.PerformedByUsername)
+}
+
 func TestRepositoryListInspectionsOrdersByPerformedDateDescWithFaultCounts(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-list-order")

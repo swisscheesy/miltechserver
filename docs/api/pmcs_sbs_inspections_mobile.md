@@ -49,7 +49,8 @@ different `equipment_id`) for an existing inspection returns `409`.
 | `equipment_id` | string | Returned by the server. |
 | `guide_manual` | string | Required on create; immutable after. |
 | `performed_date` | string | ISO timestamp; required, client-supplied. |
-| `created_by` | string, nullable | User id who first created the inspection. |
+| `performed_by` | string, nullable | User id who performed the inspection. |
+| `performed_by_username` | string, nullable | Username of `performed_by`. Omitted (not `null`) alongside `performed_by` when there is no value. |
 | `created_at` / `updated_at` | string | ISO timestamps; response only. |
 | `faults` | array | Present on the single-inspection `GET`; omitted from the list endpoint. |
 

@@ -75,7 +75,8 @@ Success response (`200`):
     "equipment_id": "550e8400-e29b-41d4-a716-446655440000",
     "guide_manual": "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json",
     "performed_date": "2026-07-16T14:30:00Z",
-    "created_by": "9f1c3a2e-user-uid",
+    "performed_by": "9f1c3a2e-user-uid",
+    "performed_by_username": "jsmith",
     "created_at": "2026-07-16T14:31:02.123456Z",
     "updated_at": "2026-07-16T14:31:02.123456Z",
     "faults": []
@@ -98,7 +99,8 @@ Success response (`200`):
     "equipment_id": "550e8400-e29b-41d4-a716-446655440000",
     "guide_manual": "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json",
     "performed_date": "2026-07-16T14:30:00Z",
-    "created_by": "9f1c3a2e-user-uid",
+    "performed_by": "9f1c3a2e-user-uid",
+    "performed_by_username": "jsmith",
     "created_at": "2026-07-16T14:31:02.123456Z",
     "updated_at": "2026-07-16T14:45:18.987654Z",
     "faults": [
@@ -345,7 +347,8 @@ Error responses: `401` (`{"message":"unauthorized"}`) for missing/invalid authen
 | `equipment_id` | string | The vehicle this inspection belongs to. |
 | `guide_manual` | string | Set on first use of this `pmcs_id`; immutable after. |
 | `performed_date` | string (ISO 8601 timestamp) | Always client-supplied. |
-| `created_by` | string (nullable) | User id who first created the inspection. This field is **omitted entirely** from the response JSON when there is no value (not `null`, simply absent). |
+| `performed_by` | string (nullable) | User id who performed the inspection. This field is **omitted entirely** from the response JSON when there is no value (not `null`, simply absent). |
+| `performed_by_username` | string (nullable) | Username of `performed_by`. Follows the same omitted-when-nil rule. |
 | `created_at` / `updated_at` | string (ISO 8601 timestamp) | Server-assigned, response only. |
 | `faults` | array of Fault Object | Present on the single-inspection `GET`. Not present on the list endpoint. |
 

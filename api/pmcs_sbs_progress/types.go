@@ -55,14 +55,15 @@ type FaultResponse struct {
 }
 
 type InspectionResponse struct {
-	ID            uuid.UUID       `json:"id"`
-	EquipmentID   string          `json:"equipment_id"`
-	GuideManual   string          `json:"guide_manual"`
-	PerformedDate time.Time       `json:"performed_date"`
-	PerformedBy   *string         `json:"performed_by,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	Faults        []FaultResponse `json:"faults"`
+	ID                  uuid.UUID       `json:"id"`
+	EquipmentID         string          `json:"equipment_id"`
+	GuideManual         string          `json:"guide_manual"`
+	PerformedDate       time.Time       `json:"performed_date"`
+	PerformedBy         *string         `json:"performed_by,omitempty"`
+	PerformedByUsername *string         `json:"performed_by_username,omitempty"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+	Faults              []FaultResponse `json:"faults"`
 }
 
 type InspectionSummaryResponse struct {

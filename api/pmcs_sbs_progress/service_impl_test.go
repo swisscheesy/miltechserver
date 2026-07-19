@@ -13,23 +13,29 @@ import (
 )
 
 type repoStub struct {
-	inspection    *model.PmcsSbsInspections
-	faults        []model.PmcsSbsFaults
-	summaries     []InspectionSummary
-	savedFault    *model.PmcsSbsFaults
-	deletedCount  int64
-	err           error
+	inspection     *model.PmcsSbsInspections
+	detailUsername *string
+	faults         []model.PmcsSbsFaults
+	summaries      []InspectionSummary
+	savedFault     *model.PmcsSbsFaults
+	deletedCount   int64
+	err            error
 
-	capturedUser        *bootstrap.User
-	capturedEquipmentID string
-	capturedPmcsID      uuid.UUID
-	capturedGuideManual string
-	capturedLimit       int
-	capturedOffset      int
-	capturedInspection  model.PmcsSbsInspections
-	capturedFault       model.PmcsSbsFaults
-	capturedDelete      FaultKey
-	capturedBulkKeys    []FaultKey
+	lookupUsernameResult *string
+	lookupUsernameErr    error
+	lookupUsernameCalls  int
+
+	capturedUser             *bootstrap.User
+	capturedEquipmentID      string
+	capturedPmcsID           uuid.UUID
+	capturedGuideManual      string
+	capturedLimit            int
+	capturedOffset           int
+	capturedInspection       model.PmcsSbsInspections
+	capturedFault            model.PmcsSbsFaults
+	capturedDelete           FaultKey
+	capturedBulkKeys         []FaultKey
+	capturedLookupUsernameID string
 }
 
 func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
@@ -41,11 +47,20 @@ func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.Pm
 	return &inspection, repo.err
 }
 
-func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*model.PmcsSbsInspections, []model.PmcsSbsFaults, error) {
+func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, error) {
 	repo.capturedUser = user
 	repo.capturedEquipmentID = equipmentID
 	repo.capturedPmcsID = pmcsID
-	return repo.inspection, repo.faults, repo.err
+	if repo.inspection == nil {
+		return nil, repo.faults, repo.err
+	}
+	return &InspectionDetail{PmcsSbsInspections: *repo.inspection, PerformedByUsername: repo.detailUsername}, repo.faults, repo.err
+}
+
+func (repo *repoStub) LookupUsername(userID string) (*string, error) {
+	repo.lookupUsernameCalls++
+	repo.capturedLookupUsernameID = userID
+	return repo.lookupUsernameResult, repo.lookupUsernameErr
 }
 
 func (repo *repoStub) ListInspections(user *bootstrap.User, equipmentID string, guideManual string, limit int, offset int) ([]InspectionSummary, error) {
@@ -161,6 +176,57 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	require.NotNil(t, stub.capturedInspection.PerformedBy)
 	require.Equal(t, "user-1", *stub.capturedInspection.PerformedBy)
 	require.Empty(t, resp.Faults)
+}
+
+func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *testing.T) {
+	performedBy := "user-1"
+	stub := &repoStub{inspection: &model.PmcsSbsInspections{
+		ID:            samplePmcsID(),
+		EquipmentID:   "vehicle-1",
+		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		PerformedDate: time.Now().UTC(),
+		PerformedBy:   &performedBy,
+	}}
+	svc := NewService(stub)
+	user := &bootstrap.User{UserID: "user-1", Username: "jsmith"}
+
+	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
+		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		PerformedDate: time.Now(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.PerformedByUsername)
+	require.Equal(t, "jsmith", *resp.PerformedByUsername)
+	require.Equal(t, 0, stub.lookupUsernameCalls)
+}
+
+func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiffers(t *testing.T) {
+	performedBy := "original-user"
+	lookupResult := "original-username"
+	stub := &repoStub{
+		inspection: &model.PmcsSbsInspections{
+			ID:            samplePmcsID(),
+			EquipmentID:   "vehicle-1",
+			GuideManual:   "pmcs_sbs/hmmwv/file.json",
+			PerformedDate: time.Now().UTC(),
+			PerformedBy:   &performedBy,
+		},
+		lookupUsernameResult: &lookupResult,
+	}
+	svc := NewService(stub)
+	user := &bootstrap.User{UserID: "editor-user", Username: "editor"}
+
+	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
+		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		PerformedDate: time.Now(),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.PerformedByUsername)
+	require.Equal(t, "original-username", *resp.PerformedByUsername)
+	require.Equal(t, 1, stub.lookupUsernameCalls)
+	require.Equal(t, "original-user", stub.capturedLookupUsernameID)
 }
 
 func TestGetInspectionRejectsInvalidPmcsID(t *testing.T) {
