@@ -1199,9 +1199,15 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		equipmentIDs = append(equipmentIDs, String(row.ID))
 	}
 
-	var inspections []model.PmcsSbsInspections
-	inspectionsStmt := SELECT(PmcsSbsInspections.AllColumns).
-		FROM(PmcsSbsInspections).
+	var inspections []struct {
+		model.PmcsSbsInspections
+		PerformedByUsername *string `sql:"performed_by_username"`
+	}
+	inspectionsStmt := SELECT(
+		PmcsSbsInspections.AllColumns,
+		Users.Username.AS("performed_by_username"),
+	).
+		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(PmcsSbsInspections.EquipmentID.IN(equipmentIDs...)).
 		ORDER_BY(PmcsSbsInspections.EquipmentID.ASC(), PmcsSbsInspections.PerformedDate.DESC())
 
@@ -1238,11 +1244,13 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
 	for _, inspection := range inspections {
 		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
-			ID:            inspection.ID,
-			GuideManual:   inspection.GuideManual,
-			PerformedDate: inspection.PerformedDate,
-			FaultCount:    faultCountByInspectionID[inspection.ID],
-			CreatedAt:     inspection.CreatedAt,
+			ID:                  inspection.ID,
+			GuideManual:         inspection.GuideManual,
+			PerformedDate:       inspection.PerformedDate,
+			FaultCount:          faultCountByInspectionID[inspection.ID],
+			CreatedAt:           inspection.CreatedAt,
+			PerformedBy:         inspection.PerformedBy,
+			PerformedByUsername: inspection.PerformedByUsername,
 		})
 	}
 

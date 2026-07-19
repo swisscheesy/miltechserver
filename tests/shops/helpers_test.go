@@ -310,15 +310,15 @@ func createMessage(t *testing.T, router *gin.Engine, userID string, shopID strin
 	return messageID
 }
 
-func createPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, guideManual string, performedDate time.Time) string {
+func createPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, guideManual string, performedDate time.Time, performedBy string) string {
 	t.Helper()
 
 	id := uuid.New().String()
 	now := time.Now().UTC()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, guide_manual, performed_date, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $5)`,
-		id, equipmentID, guideManual, performedDate, now,
+		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, guide_manual, performed_date, performed_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+		id, equipmentID, guideManual, performedDate, performedBy, now,
 	)
 	require.NoError(t, err)
 	return id

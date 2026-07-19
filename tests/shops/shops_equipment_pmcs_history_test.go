@@ -38,10 +38,10 @@ func TestGetEquipmentPmcsHistoryRepository(t *testing.T) {
 
 	newerTime := time.Date(2026, time.July, 16, 14, 30, 0, 0, time.UTC)
 	olderTime := newerTime.Add(-7 * 24 * time.Hour)
-	newerInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", newerTime)
+	newerInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", newerTime, "history-user")
 	createPmcsFault(t, testDB, newerInspectionID, "before", 0)
 	createPmcsFault(t, testDB, newerInspectionID, "during", 1)
-	olderInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", olderTime)
+	olderInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", olderTime, "history-user")
 
 	repository := aggregates.NewRepository(testDB)
 	equipment, err := repository.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "history-user"})
@@ -111,7 +111,7 @@ func TestEquipmentPmcsHistoryEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	performedDate := time.Date(2026, time.July, 16, 14, 30, 0, 0, time.UTC)
-	inspectionID := createPmcsInspection(t, testDB, vehicleID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", performedDate)
+	inspectionID := createPmcsInspection(t, testDB, vehicleID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", performedDate, "history-user")
 	createPmcsFault(t, testDB, inspectionID, "before", 0)
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil, "history-user")
@@ -132,6 +132,33 @@ func TestEquipmentPmcsHistoryEndpoint(t *testing.T) {
 	require.Equal(t, inspectionID, inspection["id"])
 	require.Equal(t, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", inspection["guide_manual"])
 	require.Equal(t, float64(1), inspection["fault_count"])
+	require.Equal(t, "history-user", inspection["performed_by"])
+	require.Equal(t, "test-user", inspection["performed_by_username"])
+}
+
+func TestGetEquipmentPmcsHistoryRepositoryIncludesPerformedByUsername(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "history-user")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "history-user", "History Shop")
+	vehicleID := createVehicle(t, router, "history-user", shopID)
+
+	performedDate := time.Date(2026, time.July, 16, 14, 30, 0, 0, time.UTC)
+	inspectionID := createPmcsInspection(t, testDB, vehicleID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", performedDate, "history-user")
+
+	repository := aggregates.NewRepository(testDB)
+	equipment, err := repository.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "history-user"})
+
+	require.NoError(t, err)
+	require.Len(t, equipment, 1)
+	require.Len(t, equipment[0].HistoricalPmcs, 1)
+	entry := equipment[0].HistoricalPmcs[0]
+	require.Equal(t, inspectionID, entry.ID.String())
+	require.NotNil(t, entry.PerformedBy)
+	require.Equal(t, "history-user", *entry.PerformedBy)
+	require.NotNil(t, entry.PerformedByUsername)
+	require.Equal(t, "test-user", *entry.PerformedByUsername)
 }
 
 func TestEquipmentPmcsHistoryEndpointRequiresAuthentication(t *testing.T) {
