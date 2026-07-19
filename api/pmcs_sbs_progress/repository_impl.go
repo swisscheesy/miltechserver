@@ -79,9 +79,15 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		condition = condition.AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual)))
 	}
 
-	var inspections []model.PmcsSbsInspections
-	stmt := SELECT(PmcsSbsInspections.AllColumns).
-		FROM(PmcsSbsInspections).
+	var inspections []struct {
+		model.PmcsSbsInspections
+		PerformedByUsername *string `sql:"performed_by_username"`
+	}
+	stmt := SELECT(
+		PmcsSbsInspections.AllColumns,
+		Users.Username.AS("performed_by_username"),
+	).
+		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(condition).
 		ORDER_BY(PmcsSbsInspections.PerformedDate.DESC()).
 		LIMIT(int64(limit)).
@@ -122,11 +128,13 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 	summaries := make([]InspectionSummary, 0, len(inspections))
 	for _, inspection := range inspections {
 		summaries = append(summaries, InspectionSummary{
-			ID:            inspection.ID,
-			GuideManual:   inspection.GuideManual,
-			PerformedDate: inspection.PerformedDate,
-			FaultCount:    countByID[inspection.ID],
-			CreatedAt:     inspection.CreatedAt,
+			ID:                  inspection.ID,
+			GuideManual:         inspection.GuideManual,
+			PerformedDate:       inspection.PerformedDate,
+			FaultCount:          countByID[inspection.ID],
+			CreatedAt:           inspection.CreatedAt,
+			PerformedBy:         inspection.PerformedBy,
+			PerformedByUsername: inspection.PerformedByUsername,
 		})
 	}
 	return summaries, nil

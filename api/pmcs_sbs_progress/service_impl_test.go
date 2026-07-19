@@ -276,8 +276,10 @@ func TestListInspectionsValidatesGuideManualFilterWhenProvided(t *testing.T) {
 
 func TestListInspectionsMapsSummaries(t *testing.T) {
 	now := time.Now().UTC()
+	performedBy := "user-1"
+	performedByUsername := "jsmith"
 	stub := &repoStub{summaries: []InspectionSummary{
-		{ID: samplePmcsID(), GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, FaultCount: 2, CreatedAt: now},
+		{ID: samplePmcsID(), GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, FaultCount: 2, CreatedAt: now, PerformedBy: &performedBy, PerformedByUsername: &performedByUsername},
 	}}
 	svc := NewService(stub)
 
@@ -286,6 +288,10 @@ func TestListInspectionsMapsSummaries(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.Count)
 	require.Equal(t, 2, resp.Inspections[0].FaultCount)
+	require.NotNil(t, resp.Inspections[0].PerformedBy)
+	require.Equal(t, "user-1", *resp.Inspections[0].PerformedBy)
+	require.NotNil(t, resp.Inspections[0].PerformedByUsername)
+	require.Equal(t, "jsmith", *resp.Inspections[0].PerformedByUsername)
 }
 
 func TestDeleteInspectionValidatesPmcsID(t *testing.T) {

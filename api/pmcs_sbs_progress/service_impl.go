@@ -114,11 +114,13 @@ func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID st
 	responses := make([]InspectionSummaryResponse, 0, len(summaries))
 	for _, summary := range summaries {
 		responses = append(responses, InspectionSummaryResponse{
-			ID:            summary.ID,
-			GuideManual:   summary.GuideManual,
-			PerformedDate: summary.PerformedDate,
-			FaultCount:    summary.FaultCount,
-			CreatedAt:     summary.CreatedAt,
+			ID:                  summary.ID,
+			GuideManual:         summary.GuideManual,
+			PerformedDate:       summary.PerformedDate,
+			FaultCount:          summary.FaultCount,
+			CreatedAt:           summary.CreatedAt,
+			PerformedBy:         summary.PerformedBy,
+			PerformedByUsername: summary.PerformedByUsername,
 		})
 	}
 	return &InspectionListResponse{Inspections: responses, Count: len(responses)}, nil

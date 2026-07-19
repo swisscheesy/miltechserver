@@ -264,6 +264,28 @@ func TestRepositoryGetInspectionReturnsNilUsernameWhenPerformerDeleted(t *testin
 	require.Nil(t, detail.PerformedByUsername)
 }
 
+func TestRepositoryListInspectionsIncludesPerformedByUsername(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-list-username")
+	user.Username = "jsmith"
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B19")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	summaries, err := repo.ListInspections(user, vehicleID, "", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.NotNil(t, summaries[0].PerformedBy)
+	require.Equal(t, user.UserID, *summaries[0].PerformedBy)
+	require.NotNil(t, summaries[0].PerformedByUsername)
+	require.Equal(t, "jsmith", *summaries[0].PerformedByUsername)
+}
+
 func TestRepositoryListInspectionsOrdersByPerformedDateDescWithFaultCounts(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-list-order")

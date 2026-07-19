@@ -67,11 +67,13 @@ type InspectionResponse struct {
 }
 
 type InspectionSummaryResponse struct {
-	ID            uuid.UUID `json:"id"`
-	GuideManual   string    `json:"guide_manual"`
-	PerformedDate time.Time `json:"performed_date"`
-	FaultCount    int       `json:"fault_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID                  uuid.UUID `json:"id"`
+	GuideManual         string    `json:"guide_manual"`
+	PerformedDate       time.Time `json:"performed_date"`
+	FaultCount          int       `json:"fault_count"`
+	CreatedAt           time.Time `json:"created_at"`
+	PerformedBy         *string   `json:"performed_by,omitempty"`
+	PerformedByUsername *string   `json:"performed_by_username,omitempty"`
 }
 
 type InspectionListResponse struct {

@@ -63,6 +63,8 @@ different `equipment_id`) for an existing inspection returns `409`.
 | `performed_date` | string | ISO timestamp. |
 | `fault_count` | integer | Number of faults on this inspection. |
 | `created_at` | string | ISO timestamp. |
+| `performed_by` | string, nullable | User id who performed the inspection. |
+| `performed_by_username` | string, nullable | Username of `performed_by`. |
 
 ## Fault Object
 
