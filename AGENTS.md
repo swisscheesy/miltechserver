@@ -18,6 +18,9 @@ Follow current application architecure as best as possible.  Any code written sh
 Use the golang-pro skill for help when working on go code.
 When working with a postgres database, user Database Optimizer & Supabase Postgres Best Practices skills to ensure we are following best practices and keeping our database optimized.
 
+## YAGNI principle
+- Apply YAGNI to speculative requirements and premature abstraction, not to correctness, security, testing, maintainability, or explicitly requested product quality.
+
 ## Required Tools and Research Methods
 
 ### 1. Mandatory MCP Tool Usage
