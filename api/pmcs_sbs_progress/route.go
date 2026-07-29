@@ -36,6 +36,9 @@ func registerHandlers(group *gin.RouterGroup, svc Service) {
 	group.PUT("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults", handler.upsertFault)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults", handler.deleteFault)
 	group.DELETE("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults/bulk", handler.deleteFaults)
+	group.POST("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/comments", handler.createComment)
+	group.PUT("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/comments/:comment_id", handler.updateComment)
+	group.DELETE("/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/comments/:comment_id", handler.deleteComment)
 }
 
 func (handler Handler) upsertInspection(c *gin.Context) {
@@ -175,6 +178,63 @@ func (handler Handler) deleteFaults(c *gin.Context) {
 	})
 }
 
+func (handler Handler) createComment(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		return
+	}
+
+	var req CreateCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		return
+	}
+
+	result, err := handler.service.CreateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, response.StandardResponse{Status: http.StatusCreated, Message: "Comment created", Data: result})
+}
+
+func (handler Handler) updateComment(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		return
+	}
+
+	var req UpdateCommentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		return
+	}
+
+	result, err := handler.service.UpdateComment(user, c.Param("comment_id"), req)
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Comment updated", Data: result})
+}
+
+func (handler Handler) deleteComment(c *gin.Context) {
+	user, ok := getUser(c)
+	if !ok {
+		return
+	}
+
+	result, err := handler.service.DeleteComment(user, c.Param("comment_id"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Comment deleted", Data: result})
+}
+
 func getUser(c *gin.Context) (*bootstrap.User, bool) {
 	value, exists := c.Get("user")
 	if !exists {
@@ -199,14 +259,19 @@ func respondServiceError(c *gin.Context, err error) {
 		errors.Is(err, ErrInvalidPmcsID),
 		errors.Is(err, ErrInvalidGuideManual),
 		errors.Is(err, ErrInvalidRequest),
-		errors.Is(err, ErrInvalidStatus):
+		errors.Is(err, ErrInvalidStatus),
+		errors.Is(err, ErrInvalidCommentText):
 		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 	case errors.Is(err, ErrInspectionConflict):
 		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	case errors.Is(err, ErrForbidden):
+		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
 	case errors.Is(err, ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"message": "pmcs sbs equipment not found"})
 	case errors.Is(err, ErrInspectionNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"message": "pmcs sbs inspection not found"})
+	case errors.Is(err, ErrCommentNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": "pmcs sbs comment not found"})
 	default:
 		slog.Error("PMCS SBS fault handler failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())

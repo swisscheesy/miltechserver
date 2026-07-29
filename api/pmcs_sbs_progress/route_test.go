@@ -22,11 +22,13 @@ type serviceStub struct {
 	listResp       *InspectionListResponse
 	faultResp      *FaultResponse
 	bulkDeleteResp *BulkDeleteFaultResponse
+	commentResp    *CommentResponse
 	err            error
 
 	capturedUser        *bootstrap.User
 	capturedEquipmentID string
 	capturedPmcsID      string
+	capturedCommentID   string
 	capturedRequest     interface{}
 }
 
@@ -81,6 +83,27 @@ func (s *serviceStub) DeleteFaults(user *bootstrap.User, equipmentID string, pmc
 	s.capturedPmcsID = pmcsID
 	s.capturedRequest = req
 	return s.bulkDeleteResp, s.err
+}
+
+func (s *serviceStub) CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
+	s.capturedUser = user
+	s.capturedEquipmentID = equipmentID
+	s.capturedPmcsID = pmcsID
+	s.capturedRequest = req
+	return s.commentResp, s.err
+}
+
+func (s *serviceStub) UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+	s.capturedUser = user
+	s.capturedCommentID = commentID
+	s.capturedRequest = req
+	return s.commentResp, s.err
+}
+
+func (s *serviceStub) DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error) {
+	s.capturedUser = user
+	s.capturedCommentID = commentID
+	return s.commentResp, s.err
 }
 
 const routeTestPmcsID = "11111111-1111-1111-1111-111111111111"
@@ -246,6 +269,52 @@ func TestBulkDeleteFaultsSuccess(t *testing.T) {
 	require.Equal(t, 1, body.DeletedCount)
 }
 
+func TestCreateCommentSuccess(t *testing.T) {
+	now := time.Now().UTC()
+	stub := &serviceStub{commentResp: &CommentResponse{
+		ID: uuid.New(), PmcsID: uuid.MustParse(routeTestPmcsID), AuthorID: "user-1", Text: "looks good", CreatedAt: now,
+	}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodPost, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/comments", CreateCommentRequest{
+		Text: "looks good",
+	}, routeUser())
+
+	require.Equal(t, http.StatusCreated, resp.Code)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, routeTestPmcsID, stub.capturedPmcsID)
+	captured, ok := stub.capturedRequest.(CreateCommentRequest)
+	require.True(t, ok)
+	require.Equal(t, "looks good", captured.Text)
+}
+
+func TestUpdateCommentSuccess(t *testing.T) {
+	commentID := uuid.New().String()
+	now := time.Now().UTC()
+	stub := &serviceStub{commentResp: &CommentResponse{
+		ID: uuid.MustParse(commentID), PmcsID: uuid.MustParse(routeTestPmcsID), AuthorID: "user-1", Text: "edited", CreatedAt: now,
+	}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/comments/"+commentID, UpdateCommentRequest{
+		Text: "edited",
+	}, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, commentID, stub.capturedCommentID)
+}
+
+func TestDeleteCommentSuccess(t *testing.T) {
+	commentID := uuid.New().String()
+	stub := &serviceStub{commentResp: &CommentResponse{ID: uuid.MustParse(commentID)}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/comments/"+commentID, nil, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, commentID, stub.capturedCommentID)
+}
+
 func TestServiceErrorMapping(t *testing.T) {
 	cases := []struct {
 		name string
@@ -261,6 +330,9 @@ func TestServiceErrorMapping(t *testing.T) {
 		{name: "inspection conflict", err: ErrInspectionConflict, want: http.StatusConflict},
 		{name: "not found", err: ErrNotFound, want: http.StatusNotFound},
 		{name: "inspection not found", err: ErrInspectionNotFound, want: http.StatusNotFound},
+		{name: "comment not found", err: ErrCommentNotFound, want: http.StatusNotFound},
+		{name: "invalid comment text", err: ErrInvalidCommentText, want: http.StatusBadRequest},
+		{name: "forbidden", err: ErrForbidden, want: http.StatusForbidden},
 		{name: "internal", err: errors.New("boom"), want: http.StatusInternalServerError},
 	}
 

@@ -2,6 +2,7 @@ package pmcs_sbs_progress
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ type repoStub struct {
 	inspection     *model.PmcsSbsInspections
 	detailUsername *string
 	faults         []model.PmcsSbsFaults
+	comments       []CommentWithAuthor
 	summaries      []InspectionSummary
 	savedFault     *model.PmcsSbsFaults
 	deletedCount   int64
@@ -24,6 +26,10 @@ type repoStub struct {
 	lookupUsernameResult *string
 	lookupUsernameErr    error
 	lookupUsernameCalls  int
+
+	existingComment *CommentWithAuthor
+	createdComment  *CommentWithAuthor
+	updatedComment  *CommentWithAuthor
 
 	capturedUser             *bootstrap.User
 	capturedEquipmentID      string
@@ -36,6 +42,8 @@ type repoStub struct {
 	capturedDelete           FaultKey
 	capturedBulkKeys         []FaultKey
 	capturedLookupUsernameID string
+	capturedCommentID        uuid.UUID
+	capturedCommentText      string
 }
 
 func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
@@ -47,14 +55,14 @@ func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.Pm
 	return &inspection, repo.err
 }
 
-func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, error) {
+func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, []CommentWithAuthor, error) {
 	repo.capturedUser = user
 	repo.capturedEquipmentID = equipmentID
 	repo.capturedPmcsID = pmcsID
 	if repo.inspection == nil {
-		return nil, repo.faults, repo.err
+		return nil, repo.faults, repo.comments, repo.err
 	}
-	return &InspectionDetail{PmcsSbsInspections: *repo.inspection, PerformedByUsername: repo.detailUsername}, repo.faults, repo.err
+	return &InspectionDetail{PmcsSbsInspections: *repo.inspection, PerformedByUsername: repo.detailUsername}, repo.faults, repo.comments, repo.err
 }
 
 func (repo *repoStub) LookupUsername(userID string) (*string, error) {
@@ -102,6 +110,33 @@ func (repo *repoStub) DeleteFaults(user *bootstrap.User, equipmentID string, pmc
 	repo.capturedPmcsID = pmcsID
 	repo.capturedBulkKeys = keys
 	return repo.deletedCount, repo.err
+}
+
+func (repo *repoStub) CreateComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, text string) (*CommentWithAuthor, error) {
+	repo.capturedUser = user
+	repo.capturedEquipmentID = equipmentID
+	repo.capturedPmcsID = pmcsID
+	repo.capturedCommentText = text
+	if repo.createdComment != nil {
+		return repo.createdComment, repo.err
+	}
+	return &CommentWithAuthor{PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{
+		ID: uuid.New(), PmcsID: pmcsID, AuthorID: user.UserID, Text: text,
+	}}, repo.err
+}
+
+func (repo *repoStub) GetComment(commentID uuid.UUID) (*CommentWithAuthor, error) {
+	repo.capturedCommentID = commentID
+	return repo.existingComment, repo.err
+}
+
+func (repo *repoStub) UpdateComment(commentID uuid.UUID, text string) (*CommentWithAuthor, error) {
+	repo.capturedCommentID = commentID
+	repo.capturedCommentText = text
+	if repo.updatedComment != nil {
+		return repo.updatedComment, repo.err
+	}
+	return &CommentWithAuthor{PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: commentID, Text: text}}, repo.err
 }
 
 func requireUser() *bootstrap.User {
@@ -461,4 +496,146 @@ func TestValidateBulkDeleteFaultRequestRejectsInvalidValues(t *testing.T) {
 			requireServiceError(t, err, tc.want)
 		})
 	}
+}
+
+func TestEnsureInspectionTrimsAndClearsNotes(t *testing.T) {
+	stub := &repoStub{}
+	svc := NewService(stub)
+
+	blank := "   "
+	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &blank,
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, stub.capturedInspection.Notes)
+
+	padded := "  looks fine  "
+	_, err = svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &padded,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, stub.capturedInspection.Notes)
+	require.Equal(t, "looks fine", *stub.capturedInspection.Notes)
+}
+
+func TestEnsureInspectionRejectsOverlongNotes(t *testing.T) {
+	svc := NewService(&repoStub{})
+	tooLong := strings.Repeat("a", maxNotesLength+1)
+
+	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &tooLong,
+	})
+
+	requireServiceError(t, err, ErrInvalidRequest)
+}
+
+func TestGetInspectionMapsNotesAndComments(t *testing.T) {
+	now := time.Now().UTC()
+	notes := "clean inspection"
+	authorUsername := "jsmith"
+	stub := &repoStub{
+		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, Notes: &notes},
+		comments: []CommentWithAuthor{{
+			PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: uuid.New(), PmcsID: samplePmcsID(), AuthorID: "user-1", Text: "looks good", CreatedAt: now},
+			AuthorUsername:            &authorUsername,
+		}},
+	}
+	svc := NewService(stub)
+
+	resp, err := svc.GetInspection(requireUser(), "vehicle-1", samplePmcsIDStr)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp.Notes)
+	require.Equal(t, "clean inspection", *resp.Notes)
+	require.Len(t, resp.Comments, 1)
+	require.Equal(t, "looks good", resp.Comments[0].Text)
+	require.NotNil(t, resp.Comments[0].AuthorUsername)
+	require.Equal(t, "jsmith", *resp.Comments[0].AuthorUsername)
+}
+
+func TestCreateCommentRequiresAuth(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	_, err := svc.CreateComment(nil, "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "hello"})
+
+	requireServiceError(t, err, ErrUnauthorized)
+}
+
+func TestCreateCommentRejectsInvalidText(t *testing.T) {
+	svc := NewService(&repoStub{})
+
+	cases := []struct {
+		name string
+		text string
+	}{
+		{name: "blank", text: "   "},
+		{name: "too long", text: strings.Repeat("a", maxCommentTextLength+1)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := svc.CreateComment(requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: tc.text})
+			requireServiceError(t, err, ErrInvalidCommentText)
+		})
+	}
+}
+
+func TestCreateCommentTrimsTextAndPassesThrough(t *testing.T) {
+	stub := &repoStub{}
+	svc := NewService(stub)
+
+	resp, err := svc.CreateComment(requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "  looks good  "})
+
+	require.NoError(t, err)
+	require.Equal(t, "looks good", stub.capturedCommentText)
+	require.Equal(t, "looks good", resp.Text)
+	require.Equal(t, samplePmcsID(), stub.capturedPmcsID)
+}
+
+func TestUpdateCommentRequiresAuthorship(t *testing.T) {
+	stub := &repoStub{existingComment: &CommentWithAuthor{
+		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
+	}}
+	svc := NewService(stub)
+
+	_, err := svc.UpdateComment(requireUser(), samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+
+	requireServiceError(t, err, ErrForbidden)
+}
+
+func TestUpdateCommentSucceedsForAuthor(t *testing.T) {
+	stub := &repoStub{existingComment: &CommentWithAuthor{
+		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
+	}}
+	svc := NewService(stub)
+
+	_, err := svc.UpdateComment(requireUser(), samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+
+	require.NoError(t, err)
+	require.Equal(t, "edited", stub.capturedCommentText)
+}
+
+func TestDeleteCommentRequiresAuthorshipAndUsesSentinelText(t *testing.T) {
+	stub := &repoStub{existingComment: &CommentWithAuthor{
+		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
+	}}
+	svc := NewService(stub)
+
+	_, err := svc.DeleteComment(requireUser(), samplePmcsIDStr)
+
+	require.NoError(t, err)
+	require.Equal(t, deletedCommentText, stub.capturedCommentText)
+}
+
+func TestDeleteCommentRejectsNonAuthor(t *testing.T) {
+	stub := &repoStub{existingComment: &CommentWithAuthor{
+		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
+	}}
+	svc := NewService(stub)
+
+	_, err := svc.DeleteComment(requireUser(), samplePmcsIDStr)
+
+	requireServiceError(t, err, ErrForbidden)
 }

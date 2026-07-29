@@ -6,6 +6,7 @@ import (
 
 	"miltechserver/api/pmcs_sbs_progress"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,7 +99,7 @@ func TestRepositoryUpsertFaultCreatesInspectionImplicitly(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, inspection.ID, saved.PmcsID)
 
-	fetched, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	fetched, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Equal(t, inspection.GuideManual, fetched.GuideManual)
 	require.Len(t, faults, 1)
@@ -125,7 +126,7 @@ func TestRepositoryUpsertFaultReusesExistingInspectionForSamePmcsID(t *testing.T
 	_, err = repo.UpsertFault(user, inspection, second)
 	require.NoError(t, err)
 
-	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Len(t, faults, 2)
 }
@@ -170,7 +171,7 @@ func TestRepositoryGetInspectionReturnsFaultsOrderedBySectionAndItem(t *testing.
 	_, err = repo.UpsertFault(user, inspection, early)
 	require.NoError(t, err)
 
-	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Len(t, faults, 2)
 	require.Equal(t, "before", faults[0].SectionID)
@@ -189,7 +190,7 @@ func TestRepositoryGetInspectionReturnsCleanInspectionWithEmptyFaults(t *testing
 	_, err := repo.EnsureInspection(user, inspection)
 	require.NoError(t, err)
 
-	fetched, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	fetched, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Equal(t, inspection.ID, fetched.ID)
 	require.Empty(t, faults)
@@ -208,7 +209,7 @@ func TestRepositoryGetInspectionRejectsCrossVehiclePmcsID(t *testing.T) {
 	_, err := repo.EnsureInspection(user, inspection)
 	require.NoError(t, err)
 
-	_, _, err = repo.GetInspection(user, otherVehicleID, inspection.ID)
+	_, _, _, err = repo.GetInspection(user, otherVehicleID, inspection.ID)
 
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
 }
@@ -226,7 +227,7 @@ func TestRepositoryGetInspectionIncludesPerformedByUsername(t *testing.T) {
 	_, err := repo.EnsureInspection(user, inspection)
 	require.NoError(t, err)
 
-	detail, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	detail, _, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.NotNil(t, detail.PerformedBy)
 	require.Equal(t, user.UserID, *detail.PerformedBy)
@@ -258,7 +259,7 @@ func TestRepositoryGetInspectionReturnsNilUsernameWhenPerformerDeleted(t *testin
 	_, err = testDB.Exec(`DELETE FROM users WHERE uid=$1`, performer.UserID)
 	require.NoError(t, err)
 
-	detail, _, err := repo.GetInspection(viewer, vehicleID, inspection.ID)
+	detail, _, _, err := repo.GetInspection(viewer, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Nil(t, detail.PerformedBy)
 	require.Nil(t, detail.PerformedByUsername)
@@ -361,7 +362,7 @@ func TestRepositoryDeleteInspectionCascadesFaultsButNotSiblings(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, faultCount)
 
-	_, siblingFaults, err := repo.GetInspection(user, vehicleID, sibling.ID)
+	_, siblingFaults, _, err := repo.GetInspection(user, vehicleID, sibling.ID)
 	require.NoError(t, err)
 	require.Len(t, siblingFaults, 1)
 }
@@ -397,9 +398,158 @@ func TestRepositoryDeleteFaultAndBulkDeleteFaultsScopedToInspection(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deletedCount)
 
-	_, faults, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
 	require.NoError(t, err)
 	require.Empty(t, faults)
+}
+
+func TestRepositoryEnsureInspectionPersistsAndClearsNotes(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-notes-persist")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "N1")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	notes := "clean inspection, no issues found"
+	inspection.Notes = &notes
+	saved, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+	require.NotNil(t, saved.Notes)
+	require.Equal(t, notes, *saved.Notes)
+
+	cleared := inspection
+	cleared.Notes = nil
+	saved, err = repo.EnsureInspection(user, cleared)
+	require.NoError(t, err)
+	require.Nil(t, saved.Notes)
+}
+
+func TestRepositoryCreateCommentAndGetInspectionReturnsOrderedWithAuthor(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	author := testUser("pmcs-comment-author")
+	author.Username = "jsmith"
+	ensureUser(t, testDB, author)
+	shopID := createShopWithMember(t, testDB, author, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, author, "N2")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, author.UserID)
+	_, err := repo.EnsureInspection(author, inspection)
+	require.NoError(t, err)
+
+	first, err := repo.CreateComment(author, vehicleID, inspection.ID, "first comment")
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, first.PmcsID)
+	require.Equal(t, author.UserID, first.AuthorID)
+	require.NotNil(t, first.AuthorUsername)
+	require.Equal(t, "jsmith", *first.AuthorUsername)
+
+	time.Sleep(10 * time.Millisecond)
+	_, err = repo.CreateComment(author, vehicleID, inspection.ID, "second comment")
+	require.NoError(t, err)
+
+	_, _, comments, err := repo.GetInspection(author, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Len(t, comments, 2)
+	require.Equal(t, "first comment", comments[0].Text)
+	require.Equal(t, "second comment", comments[1].Text)
+}
+
+func TestRepositoryCreateCommentRejectsCrossVehiclePmcsID(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-comment-crossveh")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "N3")
+	otherVehicleID := createShopVehicle(t, testDB, shopID, user, "N4")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	_, err = repo.CreateComment(user, otherVehicleID, inspection.ID, "should fail")
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
+}
+
+func TestRepositoryUpdateCommentPersistsTextAndSetsUpdatedAt(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	author := testUser("pmcs-comment-update")
+	ensureUser(t, testDB, author)
+	shopID := createShopWithMember(t, testDB, author, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, author, "N5")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, author.UserID)
+	_, err := repo.EnsureInspection(author, inspection)
+	require.NoError(t, err)
+
+	created, err := repo.CreateComment(author, vehicleID, inspection.ID, "original text")
+	require.NoError(t, err)
+	require.Nil(t, created.UpdatedAt)
+
+	updated, err := repo.UpdateComment(created.ID, "Deleted by user")
+	require.NoError(t, err)
+	require.Equal(t, "Deleted by user", updated.Text)
+	require.NotNil(t, updated.UpdatedAt)
+}
+
+func TestRepositoryGetCommentReturnsNotFoundForMissingID(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	_, err := repo.GetComment(uuid.New())
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrCommentNotFound)
+}
+
+func TestRepositoryListInspectionsIncludesCommentCount(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-list-comment-count")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "N6")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	_, err = repo.CreateComment(user, vehicleID, inspection.ID, "one")
+	require.NoError(t, err)
+	_, err = repo.CreateComment(user, vehicleID, inspection.ID, "two")
+	require.NoError(t, err)
+
+	summaries, err := repo.ListInspections(user, vehicleID, "", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.Equal(t, 2, summaries[0].CommentCount)
+}
+
+func TestRepositoryDeleteInspectionCascadesComments(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-comment-cascade")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "N7")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+	_, err = repo.CreateComment(user, vehicleID, inspection.ID, "will be cascaded")
+	require.NoError(t, err)
+
+	err = repo.DeleteInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+
+	var commentCount int
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
+	require.NoError(t, err)
+	require.Equal(t, 0, commentCount)
 }
 
 func TestRepositoryVehicleDeleteCascadesInspectionsAndFaults(t *testing.T) {

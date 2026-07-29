@@ -9,6 +9,7 @@ import (
 type InspectionRequest struct {
 	GuideManual   string    `json:"guide_manual"`
 	PerformedDate time.Time `json:"performed_date"`
+	Notes         *string   `json:"notes"`
 }
 
 type ListInspectionsRequest struct {
@@ -54,16 +55,36 @@ type FaultResponse struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+type CreateCommentRequest struct {
+	Text string `json:"text"`
+}
+
+type UpdateCommentRequest struct {
+	Text string `json:"text"`
+}
+
+type CommentResponse struct {
+	ID             uuid.UUID  `json:"id"`
+	PmcsID         uuid.UUID  `json:"pmcs_id"`
+	AuthorID       string     `json:"author_id"`
+	AuthorUsername *string    `json:"author_username,omitempty"`
+	Text           string     `json:"text"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
+}
+
 type InspectionResponse struct {
-	ID                  uuid.UUID       `json:"id"`
-	EquipmentID         string          `json:"equipment_id"`
-	GuideManual         string          `json:"guide_manual"`
-	PerformedDate       time.Time       `json:"performed_date"`
-	PerformedBy         *string         `json:"performed_by,omitempty"`
-	PerformedByUsername *string         `json:"performed_by_username,omitempty"`
-	CreatedAt           time.Time       `json:"created_at"`
-	UpdatedAt           time.Time       `json:"updated_at"`
-	Faults              []FaultResponse `json:"faults"`
+	ID                  uuid.UUID         `json:"id"`
+	EquipmentID         string            `json:"equipment_id"`
+	GuideManual         string            `json:"guide_manual"`
+	PerformedDate       time.Time         `json:"performed_date"`
+	PerformedBy         *string           `json:"performed_by,omitempty"`
+	PerformedByUsername *string           `json:"performed_by_username,omitempty"`
+	Notes               *string           `json:"notes,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
+	Faults              []FaultResponse   `json:"faults"`
+	Comments            []CommentResponse `json:"comments"`
 }
 
 type InspectionSummaryResponse struct {
@@ -71,6 +92,7 @@ type InspectionSummaryResponse struct {
 	GuideManual         string    `json:"guide_manual"`
 	PerformedDate       time.Time `json:"performed_date"`
 	FaultCount          int       `json:"fault_count"`
+	CommentCount        int       `json:"comment_count"`
 	CreatedAt           time.Time `json:"created_at"`
 	PerformedBy         *string   `json:"performed_by,omitempty"`
 	PerformedByUsername *string   `json:"performed_by_username,omitempty"`

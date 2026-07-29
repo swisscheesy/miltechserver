@@ -12,4 +12,7 @@ var (
 	ErrNotFound           = errors.New("pmcs sbs equipment not found")
 	ErrInspectionNotFound = errors.New("pmcs sbs inspection not found")
 	ErrInspectionConflict = errors.New("pmcs sbs inspection conflict")
+	ErrInvalidCommentText = errors.New("invalid comment text")
+	ErrCommentNotFound    = errors.New("pmcs sbs comment not found")
+	ErrForbidden          = errors.New("user not authorized")
 )

@@ -41,6 +41,8 @@ func TestGetEquipmentPmcsHistoryRepository(t *testing.T) {
 	newerInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", newerTime, "history-user")
 	createPmcsFault(t, testDB, newerInspectionID, "before", 0)
 	createPmcsFault(t, testDB, newerInspectionID, "during", 1)
+	createPmcsComment(t, testDB, newerInspectionID, "history-user", "first comment")
+	createPmcsComment(t, testDB, newerInspectionID, "history-user", "second comment")
 	olderInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", olderTime, "history-user")
 
 	repository := aggregates.NewRepository(testDB)
@@ -61,8 +63,10 @@ func TestGetEquipmentPmcsHistoryRepository(t *testing.T) {
 	require.Len(t, withHistory.HistoricalPmcs, 2)
 	require.Equal(t, newerInspectionID, withHistory.HistoricalPmcs[0].ID.String())
 	require.Equal(t, 2, withHistory.HistoricalPmcs[0].FaultCount)
+	require.Equal(t, 2, withHistory.HistoricalPmcs[0].CommentCount)
 	require.Equal(t, olderInspectionID, withHistory.HistoricalPmcs[1].ID.String())
 	require.Equal(t, 0, withHistory.HistoricalPmcs[1].FaultCount)
+	require.Equal(t, 0, withHistory.HistoricalPmcs[1].CommentCount)
 
 	withoutHistory := equipment[byID[vehicleWithoutHistoryID]]
 	require.Equal(t, shop2ID, withoutHistory.ShopID)
@@ -113,6 +117,7 @@ func TestEquipmentPmcsHistoryEndpoint(t *testing.T) {
 	performedDate := time.Date(2026, time.July, 16, 14, 30, 0, 0, time.UTC)
 	inspectionID := createPmcsInspection(t, testDB, vehicleID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", performedDate, "history-user")
 	createPmcsFault(t, testDB, inspectionID, "before", 0)
+	createPmcsComment(t, testDB, inspectionID, "history-user", "a comment")
 
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/equipment-pmcs-history", nil, "history-user")
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -132,6 +137,7 @@ func TestEquipmentPmcsHistoryEndpoint(t *testing.T) {
 	require.Equal(t, inspectionID, inspection["id"])
 	require.Equal(t, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", inspection["guide_manual"])
 	require.Equal(t, float64(1), inspection["fault_count"])
+	require.Equal(t, float64(1), inspection["comment_count"])
 	require.Equal(t, "history-user", inspection["performed_by"])
 	require.Equal(t, "test-user", inspection["performed_by_username"])
 }

@@ -1241,6 +1241,32 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		}
 	}
 
+	commentCountByInspectionID := make(map[uuid.UUID]int)
+	if len(inspections) > 0 {
+		inspectionIDs := make([]Expression, 0, len(inspections))
+		for _, inspection := range inspections {
+			inspectionIDs = append(inspectionIDs, UUID(inspection.ID))
+		}
+
+		var commentCounts []struct {
+			PmcsID uuid.UUID `sql:"pmcs_id"`
+			Total  int32     `sql:"total"`
+		}
+		commentCountStmt := SELECT(
+			PmcsSbsInspectionComments.PmcsID.AS("pmcs_id"),
+			COUNT(PmcsSbsInspectionComments.PmcsID).AS("total"),
+		).FROM(PmcsSbsInspectionComments).
+			WHERE(PmcsSbsInspectionComments.PmcsID.IN(inspectionIDs...)).
+			GROUP_BY(PmcsSbsInspectionComments.PmcsID)
+
+		if err := commentCountStmt.QueryContext(ctx, repo.db, &commentCounts); err != nil {
+			return nil, fmt.Errorf("failed to count pmcs inspection comments for equipment history: %w", err)
+		}
+		for _, count := range commentCounts {
+			commentCountByInspectionID[count.PmcsID] = int(count.Total)
+		}
+	}
+
 	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
 	for _, inspection := range inspections {
 		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
@@ -1248,6 +1274,7 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 			GuideManual:         inspection.GuideManual,
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          faultCountByInspectionID[inspection.ID],
+			CommentCount:        commentCountByInspectionID[inspection.ID],
 			CreatedAt:           inspection.CreatedAt,
 			PerformedBy:         inspection.PerformedBy,
 			PerformedByUsername: inspection.PerformedByUsername,

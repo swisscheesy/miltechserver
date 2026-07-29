@@ -335,3 +335,15 @@ func createPmcsFault(t *testing.T, db *sql.DB, pmcsID string, sectionID string, 
 	)
 	require.NoError(t, err)
 }
+
+func createPmcsComment(t *testing.T, db *sql.DB, pmcsID string, authorID string, text string) {
+	t.Helper()
+
+	now := time.Now().UTC()
+	_, err := db.Exec(
+		`INSERT INTO pmcs_sbs_inspection_comments (id, pmcs_id, author_id, text, created_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New().String(), pmcsID, authorID, text, now,
+	)
+	require.NoError(t, err)
+}

@@ -39,6 +39,7 @@ func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 	_, err := db.Exec(
 		`TRUNCATE TABLE
 			pmcs_sbs_faults,
+			pmcs_sbs_inspection_comments,
 			pmcs_sbs_inspections,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,

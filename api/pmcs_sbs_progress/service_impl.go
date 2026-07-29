@@ -22,6 +22,9 @@ func NewService(repository Repository) *ServiceImpl {
 
 const maxBulkDeleteFaults = 100
 const defaultListInspectionsLimit = 1000
+const maxNotesLength = 4000
+const maxCommentTextLength = 2000
+const deletedCommentText = "Deleted by user"
 
 func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
 	if !hasAuthenticatedUser(user) {
@@ -39,7 +42,7 @@ func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID s
 	if err != nil {
 		return nil, err
 	}
-	resp := mapInspection(*saved, performedByUsername, nil)
+	resp := mapInspection(*saved, performedByUsername, nil, nil)
 	return &resp, nil
 }
 
@@ -72,11 +75,11 @@ func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		return nil, err
 	}
 
-	detail, faults, err := service.repository.GetInspection(user, trimmedEquipmentID, parsedPmcsID)
+	detail, faults, comments, err := service.repository.GetInspection(user, trimmedEquipmentID, parsedPmcsID)
 	if err != nil {
 		return nil, err
 	}
-	resp := mapInspection(detail.PmcsSbsInspections, detail.PerformedByUsername, faults)
+	resp := mapInspection(detail.PmcsSbsInspections, detail.PerformedByUsername, faults, comments)
 	return &resp, nil
 }
 
@@ -187,6 +190,85 @@ func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID strin
 	return &BulkDeleteFaultResponse{RequestedCount: len(keys), DeletedCount: int(deletedCount)}, nil
 }
 
+func (service *ServiceImpl) CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
+	parsedPmcsID, err := validatePmcsID(pmcsID)
+	if err != nil {
+		return nil, err
+	}
+	text, err := validateCommentText(req.Text)
+	if err != nil {
+		return nil, err
+	}
+
+	created, err := service.repository.CreateComment(user, trimmedEquipmentID, parsedPmcsID, text)
+	if err != nil {
+		return nil, err
+	}
+	resp := mapComment(*created)
+	return &resp, nil
+}
+
+func (service *ServiceImpl) UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	parsedCommentID, err := uuid.Parse(strings.TrimSpace(commentID))
+	if err != nil {
+		return nil, ErrCommentNotFound
+	}
+	text, err := validateCommentText(req.Text)
+	if err != nil {
+		return nil, err
+	}
+
+	existing, err := service.repository.GetComment(parsedCommentID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.AuthorID != user.UserID {
+		return nil, ErrForbidden
+	}
+
+	updated, err := service.repository.UpdateComment(parsedCommentID, text)
+	if err != nil {
+		return nil, err
+	}
+	resp := mapComment(*updated)
+	return &resp, nil
+}
+
+func (service *ServiceImpl) DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error) {
+	if !hasAuthenticatedUser(user) {
+		return nil, ErrUnauthorized
+	}
+	parsedCommentID, err := uuid.Parse(strings.TrimSpace(commentID))
+	if err != nil {
+		return nil, ErrCommentNotFound
+	}
+
+	existing, err := service.repository.GetComment(parsedCommentID)
+	if err != nil {
+		return nil, err
+	}
+	if existing.AuthorID != user.UserID {
+		return nil, ErrForbidden
+	}
+
+	updated, err := service.repository.UpdateComment(parsedCommentID, deletedCommentText)
+	if err != nil {
+		return nil, err
+	}
+	resp := mapComment(*updated)
+	return &resp, nil
+}
+
 func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID string, userID string, req InspectionRequest) (model.PmcsSbsInspections, error) {
 	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
@@ -204,6 +286,11 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 		return model.PmcsSbsInspections{}, ErrInvalidRequest
 	}
 
+	notes, err := validateNotes(req.Notes)
+	if err != nil {
+		return model.PmcsSbsInspections{}, err
+	}
+
 	performedBy := strings.TrimSpace(userID)
 	return model.PmcsSbsInspections{
 		ID:            parsedPmcsID,
@@ -211,6 +298,7 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 		GuideManual:   guideManual,
 		PerformedDate: req.PerformedDate.UTC(),
 		PerformedBy:   &performedBy,
+		Notes:         notes,
 	}, nil
 }
 
@@ -322,6 +410,28 @@ func validateGuideManual(guideManual string) (string, error) {
 	return trimmedGuideManual, nil
 }
 
+func validateNotes(notes *string) (*string, error) {
+	if notes == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*notes)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if len(trimmed) > maxNotesLength {
+		return nil, ErrInvalidRequest
+	}
+	return &trimmed, nil
+}
+
+func validateCommentText(text string) (string, error) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || len(trimmed) > maxCommentTextLength {
+		return "", ErrInvalidCommentText
+	}
+	return trimmed, nil
+}
+
 func hasAuthenticatedUser(user *bootstrap.User) bool {
 	return user != nil && strings.TrimSpace(user.UserID) != ""
 }
@@ -353,10 +463,14 @@ func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	}
 }
 
-func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, faultRows []model.PmcsSbsFaults) InspectionResponse {
+func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, faultRows []model.PmcsSbsFaults, commentRows []CommentWithAuthor) InspectionResponse {
 	faults := make([]FaultResponse, 0, len(faultRows))
 	for _, faultRow := range faultRows {
 		faults = append(faults, mapFault(faultRow))
+	}
+	comments := make([]CommentResponse, 0, len(commentRows))
+	for _, commentRow := range commentRows {
+		comments = append(comments, mapComment(commentRow))
 	}
 	return InspectionResponse{
 		ID:                  row.ID,
@@ -365,8 +479,22 @@ func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, fa
 		PerformedDate:       row.PerformedDate,
 		PerformedBy:         row.PerformedBy,
 		PerformedByUsername: performedByUsername,
+		Notes:               row.Notes,
 		CreatedAt:           row.CreatedAt,
 		UpdatedAt:           row.UpdatedAt,
 		Faults:              faults,
+		Comments:            comments,
+	}
+}
+
+func mapComment(row CommentWithAuthor) CommentResponse {
+	return CommentResponse{
+		ID:             row.ID,
+		PmcsID:         row.PmcsID,
+		AuthorID:       row.AuthorID,
+		AuthorUsername: row.AuthorUsername,
+		Text:           row.Text,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
 	}
 }

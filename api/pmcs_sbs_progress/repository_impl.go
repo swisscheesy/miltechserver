@@ -30,9 +30,9 @@ func (repo *RepositoryImpl) EnsureInspection(user *bootstrap.User, inspection mo
 	return ensureInspection(repo.db, inspection)
 }
 
-func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, error) {
+func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, []CommentWithAuthor, error) {
 	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	var row struct {
@@ -51,9 +51,9 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 
 	if err := stmt.Query(repo.db, &row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
-			return nil, nil, ErrInspectionNotFound
+			return nil, nil, nil, ErrInspectionNotFound
 		}
-		return nil, nil, fmt.Errorf("get pmcs sbs inspection: %w", err)
+		return nil, nil, nil, fmt.Errorf("get pmcs sbs inspection: %w", err)
 	}
 
 	var faults []model.PmcsSbsFaults
@@ -63,10 +63,34 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		ORDER_BY(PmcsSbsFaults.SectionID.ASC(), PmcsSbsFaults.ItemIndex.ASC())
 
 	if err := faultsStmt.Query(repo.db, &faults); err != nil {
-		return nil, nil, fmt.Errorf("list pmcs sbs inspection faults: %w", err)
+		return nil, nil, nil, fmt.Errorf("list pmcs sbs inspection faults: %w", err)
 	}
 
-	return &InspectionDetail{PmcsSbsInspections: row.PmcsSbsInspections, PerformedByUsername: row.PerformedByUsername}, faults, nil
+	var comments []struct {
+		model.PmcsSbsInspectionComments
+		AuthorUsername *string `sql:"author_username"`
+	}
+	commentsStmt := SELECT(
+		PmcsSbsInspectionComments.AllColumns,
+		Users.Username.AS("author_username"),
+	).
+		FROM(PmcsSbsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspectionComments.AuthorID))).
+		WHERE(PmcsSbsInspectionComments.PmcsID.EQ(UUID(pmcsID))).
+		ORDER_BY(PmcsSbsInspectionComments.CreatedAt.ASC())
+
+	if err := commentsStmt.Query(repo.db, &comments); err != nil {
+		return nil, nil, nil, fmt.Errorf("list pmcs sbs inspection comments: %w", err)
+	}
+
+	commentsWithAuthor := make([]CommentWithAuthor, 0, len(comments))
+	for _, comment := range comments {
+		commentsWithAuthor = append(commentsWithAuthor, CommentWithAuthor{
+			PmcsSbsInspectionComments: comment.PmcsSbsInspectionComments,
+			AuthorUsername:            comment.AuthorUsername,
+		})
+	}
+
+	return &InspectionDetail{PmcsSbsInspections: row.PmcsSbsInspections, PerformedByUsername: row.PerformedByUsername}, faults, commentsWithAuthor, nil
 }
 
 func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID string, guideManual string, limit int, offset int) ([]InspectionSummary, error) {
@@ -125,6 +149,26 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		countByID[c.PmcsID] = int(c.Total)
 	}
 
+	var commentCounts []struct {
+		PmcsID uuid.UUID `sql:"pmcs_id"`
+		Total  int32     `sql:"total"`
+	}
+	commentCountStmt := SELECT(
+		PmcsSbsInspectionComments.PmcsID.AS("pmcs_id"),
+		COUNT(PmcsSbsInspectionComments.PmcsID).AS("total"),
+	).FROM(PmcsSbsInspectionComments).
+		WHERE(PmcsSbsInspectionComments.PmcsID.IN(ids...)).
+		GROUP_BY(PmcsSbsInspectionComments.PmcsID)
+
+	if err := commentCountStmt.Query(repo.db, &commentCounts); err != nil {
+		return nil, fmt.Errorf("count pmcs sbs inspection comments: %w", err)
+	}
+
+	commentCountByID := make(map[uuid.UUID]int, len(commentCounts))
+	for _, c := range commentCounts {
+		commentCountByID[c.PmcsID] = int(c.Total)
+	}
+
 	summaries := make([]InspectionSummary, 0, len(inspections))
 	for _, inspection := range inspections {
 		summaries = append(summaries, InspectionSummary{
@@ -132,6 +176,7 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 			GuideManual:         inspection.GuideManual,
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          countByID[inspection.ID],
+			CommentCount:        commentCountByID[inspection.ID],
 			CreatedAt:           inspection.CreatedAt,
 			PerformedBy:         inspection.PerformedBy,
 			PerformedByUsername: inspection.PerformedByUsername,
@@ -282,6 +327,80 @@ func (repo *RepositoryImpl) DeleteFaults(user *bootstrap.User, equipmentID strin
 	return deletedCount, nil
 }
 
+func (repo *RepositoryImpl) CreateComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, text string) (*CommentWithAuthor, error) {
+	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
+		return nil, err
+	}
+	if err := repo.requireInspectionOwnership(repo.db, equipmentID, pmcsID); err != nil {
+		return nil, err
+	}
+
+	stmt := PmcsSbsInspectionComments.INSERT(
+		PmcsSbsInspectionComments.PmcsID,
+		PmcsSbsInspectionComments.AuthorID,
+		PmcsSbsInspectionComments.Text,
+	).VALUES(
+		UUID(pmcsID),
+		String(user.UserID),
+		String(text),
+	).RETURNING(PmcsSbsInspectionComments.AllColumns)
+
+	var created model.PmcsSbsInspectionComments
+	if err := stmt.Query(repo.db, &created); err != nil {
+		return nil, fmt.Errorf("create pmcs sbs inspection comment: %w", err)
+	}
+
+	username := user.Username
+	return &CommentWithAuthor{PmcsSbsInspectionComments: created, AuthorUsername: &username}, nil
+}
+
+func (repo *RepositoryImpl) GetComment(commentID uuid.UUID) (*CommentWithAuthor, error) {
+	var row struct {
+		model.PmcsSbsInspectionComments
+		AuthorUsername *string `sql:"author_username"`
+	}
+	stmt := SELECT(
+		PmcsSbsInspectionComments.AllColumns,
+		Users.Username.AS("author_username"),
+	).
+		FROM(PmcsSbsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspectionComments.AuthorID))).
+		WHERE(PmcsSbsInspectionComments.ID.EQ(UUID(commentID)))
+
+	if err := stmt.Query(repo.db, &row); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+			return nil, ErrCommentNotFound
+		}
+		return nil, fmt.Errorf("get pmcs sbs inspection comment: %w", err)
+	}
+	return &CommentWithAuthor{PmcsSbsInspectionComments: row.PmcsSbsInspectionComments, AuthorUsername: row.AuthorUsername}, nil
+}
+
+func (repo *RepositoryImpl) UpdateComment(commentID uuid.UUID, text string) (*CommentWithAuthor, error) {
+	now := time.Now().UTC()
+
+	stmt := PmcsSbsInspectionComments.UPDATE().
+		SET(
+			PmcsSbsInspectionComments.Text.SET(String(text)),
+			PmcsSbsInspectionComments.UpdatedAt.SET(TimestampzT(now)),
+		).
+		WHERE(PmcsSbsInspectionComments.ID.EQ(UUID(commentID))).
+		RETURNING(PmcsSbsInspectionComments.AllColumns)
+
+	var updated model.PmcsSbsInspectionComments
+	if err := stmt.Query(repo.db, &updated); err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+			return nil, ErrCommentNotFound
+		}
+		return nil, fmt.Errorf("update pmcs sbs inspection comment: %w", err)
+	}
+
+	username, err := repo.LookupUsername(updated.AuthorID)
+	if err != nil {
+		return nil, err
+	}
+	return &CommentWithAuthor{PmcsSbsInspectionComments: updated, AuthorUsername: username}, nil
+}
+
 func (repo *RepositoryImpl) requireVehicleAccess(user *bootstrap.User, equipmentID string) error {
 	if user == nil {
 		return ErrUnauthorized
@@ -364,6 +483,10 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 	if inspection.PerformedBy != nil {
 		performedByExpr = String(*inspection.PerformedBy)
 	}
+	var notesExpr StringExpression = StringExp(NULL)
+	if inspection.Notes != nil {
+		notesExpr = String(*inspection.Notes)
+	}
 
 	stmt := PmcsSbsInspections.INSERT(
 		PmcsSbsInspections.ID,
@@ -371,6 +494,7 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		PmcsSbsInspections.GuideManual,
 		PmcsSbsInspections.PerformedDate,
 		PmcsSbsInspections.PerformedBy,
+		PmcsSbsInspections.Notes,
 		PmcsSbsInspections.CreatedAt,
 		PmcsSbsInspections.UpdatedAt,
 	).VALUES(
@@ -379,11 +503,13 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		String(inspection.GuideManual),
 		TimestampzT(inspection.PerformedDate),
 		performedByExpr,
+		notesExpr,
 		TimestampzT(now),
 		TimestampzT(now),
 	).ON_CONFLICT(PmcsSbsInspections.ID).DO_UPDATE(
 		SET(
 			PmcsSbsInspections.PerformedDate.SET(TimestampzT(inspection.PerformedDate)),
+			PmcsSbsInspections.Notes.SET(notesExpr),
 			PmcsSbsInspections.UpdatedAt.SET(TimestampzT(now)),
 		).WHERE(
 			PmcsSbsInspections.EquipmentID.EQ(String(inspection.EquipmentID)).

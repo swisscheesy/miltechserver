@@ -457,3 +457,27 @@ Based on the current project setup:
 - The fault API's identity changed from `(equipment_id, guide_manual, section_id, item_index)` to `(pmcs_id, section_id, item_index)` — a breaking change for API consumers, documented in `docs/api/pmcs_sbs_inspections_mobile.md`
 - The Flutter mobile client requires a corresponding Drift schema migration (add `pmcs_id` to its local `PmcsSbsFaultsTable` mirror) and client-side generation/tracking of the inspection UUID per session before this can ship end-to-end — tracked as a follow-up in the `miltech` repo, out of scope for this server-side change
 - Every write to `pmcs_sbs_faults` now goes through a transaction that also touches `pmcs_sbs_inspections` (to implicitly create the parent row), adding one extra `INSERT ... ON CONFLICT` per fault save compared to the old single-table upsert
+
+### ADR-018: PMCS SBS Inspection Notes + Comments (2026-07-21)
+
+**Context:**
+- `pmcs_sbs_inspections` (ADR-017) records only mechanical inspection facts (`equipment_id`, `guide_manual`, `performed_date`, `performed_by`) — there was no field for the inspecting user to leave free-text context, and no way for other shop members to discuss an inspection after the fact
+- Users need (1) a single free-text note per inspection, and (2) a multi-user comment thread: any shop member with access to the vehicle can post a comment, edit/delete their own, and see all comments when the inspection is fetched
+
+**Decision:**
+- Add a nullable `notes TEXT` column directly to `pmcs_sbs_inspections`, mutable through the existing `PUT .../pmcs/:pmcs_id` upsert (same access as `performed_date` — any shop member, no separate endpoint)
+- Add a new child table `pmcs_sbs_inspection_comments` (`id`, `pmcs_id` FK `ON DELETE CASCADE`, `author_id` FK with no delete action, `text`, `created_at`, `updated_at`), following the same relationship shape as `pmcs_sbs_faults` to its parent
+- Comments are a flat chronological list — no threading/`parent_id`, since the product requirement was "leave a comment on an inspection," not reply chains
+- Comments are edit/soft-delete by author, reusing the exact `api/item_comments` pattern: a `PUT`/`DELETE` on a comment checks `author_id == caller.UserID` (403 otherwise), and delete is a soft-delete (`UPDATE text = 'Deleted by user'`), not a row delete — no new `is_deleted` column needed
+- `GET .../pmcs/:pmcs_id` embeds the full `comments` array (with resolved author username via the same `LEFT JOIN users` pattern used for `performed_by_username`) and `GET .../pmcs` (list) gets a batched `comment_count` per inspection, mirroring the existing `fault_count` query exactly
+- Comment access control reuses `requireVehicleAccess` (shop-membership check) — there is no role gate, matching how the rest of the inspection record already works
+
+**Alternatives considered:**
+- A dedicated `GET .../comments` endpoint (rejected: comments are always wanted alongside inspection detail per the stated requirement; a separate endpoint would just add an extra round trip for the common case)
+- Threaded replies via `parent_id` like `item_comments` (rejected: no product requirement for replies, and it adds mobile-client complexity for no stated benefit)
+- Restricting note edits to only the inspection's `performed_by` user (rejected: inconsistent with how the rest of the inspection record — `guide_manual`, `performed_date` — is already editable by any shop member with vehicle access)
+
+**Consequences:**
+- `InspectionResponse` grew two fields (`notes`, `comments`); `InspectionSummaryResponse` grew one (`comment_count`) — additive, non-breaking for existing API consumers
+- `author_id` on `pmcs_sbs_inspection_comments` has no `ON DELETE` action (matching the live `item_comments_author_id_fkey` constraint), so a user with existing comments cannot be hard-deleted from `users` without first handling their comments — same constraint that already exists for `item_comments` authors
+- The Flutter mobile client needs corresponding UI to display/edit notes and render the comment thread on the inspection detail screen — out of scope for this server-side change, tracked separately in the `miltech` repo

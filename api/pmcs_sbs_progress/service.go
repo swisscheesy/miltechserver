@@ -11,4 +11,8 @@ type Service interface {
 	UpsertFault(user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error)
 	DeleteFault(user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error
 	DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error)
+
+	CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error)
+	UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error)
+	DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error)
 }
