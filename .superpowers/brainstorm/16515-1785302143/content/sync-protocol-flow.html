@@ -1,0 +1,157 @@
+<style>
+  .flow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 24px 0;
+  }
+  .flow-card {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 17px;
+    background: color-mix(in srgb, var(--surface) 93%, transparent);
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 10px;
+    align-items: start;
+    margin: 12px 0;
+  }
+  .num {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #5b8def;
+    color: white;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .step strong { display: block; margin-bottom: 3px; }
+  .step small { color: var(--muted); line-height: 1.4; }
+  .contract {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 18px 0;
+  }
+  .code-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px;
+    text-align: center;
+  }
+  .code-card code { font-size: 15px; font-weight: 700; }
+  .code-card small { display: block; color: var(--muted); margin-top: 5px; }
+  .payload {
+    border-left: 4px solid #36a269;
+    padding: 12px 14px;
+    background: color-mix(in srgb, #36a269 8%, transparent);
+    border-radius: 8px;
+  }
+  .race {
+    border-left: 4px solid #7d65d8;
+    padding: 12px 14px;
+    background: color-mix(in srgb, #7d65d8 8%, transparent);
+    border-radius: 8px;
+    margin-top: 16px;
+  }
+  @media (max-width: 900px) {
+    .flow-grid, .contract { grid-template-columns: 1fr; }
+  }
+</style>
+
+<h2>Synchronization and concurrency flow</h2>
+<p class="subtitle">
+  Complete aggregates move in version-ordered pages; writes are conditional and account changes cannot commit out of order.
+</p>
+
+<div class="flow-grid">
+  <section class="flow-card">
+    <h3>Conditional mutation</h3>
+    <div class="step">
+      <div class="num">1</div>
+      <div><strong>Read resource</strong><small>Client receives the complete representation and strong ETag derived from checklist sync_version.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div><strong>Send desired state</strong><small>PUT or DELETE includes If-Match. New client-ID resources use If-None-Match: *.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div><strong>Lock in one order</strong><small>Transaction locks user sync-state first, then checklist/subscription root, then dependent rows.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div><strong>Validate and commit</strong><small>Server validates ownership, UUID tree, limits, state transition, and publication rules before replacing content.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">5</div>
+      <div><strong>Return canonical state</strong><small>Response contains new ETag, server timestamps, normalized models, and the committed representation.</small></div>
+    </div>
+  </section>
+
+  <section class="flow-card">
+    <h3>Embedded account delta</h3>
+    <div class="step">
+      <div class="num">1</div>
+      <div><strong>Request after cursor V</strong><small>Server begins one consistent read snapshot and selects changed roots ordered by account_change_version.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div><strong>Build whole entries</strong><small>Owned entry embeds current draft + current publication. Subscription entry embeds its installed release. Tombstones contain no content tree.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <div><strong>Stop at page boundary</strong><small>An aggregate is never split. Entry-count and uncompressed-byte ceilings bound the response.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div><strong>Apply atomically on device</strong><small>Client durably applies the complete page before storing the returned through_cursor.</small></div>
+    </div>
+    <div class="step">
+      <div class="num">5</div>
+      <div><strong>Continue if needed</strong><small>has_more drives the next page. Concurrent later commits have higher versions and appear on a later request.</small></div>
+    </div>
+  </section>
+</div>
+
+<div class="contract">
+  <div class="code-card"><code>428</code><small>Missing required precondition</small></div>
+  <div class="code-card"><code>412</code><small>Stale ETag or failed create precondition</small></div>
+  <div class="code-card"><code>409</code><small>Valid version, invalid domain transition</small></div>
+  <div class="code-card"><code>422</code><small>Structurally valid JSON, invalid PMCS content</small></div>
+</div>
+
+<div class="payload">
+  <strong>Delta response contract</strong>
+  <div style="margin-top:6px">
+    from_cursor · through_cursor · account_version · has_more · changes[]
+  </div>
+  <small>Each change has kind, resource ID, sync version, account change version, ETag, tombstone metadata, and—when active—the complete selected aggregate content.</small>
+</div>
+
+<div class="race">
+  <strong>Concurrent write safety</strong>
+  A mutation committed after the delta snapshot receives a later account version. It cannot be hidden behind the page cursor and will be returned on the next pull.
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="approve-sync-flow" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Approve this sync flow</h3>
+      <p>Continue to the concrete REST endpoint surface.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="revise-sync-flow" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Request changes</h3>
+      <p>Describe which mutation, paging, or conflict behavior should change.</p>
+    </div>
+  </div>
+</div>

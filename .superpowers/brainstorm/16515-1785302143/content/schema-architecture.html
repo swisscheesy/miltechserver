@@ -1,0 +1,154 @@
+<style>
+  .diagram {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr 1fr;
+    gap: 18px;
+    align-items: start;
+    margin: 26px 0;
+  }
+  .lane {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+  }
+  .lane h3 { margin-top: 0; }
+  .entity {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 11px 12px;
+    margin: 10px 0;
+    background: var(--background);
+  }
+  .entity strong { display: block; margin-bottom: 4px; }
+  .entity small { color: var(--muted); line-height: 1.35; }
+  .root { border-color: #5b8def; box-shadow: 0 0 0 1px #5b8def33; }
+  .immutable { border-color: #7d65d8; }
+  .public { border-color: #36a269; }
+  .tombstone { border-style: dashed; border-color: #d47b30; }
+  .arrow {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin: -3px 0;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .pill {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .excluded {
+    border-left: 4px solid #b94a48;
+    padding: 12px 14px;
+    background: color-mix(in srgb, #b94a48 8%, transparent);
+    border-radius: 8px;
+    margin: 18px 0;
+  }
+  @media (max-width: 900px) {
+    .diagram { grid-template-columns: 1fr; }
+  }
+</style>
+
+<h2>User-created PMCS server schema boundaries</h2>
+<p class="subtitle">
+  Normalized aggregates, permanent deletion authority, immutable releases, and linked subscriptions.
+</p>
+
+<div class="diagram">
+  <section class="lane">
+    <h3>Account sync authority</h3>
+    <div class="entity root">
+      <strong>user_pmcs_sync_state</strong>
+      <small>One row per user. Transactionally increments current_version for every owned-checklist or subscription mutation.</small>
+    </div>
+    <div class="arrow">stamps account_change_version ↓</div>
+    <div class="entity">
+      <strong>Embedded account delta</strong>
+      <small>Ordered union of changed checklist and subscription roots. Each page contains complete active representations or tombstones.</small>
+    </div>
+  </section>
+
+  <section class="lane">
+    <h3>Owned checklist aggregate</h3>
+    <div class="entity root tombstone">
+      <strong>user_pmcs_checklists</strong>
+      <small>Stable client UUID, owner, sync_version, account_change_version, timestamps, deleted_at. Root remains permanently after deletion.</small>
+    </div>
+    <div class="arrow">1 → many ↓</div>
+    <div class="entity immutable">
+      <strong>user_pmcs_revisions</strong>
+      <small>At most one mutable draft and one current publication. Published and superseded revisions are immutable.</small>
+    </div>
+    <div class="arrow">revision-owned relational tree ↓</div>
+    <div class="entity">
+      <strong>revision_models</strong>
+      <small>Display text plus server-validated normalized model.</small>
+    </div>
+    <div class="entity">
+      <strong>sections → section_models</strong>
+      <small>Stable UUIDs and one-based sibling positions.</small>
+    </div>
+    <div class="entity">
+      <strong>items → notices + procedure_steps</strong>
+      <small>Complete authored PMCS content. Parentage and ordering enforced relationally.</small>
+    </div>
+  </section>
+
+  <section class="lane">
+    <h3>Community distribution</h3>
+    <div class="entity public">
+      <strong>user_pmcs_community_sources</strong>
+      <small>One per released checklist. Initial statuses: active or retired. No moderation fields.</small>
+    </div>
+    <div class="arrow">current release ↓</div>
+    <div class="entity public immutable">
+      <strong>user_pmcs_community_releases</strong>
+      <small>Immutable revision-specific releases. Revision numbers advance monotonically; no rollback.</small>
+    </div>
+    <div class="arrow">subscriber pins one release ↓</div>
+    <div class="entity root">
+      <strong>user_pmcs_subscriptions</strong>
+      <small>Subscriber + source identity, installed_revision_id, sync versions, and permanent unsubscribe tombstone.</small>
+    </div>
+    <div class="entity">
+      <strong>Community reads</strong>
+      <small>Recent active sources with keyset pagination and optional exact normalized-model filtering.</small>
+    </div>
+  </section>
+</div>
+
+<div class="excluded">
+  <strong>Explicitly absent from Postgres:</strong>
+  inspections, snapshots, equipment selections, completions, faults, notes, exports, and custom inspection history.
+</div>
+
+<div class="legend">
+  <span class="pill">Blue: concurrency/sync root</span>
+  <span class="pill">Purple: immutable after publication</span>
+  <span class="pill">Green: public distribution</span>
+  <span class="pill">Dashed orange: permanent tombstone authority</span>
+</div>
+
+<div class="options" style="margin-top: 24px;">
+  <div class="option" data-choice="approve-schema-boundaries" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Approve these boundaries</h3>
+      <p>Continue to detailed table constraints and deletion behavior.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="revise-schema-boundaries" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Request changes</h3>
+      <p>Describe the relationship or responsibility that should move.</p>
+    </div>
+  </div>
+</div>
