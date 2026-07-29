@@ -236,13 +236,44 @@ func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context
 	return result, nil
 }
 
+// buildNotificationsQuery holds the SELECT column list, ORDER BY, and LIMIT shared by every
+// scope this query is called with, so the two scopes can never diverge in behavior the way
+// GetVehicleServices/getShopSnapshotServices did before the ORDER BY was unified. whereClause
+// and membershipJoin carry the only real variance: which column scopes the rows, and whether a
+// shop-membership check is required. limitPlaceholder is the positional arg index for LIMIT,
+// which shifts depending on how many args the membership join consumes.
+func buildNotificationsQuery(whereClause, membershipJoin string, limitPlaceholder int) string {
+	return fmt.Sprintf(`
+SELECT n.id, n.shop_id, n.vehicle_id, n.title, n.description, n.type, n.completed, n.save_time, n.last_updated, n.attached_shop_list
+FROM shop_vehicle_notifications n
+%s
+WHERE %s
+ORDER BY n.save_time DESC, n.id ASC
+LIMIT NULLIF($%d, 0)`, membershipJoin, whereClause, limitPlaceholder)
+}
+
+func scanVehicleNotification(scanner rowScanner) (model.ShopVehicleNotifications, error) {
+	var notification model.ShopVehicleNotifications
+	err := scanner.Scan(
+		&notification.ID,
+		&notification.ShopID,
+		&notification.VehicleID,
+		&notification.Title,
+		&notification.Description,
+		&notification.Type,
+		&notification.Completed,
+		&notification.SaveTime,
+		&notification.LastUpdated,
+		&notification.AttachedShopList,
+	)
+	if err != nil {
+		return model.ShopVehicleNotifications{}, fmt.Errorf("failed to scan vehicle notification: %w", err)
+	}
+	return notification, nil
+}
+
 func (repo *RepositoryImpl) getVehicleNotifications(ctx context.Context, vehicleID string, limit int) ([]model.ShopVehicleNotifications, error) {
-	const query = `
-SELECT id, shop_id, vehicle_id, title, description, type, completed, save_time, last_updated, attached_shop_list
-FROM shop_vehicle_notifications
-WHERE vehicle_id = $1
-ORDER BY save_time DESC, id ASC
-LIMIT NULLIF($2, 0)`
+	query := buildNotificationsQuery("n.vehicle_id = $1", "", 2)
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -252,21 +283,9 @@ LIMIT NULLIF($2, 0)`
 
 	notifications := []model.ShopVehicleNotifications{}
 	for rows.Next() {
-		var notification model.ShopVehicleNotifications
-		err := rows.Scan(
-			&notification.ID,
-			&notification.ShopID,
-			&notification.VehicleID,
-			&notification.Title,
-			&notification.Description,
-			&notification.Type,
-			&notification.Completed,
-			&notification.SaveTime,
-			&notification.LastUpdated,
-			&notification.AttachedShopList,
-		)
+		notification, err := scanVehicleNotification(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan vehicle notification: %w", err)
+			return nil, err
 		}
 		notifications = append(notifications, notification)
 	}
@@ -341,8 +360,11 @@ ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificat
 	return items, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleRecentChanges(ctx context.Context, vehicleID string, limit int) ([]response.NotificationChangeWithUsername, error) {
-	const query = `
+// buildRecentChangesQuery holds the SELECT column list, joins to resolve display fields, ORDER
+// BY, and LIMIT shared across scopes. whereClause and membershipJoin carry the only real
+// variance between the vehicle-scoped and shop-scoped callers.
+func buildRecentChangesQuery(whereClause, membershipJoin string, limitPlaceholder int) string {
+	return fmt.Sprintf(`
 SELECT
 	c.id,
 	c.notification_id,
@@ -358,12 +380,17 @@ SELECT
 	COALESCE(v.admin, c.vehicle_admin) AS vehicle_admin,
 	CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END AS is_deleted
 FROM shop_vehicle_notification_changes c
+%s
 LEFT JOIN users u ON c.changed_by = u.uid
 LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
-WHERE c.vehicle_id = $1
+WHERE %s
 ORDER BY c.changed_at DESC, c.id ASC
-LIMIT NULLIF($2, 0)`
+LIMIT NULLIF($%d, 0)`, membershipJoin, whereClause, limitPlaceholder)
+}
+
+func (repo *RepositoryImpl) GetVehicleRecentChanges(ctx context.Context, vehicleID string, limit int) ([]response.NotificationChangeWithUsername, error) {
+	query := buildRecentChangesQuery("c.vehicle_id = $1", "", 2)
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -386,18 +413,58 @@ LIMIT NULLIF($2, 0)`
 	return changes, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleServices(ctx context.Context, vehicleID string, limit int) ([]response.EquipmentServiceResponse, error) {
-	const query = `
+// buildServiceQuery holds the SELECT column list, ORDER BY, and LIMIT shared across scopes.
+// Both scopes previously hand-rolled this query separately and diverged on ORDER BY direction
+// (vehicle: DESC, shop: ASC) with nothing to catch it — the one canonical ORDER BY here (newest
+// service first, matching every other time-ordered list in this file) makes that divergence
+// structurally impossible going forward.
+func buildServiceQuery(whereClause, membershipJoin string, limitPlaceholder int) string {
+	return fmt.Sprintf(`
 SELECT
 	es.id, es.shop_id, es.equipment_id, es.list_id, es.description, es.service_type,
 	es.created_by, COALESCE(u.username, 'Unknown User') AS created_by_username,
 	es.is_completed, es.created_at, es.updated_at, es.service_date, es.service_hours,
 	es.completion_date
 FROM equipment_services es
+%s
 LEFT JOIN users u ON u.uid = es.created_by
-WHERE es.equipment_id = $1
+WHERE %s
 ORDER BY es.service_date DESC NULLS LAST, es.created_at DESC, es.id ASC
-LIMIT NULLIF($2, 0)`
+LIMIT NULLIF($%d, 0)`, membershipJoin, whereClause, limitPlaceholder)
+}
+
+func scanEquipmentService(scanner rowScanner) (response.EquipmentServiceResponse, error) {
+	var service response.EquipmentServiceResponse
+	var serviceDate sql.NullTime
+	var serviceHours sql.NullInt64
+	var completionDate sql.NullTime
+	err := scanner.Scan(
+		&service.ID,
+		&service.ShopID,
+		&service.EquipmentID,
+		&service.ListID,
+		&service.Description,
+		&service.ServiceType,
+		&service.CreatedBy,
+		&service.CreatedByUsername,
+		&service.IsCompleted,
+		&service.CreatedAt,
+		&service.UpdatedAt,
+		&serviceDate,
+		&serviceHours,
+		&completionDate,
+	)
+	if err != nil {
+		return response.EquipmentServiceResponse{}, fmt.Errorf("failed to scan equipment service: %w", err)
+	}
+	service.ServiceDate = nullTimePtr(serviceDate)
+	service.ServiceHours = nullInt32Ptr(serviceHours)
+	service.CompletionDate = nullTimePtr(completionDate)
+	return service, nil
+}
+
+func (repo *RepositoryImpl) GetVehicleServices(ctx context.Context, vehicleID string, limit int) ([]response.EquipmentServiceResponse, error) {
+	query := buildServiceQuery("es.equipment_id = $1", "", 2)
 
 	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
@@ -407,32 +474,10 @@ LIMIT NULLIF($2, 0)`
 
 	services := []response.EquipmentServiceResponse{}
 	for rows.Next() {
-		var service response.EquipmentServiceResponse
-		var serviceDate sql.NullTime
-		var serviceHours sql.NullInt64
-		var completionDate sql.NullTime
-		err := rows.Scan(
-			&service.ID,
-			&service.ShopID,
-			&service.EquipmentID,
-			&service.ListID,
-			&service.Description,
-			&service.ServiceType,
-			&service.CreatedBy,
-			&service.CreatedByUsername,
-			&service.IsCompleted,
-			&service.CreatedAt,
-			&service.UpdatedAt,
-			&serviceDate,
-			&serviceHours,
-			&completionDate,
-		)
+		service, err := scanEquipmentService(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan vehicle equipment service: %w", err)
+			return nil, err
 		}
-		service.ServiceDate = nullTimePtr(serviceDate)
-		service.ServiceHours = nullInt32Ptr(serviceHours)
-		service.CompletionDate = nullTimePtr(completionDate)
 		services = append(services, service)
 	}
 	if err := rows.Err(); err != nil {
@@ -780,7 +825,7 @@ func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, u
 		notificationIDs[i] = notification.ID
 	}
 
-	items, err := repo.getSnapshotItemsByNotificationIDs(ctx, notificationIDs, itemLimitPerNotification)
+	items, err := repo.getItemsByNotificationIDs(ctx, notificationIDs, itemLimitPerNotification)
 	if err != nil {
 		return nil, err
 	}
@@ -805,78 +850,12 @@ func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, u
 	return result, nil
 }
 
-func (repo *RepositoryImpl) getSnapshotItemsByNotificationIDs(ctx context.Context, notificationIDs []string, perNotificationLimit int) ([]model.ShopNotificationItems, error) {
-	if len(notificationIDs) == 0 {
-		return []model.ShopNotificationItems{}, nil
-	}
-
-	itemLimitPlaceholder := len(notificationIDs) + 1
-	query := fmt.Sprintf(`
-WITH ranked_items AS (
-	SELECT
-		id,
-		shop_id,
-		notification_id,
-		niin,
-		nomenclature,
-		quantity,
-		save_time,
-		ROW_NUMBER() OVER (
-			PARTITION BY notification_id
-			ORDER BY save_time ASC, id ASC
-		) AS item_rank
-	FROM shop_notification_items
-	WHERE notification_id IN (%s)
-)
-SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
-FROM ranked_items
-WHERE ($%d = 0 OR item_rank <= $%d)
-ORDER BY notification_id ASC, save_time ASC, id ASC`, placeholders(len(notificationIDs)), itemLimitPlaceholder, itemLimitPlaceholder)
-
-	args := make([]any, 0, len(notificationIDs)+1)
-	for _, id := range notificationIDs {
-		args = append(args, id)
-	}
-	args = append(args, perNotificationLimit)
-
-	rows, err := repo.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query bounded snapshot notification items: %w", err)
-	}
-	defer rows.Close()
-
-	items := []model.ShopNotificationItems{}
-	for rows.Next() {
-		var item model.ShopNotificationItems
-		err := rows.Scan(
-			&item.ID,
-			&item.ShopID,
-			&item.NotificationID,
-			&item.Niin,
-			&item.Nomenclature,
-			&item.Quantity,
-			&item.SaveTime,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan bounded snapshot notification item: %w", err)
-		}
-		items = append(items, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate bounded snapshot notification items: %w", err)
-	}
-
-	return items, nil
-}
-
 func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicleNotifications, error) {
-	const query = `
-SELECT n.id, n.shop_id, n.vehicle_id, n.title, n.description, n.type, n.completed, n.save_time, n.last_updated, n.attached_shop_list
-FROM shop_vehicle_notifications n
-INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2
-WHERE n.shop_id = $1
-ORDER BY n.save_time DESC, n.id ASC
-LIMIT NULLIF($3, 0)`
+	query := buildNotificationsQuery(
+		"n.shop_id = $1",
+		"INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2",
+		3,
+	)
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -886,21 +865,9 @@ LIMIT NULLIF($3, 0)`
 
 	notifications := []model.ShopVehicleNotifications{}
 	for rows.Next() {
-		var notification model.ShopVehicleNotifications
-		err := rows.Scan(
-			&notification.ID,
-			&notification.ShopID,
-			&notification.VehicleID,
-			&notification.Title,
-			&notification.Description,
-			&notification.Type,
-			&notification.Completed,
-			&notification.SaveTime,
-			&notification.LastUpdated,
-			&notification.AttachedShopList,
-		)
+		notification, err := scanVehicleNotification(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan shop snapshot notification: %w", err)
+			return nil, err
 		}
 		notifications = append(notifications, notification)
 	}
@@ -960,18 +927,11 @@ LIMIT NULLIF($3, 0)`
 }
 
 func (repo *RepositoryImpl) getShopSnapshotServices(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.EquipmentServiceResponse, error) {
-	const query = `
-SELECT
-	es.id, es.shop_id, es.equipment_id, es.list_id, es.description, es.service_type,
-	es.created_by, COALESCE(u.username, 'Unknown User') AS created_by_username,
-	es.is_completed, es.created_at, es.updated_at, es.service_date, es.service_hours,
-	es.completion_date
-FROM equipment_services es
-INNER JOIN shop_members sm ON sm.shop_id = es.shop_id AND sm.user_id = $2
-LEFT JOIN users u ON u.uid = es.created_by
-WHERE es.shop_id = $1
-ORDER BY es.service_date ASC NULLS LAST, es.created_at DESC, es.id ASC
-LIMIT NULLIF($3, 0)`
+	query := buildServiceQuery(
+		"es.shop_id = $1",
+		"INNER JOIN shop_members sm ON sm.shop_id = es.shop_id AND sm.user_id = $2",
+		3,
+	)
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
@@ -981,32 +941,10 @@ LIMIT NULLIF($3, 0)`
 
 	services := []response.EquipmentServiceResponse{}
 	for rows.Next() {
-		var service response.EquipmentServiceResponse
-		var serviceDate sql.NullTime
-		var serviceHours sql.NullInt64
-		var completionDate sql.NullTime
-		err := rows.Scan(
-			&service.ID,
-			&service.ShopID,
-			&service.EquipmentID,
-			&service.ListID,
-			&service.Description,
-			&service.ServiceType,
-			&service.CreatedBy,
-			&service.CreatedByUsername,
-			&service.IsCompleted,
-			&service.CreatedAt,
-			&service.UpdatedAt,
-			&serviceDate,
-			&serviceHours,
-			&completionDate,
-		)
+		service, err := scanEquipmentService(rows)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan shop snapshot service: %w", err)
+			return nil, err
 		}
-		service.ServiceDate = nullTimePtr(serviceDate)
-		service.ServiceHours = nullInt32Ptr(serviceHours)
-		service.CompletionDate = nullTimePtr(completionDate)
 		services = append(services, service)
 	}
 	if err := rows.Err(); err != nil {
@@ -1017,29 +955,11 @@ LIMIT NULLIF($3, 0)`
 }
 
 func (repo *RepositoryImpl) getShopSnapshotRecentChanges(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
-	const query = `
-SELECT
-	c.id,
-	c.notification_id,
-	c.shop_id,
-	c.vehicle_id,
-	c.changed_by,
-	COALESCE(u.username, 'Unknown User') AS changed_by_username,
-	c.changed_at,
-	c.change_type,
-	c.field_changes,
-	COALESCE(n.title, c.notification_title, 'Deleted Notification') AS notification_title,
-	c.notification_type,
-	COALESCE(v.admin, c.vehicle_admin) AS vehicle_admin,
-	CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END AS is_deleted
-FROM shop_vehicle_notification_changes c
-INNER JOIN shop_members sm ON sm.shop_id = c.shop_id AND sm.user_id = $2
-LEFT JOIN users u ON c.changed_by = u.uid
-LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
-LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
-WHERE c.shop_id = $1
-ORDER BY c.changed_at DESC, c.id ASC
-LIMIT NULLIF($3, 0)`
+	query := buildRecentChangesQuery(
+		"c.shop_id = $1",
+		"INNER JOIN shop_members sm ON sm.shop_id = c.shop_id AND sm.user_id = $2",
+		3,
+	)
 
 	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {

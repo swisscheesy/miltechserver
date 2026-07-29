@@ -267,6 +267,54 @@ func createNotification(t *testing.T, router *gin.Engine, userID string, shopID 
 	return notificationID
 }
 
+func createNotificationRow(t *testing.T, shopID, vehicleID, title string, saveTime time.Time) string {
+	t.Helper()
+
+	notificationID := uuid.New().String()
+	_, err := testDB.Exec(
+		`INSERT INTO shop_vehicle_notifications (
+			id, shop_id, vehicle_id, title, description, type, completed, save_time, last_updated
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		notificationID,
+		shopID,
+		vehicleID,
+		title,
+		"desc",
+		"PM",
+		false,
+		saveTime,
+		saveTime,
+	)
+	require.NoError(t, err)
+
+	return notificationID
+}
+
+func createNotificationChange(t *testing.T, shopID, vehicleID, notificationID string, changedAt time.Time) string {
+	t.Helper()
+
+	changeID := uuid.New().String()
+	_, err := testDB.Exec(
+		`INSERT INTO shop_vehicle_notification_changes (
+			id, notification_id, shop_id, vehicle_id, changed_by, changed_at, change_type, field_changes, notification_title, notification_type, vehicle_admin
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		changeID,
+		notificationID,
+		shopID,
+		vehicleID,
+		nil,
+		changedAt,
+		"created",
+		"{}",
+		"PM",
+		"PM",
+		nil,
+	)
+	require.NoError(t, err)
+
+	return changeID
+}
+
 func createInviteCode(t *testing.T, router *gin.Engine, userID string, shopID string) (string, string) {
 	t.Helper()
 

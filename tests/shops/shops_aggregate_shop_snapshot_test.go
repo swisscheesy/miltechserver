@@ -49,6 +49,54 @@ func TestShopSnapshotDefaultIncludes(t *testing.T) {
 	require.Len(t, payload["services"].([]interface{}), 1)
 }
 
+func TestShopSnapshotServicesOrderedNewestFirst(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Service Order Shop Snapshot")
+	vehicleID := createVehicle(t, router, "user-1", shopID)
+	olderDate := time.Now().AddDate(0, 0, -5)
+	newerDate := time.Now().AddDate(0, 0, -1)
+	olderServiceID := createEquipmentService(t, "user-1", shopID, vehicleID, "", "Older service", &olderDate, false)
+	newerServiceID := createEquipmentService(t, "user-1", shopID, vehicleID, "", "Newer service", &newerDate, false)
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/snapshot", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	services := payload["services"].([]interface{})
+	require.Len(t, services, 2)
+	require.Equal(t, newerServiceID, services[0].(map[string]interface{})["id"])
+	require.Equal(t, olderServiceID, services[1].(map[string]interface{})["id"])
+}
+
+func TestShopSnapshotNotificationsAndChangesOrderedNewestFirst(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Notification Order Shop Snapshot")
+	vehicleID := createVehicle(t, router, "user-1", shopID)
+	olderNotificationID := createNotificationRow(t, shopID, vehicleID, "Older PM", time.Now().Add(-time.Hour))
+	newerNotificationID := createNotificationRow(t, shopID, vehicleID, "Newer PM", time.Now())
+	olderChangeID := createNotificationChange(t, shopID, vehicleID, olderNotificationID, time.Now().Add(-time.Hour))
+	newerChangeID := createNotificationChange(t, shopID, vehicleID, newerNotificationID, time.Now())
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/snapshot?include=vehicles,lists,notifications,services,changes", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+
+	notifications := payload["notifications"].([]interface{})
+	require.Len(t, notifications, 2)
+	require.Equal(t, newerNotificationID, notifications[0].(map[string]interface{})["notification"].(map[string]interface{})["id"])
+	require.Equal(t, olderNotificationID, notifications[1].(map[string]interface{})["notification"].(map[string]interface{})["id"])
+
+	changes := payload["recent_changes"].([]interface{})
+	require.Len(t, changes, 2)
+	require.Equal(t, newerChangeID, changes[0].(map[string]interface{})["id"])
+	require.Equal(t, olderChangeID, changes[1].(map[string]interface{})["id"])
+}
+
 func TestShopSnapshotIncludeMessages(t *testing.T) {
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
