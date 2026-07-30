@@ -8,6 +8,7 @@ require (
 	firebase.google.com/go/v4 v4.15.2
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.10.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.1
+	github.com/clipperhouse/uax29/v2 v2.4.0
 	github.com/gin-contrib/gzip v1.1.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-jet/jet/v2 v2.13.0
@@ -41,6 +42,7 @@ require (
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

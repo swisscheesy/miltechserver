@@ -1,0 +1,81 @@
+{
+  "normalization_cases": [
+    {
+      "name": "ascii whitespace",
+      "input": " \tM1152A1\n ",
+      "normalized": "m1152a1"
+    },
+    {
+      "name": "non-ASCII whitespace",
+      "input": "\u00a0M1152\u2003A1\u3000",
+      "normalized": "m1152 a1"
+    },
+    {
+      "name": "mixed whitespace run",
+      "input": "M1152 \t\u2003\n A1",
+      "normalized": "m1152 a1"
+    },
+    {
+      "name": "composed sequence remains composed",
+      "input": " \u00c9QUIPEMENT ",
+      "normalized": "\u00e9quipement"
+    },
+    {
+      "name": "decomposed sequence remains decomposed",
+      "input": " E\u0301QUIPEMENT ",
+      "normalized": "e\u0301quipement"
+    },
+    {
+      "name": "ZWJ emoji",
+      "input": " \ud83d\udc69\u200d\ud83d\udd27 TRUCK ",
+      "normalized": "\ud83d\udc69\u200d\ud83d\udd27 truck"
+    },
+    {
+      "name": "flag and skin tone",
+      "input": " \ud83c\uddfa\ud83c\uddf8 \ud83d\udc4d\ud83c\udffd ",
+      "normalized": "\ud83c\uddfa\ud83c\uddf8 \ud83d\udc4d\ud83c\udffd"
+    }
+  ],
+  "grapheme_cases": [
+    {
+      "name": "ASCII",
+      "input": "abc",
+      "count": 3
+    },
+    {
+      "name": "composed",
+      "input": "\u00e9",
+      "count": 1
+    },
+    {
+      "name": "decomposed combining sequence",
+      "input": "e\u0301",
+      "count": 1
+    },
+    {
+      "name": "ZWJ emoji",
+      "input": "\ud83d\udc69\u200d\ud83d\udd27",
+      "count": 1
+    },
+    {
+      "name": "regional indicator flag",
+      "input": "\ud83c\uddfa\ud83c\uddf8",
+      "count": 1
+    },
+    {
+      "name": "emoji skin tone",
+      "input": "\ud83d\udc4d\ud83c\udffd",
+      "count": 1
+    },
+    {
+      "name": "isolated combining mark",
+      "input": "\u0301",
+      "count": 1
+    },
+    {
+      "name": "multiple complex clusters",
+      "input": "e\u0301\ud83d\udc69\u200d\ud83d\udd27\ud83c\uddfa\ud83c\uddf8\ud83d\udc4d\ud83c\udffd",
+      "count": 4
+    }
+  ]
+}
