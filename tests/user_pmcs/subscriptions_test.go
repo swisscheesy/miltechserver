@@ -2,8 +2,10 @@ package user_pmcs_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -337,6 +339,128 @@ func TestSubscriptionUpdateDiscoveryUsesChecklistUUIDKeysetAndReportsRetiredSour
 			require.False(t, item.UpdateAvailable)
 		}
 	}
+}
+
+func TestSubscriptionUpdateDiscoveryReportsActiveSubscriptionWithoutUpdateWithoutMutation(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[0].Input.ID, checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion))
+	require.NoError(t, err)
+	subscriberUID := newUserPmcsTestUser(t)
+	repository := subscriptions.NewRepository(persistence.NewStore(testDB, 3), shared.DefaultConfig())
+	installed, err := repository.Install(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
+	require.NoError(t, err)
+	var accountVersion int64
+	err = testDB.QueryRowContext(context.Background(), `SELECT current_version FROM user_pmcs_sync_state WHERE user_uid = $1`, subscriberUID).Scan(&accountVersion)
+	require.NoError(t, err)
+
+	page, err := repository.ListUpdates(context.Background(), subscriberUID, nil, 50)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	item := page.Items[0]
+	require.Equal(t, fixture.checklist, item.ChecklistID)
+	require.Equal(t, "active", item.SourceStatus)
+	require.Equal(t, fixture.revisions[0].Input.ID, item.InstalledRevisionID)
+	require.Equal(t, int32(1), item.InstalledRevisionNumber)
+	require.NotNil(t, item.CurrentReleaseRevisionID)
+	require.Equal(t, fixture.revisions[0].Input.ID, *item.CurrentReleaseRevisionID)
+	require.NotNil(t, item.CurrentReleaseNumber)
+	require.Equal(t, int32(1), *item.CurrentReleaseNumber)
+	require.False(t, item.UpdateAvailable)
+	payload, err := json.Marshal(item)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), `"sections"`)
+
+	var syncVersion, changeVersion, currentAccountVersion int64
+	err = testDB.QueryRowContext(context.Background(), `SELECT sync_version, account_change_version FROM user_pmcs_subscriptions WHERE subscriber_uid = $1 AND checklist_id = $2`, subscriberUID, fixture.checklist).Scan(&syncVersion, &changeVersion)
+	require.NoError(t, err)
+	require.Equal(t, installed.Subscription.SyncVersion, syncVersion)
+	require.Equal(t, installed.Subscription.AccountChangeVersion, changeVersion)
+	err = testDB.QueryRowContext(context.Background(), `SELECT current_version FROM user_pmcs_sync_state WHERE user_uid = $1`, subscriberUID).Scan(&currentAccountVersion)
+	require.NoError(t, err)
+	require.Equal(t, accountVersion, currentAccountVersion)
+}
+
+func TestSubscriptionAcceptUpdateRejectsStaleETagWithoutMutation(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 2)
+	firstRelease, err := fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[0].Input.ID, checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion))
+	require.NoError(t, err)
+	subscriberUID := newUserPmcsTestUser(t)
+	repository := subscriptions.NewRepository(persistence.NewStore(testDB, 3), shared.DefaultConfig())
+	installed, err := repository.Install(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
+	require.NoError(t, err)
+	_, err = fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[1].Input.ID, checklistPrecondition(fixture.checklist, firstRelease.Aggregate.SyncVersion))
+	require.NoError(t, err)
+	var accountVersion int64
+	err = testDB.QueryRowContext(context.Background(), `SELECT current_version FROM user_pmcs_sync_state WHERE user_uid = $1`, subscriberUID).Scan(&accountVersion)
+	require.NoError(t, err)
+
+	_, err = repository.AcceptUpdate(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[1].Input.ID, shared.Precondition{Mode: shared.PreconditionMatch, ETag: `"stale"`})
+	requireAPIIntegrationError(t, err, 412, "stale_precondition")
+
+	var installedRevisionID uuid.UUID
+	var syncVersion, changeVersion, currentAccountVersion int64
+	err = testDB.QueryRowContext(context.Background(), `SELECT installed_revision_id, sync_version, account_change_version FROM user_pmcs_subscriptions WHERE subscriber_uid = $1 AND checklist_id = $2`, subscriberUID, fixture.checklist).Scan(&installedRevisionID, &syncVersion, &changeVersion)
+	require.NoError(t, err)
+	require.Equal(t, fixture.revisions[0].Input.ID, installedRevisionID)
+	require.Equal(t, installed.Subscription.SyncVersion, syncVersion)
+	require.Equal(t, installed.Subscription.AccountChangeVersion, changeVersion)
+	err = testDB.QueryRowContext(context.Background(), `SELECT current_version FROM user_pmcs_sync_state WHERE user_uid = $1`, subscriberUID).Scan(&currentAccountVersion)
+	require.NoError(t, err)
+	require.Equal(t, accountVersion, currentAccountVersion)
+}
+
+func TestSubscriptionUpdateDiscoveryExplainUsesActiveUpdateIndex(t *testing.T) {
+	tx, err := testDB.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, tx.Rollback()) })
+	subscriberUID := "explain-sub-" + uuid.NewString()
+	ownerUID := "explain-owner-" + uuid.NewString()
+	for _, uid := range []string{subscriberUID, ownerUID} {
+		_, err = tx.ExecContext(context.Background(), `INSERT INTO users (uid, email, username, created_at, is_enabled) VALUES ($1, $2, $3, now(), TRUE)`, uid, uid+"@example.com", "explain")
+		require.NoError(t, err)
+	}
+	for index := 0; index < 500; index++ {
+		checklistID, installedID, currentID := uuid.New(), uuid.New(), uuid.New()
+		_, err = tx.ExecContext(context.Background(), `INSERT INTO user_pmcs_checklists (id, owner_uid, sync_version, account_change_version) VALUES ($1, $2, 1, 1)`, checklistID, ownerUID)
+		require.NoError(t, err)
+		for _, revision := range []struct {
+			id     uuid.UUID
+			number int
+			state  string
+		}{{installedID, 1, "superseded"}, {currentID, 2, "published"}} {
+			_, err = tx.ExecContext(context.Background(), `INSERT INTO user_pmcs_revisions (id, checklist_id, state, revision_number, name, description, content_hash, published_at) VALUES ($1, $2, $3, $4, '', '', $5, now())`, revision.id, checklistID, revision.state, revision.number, make([]byte, 32))
+			require.NoError(t, err)
+			_, err = tx.ExecContext(context.Background(), `INSERT INTO user_pmcs_community_releases (revision_id, checklist_id) VALUES ($1, $2)`, revision.id, checklistID)
+			require.NoError(t, err)
+		}
+		_, err = tx.ExecContext(context.Background(), `INSERT INTO user_pmcs_community_sources (checklist_id, status, current_release_revision_id, latest_release_revision_number, first_released_at, updated_at) VALUES ($1, 'active', $2, 2, now(), now())`, checklistID, currentID)
+		require.NoError(t, err)
+		_, err = tx.ExecContext(context.Background(), `INSERT INTO user_pmcs_subscriptions (subscriber_uid, checklist_id, installed_revision_id, sync_version, account_change_version) VALUES ($1, $2, $3, 1, 1)`, subscriberUID, checklistID, installedID)
+		require.NoError(t, err)
+	}
+	rows, err := tx.QueryContext(context.Background(), `EXPLAIN (ANALYZE, BUFFERS)
+		SELECT subscription.checklist_id, COALESCE(source.status, 'retired'), subscription.installed_revision_id, installed.revision_number, source.current_release_revision_id, current_release.revision_number
+		FROM user_pmcs_subscriptions AS subscription
+		JOIN user_pmcs_revisions AS installed ON installed.checklist_id = subscription.checklist_id AND installed.id = subscription.installed_revision_id
+		LEFT JOIN user_pmcs_community_sources AS source ON source.checklist_id = subscription.checklist_id
+		LEFT JOIN user_pmcs_revisions AS current_release ON current_release.checklist_id = source.checklist_id AND current_release.id = source.current_release_revision_id
+		WHERE subscription.subscriber_uid = $1 AND subscription.deleted_at IS NULL
+		ORDER BY subscription.checklist_id LIMIT 51`, subscriberUID)
+	require.NoError(t, err)
+	defer rows.Close()
+	planLines := make([]string, 0)
+	for rows.Next() {
+		var line string
+		require.NoError(t, rows.Scan(&line))
+		planLines = append(planLines, line)
+	}
+	require.NoError(t, rows.Err())
+	plan := strings.Join(planLines, "\n")
+	require.Contains(t, plan, "user_pmcs_subscriptions_active_update_idx")
+	require.Contains(t, plan, "rows=51")
+	require.Contains(t, plan, "Buffers:")
+	require.Contains(t, plan, "Execution Time:")
+	t.Logf("Task 12 EXPLAIN (500 active subscriptions; rollback-only fixture):\n%s", plan)
 }
 
 var _ = community.Repository(nil)
