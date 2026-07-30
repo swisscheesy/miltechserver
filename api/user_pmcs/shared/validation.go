@@ -1,7 +1,6 @@
 package shared
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -44,9 +43,6 @@ func prepareRevision(input RevisionInput, config Config, publication bool) (Prep
 	if err := config.validate(); err != nil {
 		return PreparedRevision{}, err
 	}
-	if err := validateMutationBodySize(input, config.MaxMutationBodyBytes); err != nil {
-		return PreparedRevision{}, err
-	}
 	if err := validateRevisionUTF8(input); err != nil {
 		return PreparedRevision{}, err
 	}
@@ -68,19 +64,6 @@ func prepareRevision(input RevisionInput, config Config, publication bool) (Prep
 		Hash:   hash,
 		Counts: counts,
 	}, nil
-}
-
-func validateMutationBodySize(input RevisionInput, maximum int64) error {
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return NewValidationFailed("revision cannot be encoded", nil)
-	}
-	if int64(len(payload)) > maximum {
-		return NewContentTooLarge("revision body exceeds the configured limit", map[string]any{
-			"maximum_bytes": maximum,
-		})
-	}
-	return nil
 }
 
 func cloneAndNormalizeRevision(input RevisionInput) (RevisionInput, error) {

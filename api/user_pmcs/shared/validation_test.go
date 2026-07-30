@@ -1,13 +1,16 @@
 package shared_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
 	"miltechserver/api/user_pmcs/shared"
@@ -434,22 +437,46 @@ func TestDraftTotalNodeCeilings(t *testing.T) {
 	}
 }
 
-func TestDraftMutationBodyByteCeiling(t *testing.T) {
+func TestPublicationDoesNotInferMutationBodySizeFromReencodedJSON(t *testing.T) {
 	input := validPublication()
-	payload, err := json.Marshal(input)
+	input.Description = strings.Repeat("<>&\u2028\u2029", 500)
+
+	var rawBody bytes.Buffer
+	encoder := json.NewEncoder(&rawBody)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(input); err != nil {
+		t.Fatalf("json.Encode() error = %v", err)
+	}
+	literalBody := bytes.ReplaceAll(rawBody.Bytes(), []byte(`\u2028`), []byte("\u2028"))
+	literalBody = bytes.ReplaceAll(literalBody, []byte(`\u2029`), []byte("\u2029"))
+	if !bytes.Contains(literalBody, []byte(input.Description)) {
+		t.Fatal("test request does not contain the literal HTML-sensitive authored content")
+	}
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(literalBody))
+	context.Request.Header.Set("Content-Type", "application/json")
+
+	var decoded shared.RevisionInput
+	if apiError := shared.DecodeStrictJSON(context, &decoded, int64(len(literalBody))); apiError != nil {
+		t.Fatalf("DecodeStrictJSON() at exact raw-body limit error = %v", apiError)
+	}
+	reencoded, err := json.Marshal(decoded)
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-
-	config := shared.DefaultConfig()
-	config.MaxMutationBodyBytes = int64(len(payload))
-	if _, err := shared.PrepareDraft(input, config); err != nil {
-		t.Fatalf("PrepareDraft() at exact body ceiling error = %v", err)
+	if len(reencoded) <= len(literalBody) {
+		t.Fatalf("HTML-escaped encoding length = %d, want greater than literal body length %d",
+			len(reencoded), len(literalBody))
 	}
 
-	config.MaxMutationBodyBytes--
-	_, err = shared.PrepareDraft(input, config)
-	requireAPIError(t, err, http.StatusRequestEntityTooLarge, "content_too_large")
+	config := shared.DefaultConfig()
+	config.MaxMutationBodyBytes = int64(len(literalBody))
+	if _, err := shared.PreparePublication(decoded, config); err != nil {
+		t.Fatalf("PreparePublication() after accepted raw body error = %v", err)
+	}
 }
 
 func TestDraftPreparationFillsNormalizedModelsCountsAndHashWithoutMutatingCaller(t *testing.T) {
