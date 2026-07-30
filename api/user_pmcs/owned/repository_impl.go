@@ -3,6 +3,7 @@ package owned
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -59,7 +60,7 @@ func (repository *RepositoryImpl) GetRevision(
 	ownerUID string,
 	checklistID uuid.UUID,
 	revisionID uuid.UUID,
-) (*shared.Revision, error) {
+) (*HistoricalRevisionResult, error) {
 	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
@@ -71,10 +72,13 @@ func (repository *RepositoryImpl) GetRevision(
 		return nil, rollbackReadTransaction(tx, err)
 	}
 
-	var authorizedRevisionID uuid.UUID
+	var (
+		authorizedRevisionID uuid.UUID
+		storedContentHash    []byte
+	)
 	err = tx.QueryRowContext(
 		ctx,
-		`SELECT revision.id
+		`SELECT revision.id, revision.content_hash
 		 FROM user_pmcs_revisions AS revision
 		 JOIN user_pmcs_checklists AS checklist
 		   ON checklist.id = revision.checklist_id
@@ -86,7 +90,7 @@ func (repository *RepositoryImpl) GetRevision(
 		checklistID,
 		ownerUID,
 		revisionID,
-	).Scan(&authorizedRevisionID)
+	).Scan(&authorizedRevisionID, &storedContentHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, rollbackReadTransaction(tx, hiddenChecklistError())
 	}
@@ -94,6 +98,15 @@ func (repository *RepositoryImpl) GetRevision(
 		return nil, rollbackReadTransaction(
 			tx,
 			fmt.Errorf("authorize owned historical revision: %w", err),
+		)
+	}
+	if len(storedContentHash) != sha256.Size {
+		return nil, rollbackReadTransaction(
+			tx,
+			fmt.Errorf(
+				"owned historical revision content hash has length %d",
+				len(storedContentHash),
+			),
 		)
 	}
 
@@ -115,7 +128,22 @@ func (repository *RepositoryImpl) GetRevision(
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit owned revision snapshot: %w", err)
 	}
-	return &revision, nil
+	var contentHash [sha256.Size]byte
+	copy(contentHash[:], storedContentHash)
+	return &HistoricalRevisionResult{
+		Revision: HistoricalRevision{
+			ID:             revision.ID,
+			RevisionNumber: revision.RevisionNumber,
+			Name:           revision.Name,
+			Description:    revision.Description,
+			Models:         revision.Models,
+			Sections:       revision.Sections,
+			CreatedAt:      revision.CreatedAt,
+			UpdatedAt:      revision.UpdatedAt,
+			PublishedAt:    revision.PublishedAt,
+		},
+		ContentHash: contentHash,
+	}, nil
 }
 
 func rollbackReadTransaction(tx *sql.Tx, cause error) error {
@@ -515,12 +543,10 @@ func (repository *RepositoryImpl) Publish(
 			if checklist.deletedAt != nil {
 				return nil, staleChecklistError()
 			}
-			if !precondition.Matches(shared.MakeChecklistETag(
+			preconditionMatches := precondition.Matches(shared.MakeChecklistETag(
 				checklistID,
 				checklist.syncVersion,
-			)) {
-				return nil, staleChecklistError()
-			}
+			))
 			if revision.Input.RevisionNumber == nil ||
 				*revision.Input.RevisionNumber <= 0 {
 				return nil, shared.NewInvalidTransition(
@@ -538,6 +564,9 @@ func (repository *RepositoryImpl) Publish(
 			)
 			if err != nil || idempotent != nil {
 				return idempotent, err
+			}
+			if !preconditionMatches {
+				return nil, staleChecklistError()
 			}
 
 			submittedNumber := *revision.Input.RevisionNumber
@@ -738,10 +767,7 @@ func (repository *RepositoryImpl) resolvePublicationRetry(
 		return nil, fmt.Errorf("inspect publication retry: %w", err)
 	}
 	if storedChecklistID != checklist.id {
-		return nil, shared.NewValidationFailed(
-			"revision tree UUID belongs to another resource",
-			nil,
-		)
+		return nil, staleChecklistError()
 	}
 	if state == "draft" {
 		return nil, nil

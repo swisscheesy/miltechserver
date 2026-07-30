@@ -15,7 +15,7 @@ import (
 type repositoryStub struct {
 	getResult         *shared.ChecklistAggregate
 	getError          error
-	getRevisionResult *shared.Revision
+	getRevisionResult *HistoricalRevisionResult
 	getRevisionError  error
 	mutationResult    *MutationResult
 	mutationError     error
@@ -37,7 +37,7 @@ func (stub *repositoryStub) GetRevision(
 	ownerUID string,
 	checklistID uuid.UUID,
 	revisionID uuid.UUID,
-) (*shared.Revision, error) {
+) (*HistoricalRevisionResult, error) {
 	stub.getRevisionCalls++
 	stub.receivedOwnerUID = ownerUID
 	stub.receivedChecklist = checklistID
@@ -374,17 +374,21 @@ func TestHistoricalGetReturnsImmutableETag(t *testing.T) {
 	checklistID := uuid.New()
 	revisionID := uuid.New()
 	number := int32(1)
+	var storedHash [32]byte
+	storedHash[0] = 0x7f
 	repository := &repositoryStub{
-		getRevisionResult: &shared.Revision{
-			ID:             revisionID,
-			RevisionNumber: &number,
-			Name:           "Vehicle PMCS",
-			Description:    "Immutable",
-			State:          "superseded",
-			Models: []shared.ModelValue{
-				{DisplayText: "M998", NormalizedText: "m998"},
+		getRevisionResult: &HistoricalRevisionResult{
+			Revision: HistoricalRevision{
+				ID:             revisionID,
+				RevisionNumber: &number,
+				Name:           "Vehicle PMCS",
+				Description:    "Tree intentionally differs from stored hash",
+				Models: []shared.ModelValue{
+					{DisplayText: "M998", NormalizedText: "m998"},
+				},
+				Sections: []shared.Section{},
 			},
-			Sections: []shared.Section{},
+			ContentHash: storedHash,
 		},
 	}
 	service := NewService(repository, shared.DefaultConfig())
@@ -398,7 +402,11 @@ func TestHistoricalGetReturnsImmutableETag(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, revisionID, revision.ID)
-	require.NotEmpty(t, etag)
+	require.Equal(
+		t,
+		immutableRevisionETag(checklistID, revisionID, storedHash),
+		etag,
+	)
 	require.Equal(t, checklistID, repository.receivedChecklist)
 	require.Equal(t, revisionID, repository.receivedRevision)
 }

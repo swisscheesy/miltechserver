@@ -21,7 +21,7 @@ type serviceStub struct {
 	getResult      *shared.ChecklistAggregate
 	getETag        string
 	getError       error
-	revisionResult *shared.Revision
+	revisionResult *HistoricalRevision
 	revisionETag   string
 	revisionError  error
 	mutationResult *MutationResult
@@ -38,7 +38,7 @@ func (stub *serviceStub) GetRevision(
 	_ *bootstrap.User,
 	_ string,
 	_ string,
-) (*shared.Revision, string, error) {
+) (*HistoricalRevision, string, error) {
 	return stub.revisionResult, stub.revisionETag, stub.revisionError
 }
 
@@ -364,7 +364,7 @@ func TestHistoricalMatchingIfNoneMatchReturnsBodylessImmutable304(t *testing.T) 
 	revisionID := uuid.New()
 	etag := `"immutable-history"`
 	stub := &serviceStub{
-		revisionResult: &shared.Revision{ID: revisionID, State: "superseded"},
+		revisionResult: &HistoricalRevision{ID: revisionID},
 		revisionETag:   etag,
 	}
 	router := newHandlerTestRouter(stub, true, shared.DefaultConfig())

@@ -57,13 +57,30 @@ type Repository interface {
 		ownerUID string,
 		checklistID uuid.UUID,
 		revisionID uuid.UUID,
-	) (*shared.Revision, error)
+	) (*HistoricalRevisionResult, error)
 }
 
 type MutationResult struct {
 	Aggregate  shared.ChecklistAggregate
 	Created    bool
 	Idempotent bool
+}
+
+type HistoricalRevision struct {
+	ID             uuid.UUID           `json:"id"`
+	RevisionNumber *int32              `json:"revision_number,omitempty"`
+	Name           string              `json:"name"`
+	Description    string              `json:"description"`
+	Models         []shared.ModelValue `json:"models"`
+	Sections       []shared.Section    `json:"sections"`
+	CreatedAt      time.Time           `json:"created_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
+	PublishedAt    *time.Time          `json:"published_at,omitempty"`
+}
+
+type HistoricalRevisionResult struct {
+	Revision    HistoricalRevision
+	ContentHash [sha256.Size]byte
 }
 
 type lockedChecklist struct {

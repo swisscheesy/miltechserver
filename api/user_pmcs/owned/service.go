@@ -48,5 +48,5 @@ type Service interface {
 		user *bootstrap.User,
 		checklistID string,
 		revisionID string,
-	) (*shared.Revision, string, error)
+	) (*HistoricalRevision, string, error)
 }

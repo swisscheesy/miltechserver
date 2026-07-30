@@ -1,15 +1,21 @@
 package user_pmcs_test
 
 import (
+	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"miltechserver/api/user_pmcs/owned"
+	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
+	"miltechserver/bootstrap"
 )
 
 func TestPublishPromotesDraftWithExactClientIdentityAndNumber(t *testing.T) {
@@ -119,11 +125,15 @@ func TestPublishWithoutPriorDraftSupersedesImmutableHistory(t *testing.T) {
 		first.Input.ID,
 	)
 	require.NoError(t, err)
-	require.Equal(t, "superseded", historical.State)
-	require.Equal(t, first.Input.Name, historical.Name)
-	require.Equal(t, first.Input.Sections[0].ID, historical.Sections[0].ID)
-	require.Equal(t, int32(1), *historical.RevisionNumber)
-	require.Equal(t, firstUpdatedAt, historical.UpdatedAt)
+	require.Equal(t, "superseded", revisionState(t, first.Input.ID))
+	require.Equal(t, first.Input.Name, historical.Revision.Name)
+	require.Equal(
+		t,
+		first.Input.Sections[0].ID,
+		historical.Revision.Sections[0].ID,
+	)
+	require.Equal(t, int32(1), *historical.Revision.RevisionNumber)
+	require.Equal(t, firstUpdatedAt, historical.Revision.UpdatedAt)
 }
 
 func TestPublishReplacesDifferentCurrentDraftBeforePromotion(t *testing.T) {
@@ -178,13 +188,43 @@ func TestPublishIdempotentRetryAfterSupersessionConsumesNoVersion(t *testing.T) 
 
 	retried, err := repository.Publish(
 		context.Background(), ownerUID, checklistID, firstPublication,
-		checklistPrecondition(checklistID, secondResult.Aggregate.SyncVersion),
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
 	)
 
 	require.NoError(t, err)
 	require.True(t, retried.Idempotent)
+	require.Equal(t, secondResult.Aggregate, retried.Aggregate)
 	require.Equal(t, secondResult.Aggregate.SyncVersion, retried.Aggregate.SyncVersion)
 	require.Equal(t, int64(3), accountVersion(t, ownerUID))
+}
+
+func TestPublishImmediateLostResponseRetryAcceptsOriginalParentETag(t *testing.T) {
+	ownerUID := newUserPmcsTestUser(t)
+	repository := newOwnedRepository()
+	checklistID := uuid.New()
+	draft := preparedTree(t, uuid.New())
+	created, err := repository.Create(
+		context.Background(), ownerUID, checklistID, draft,
+		shared.Precondition{Mode: shared.PreconditionCreate},
+	)
+	require.NoError(t, err)
+	publication := preparePublication(t, draft.Input, 1)
+	published, err := repository.Publish(
+		context.Background(), ownerUID, checklistID, publication,
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+
+	retried, err := repository.Publish(
+		context.Background(), ownerUID, checklistID, publication,
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
+	)
+
+	require.NoError(t, err)
+	require.True(t, retried.Idempotent)
+	require.Equal(t, published.Aggregate, retried.Aggregate)
+	require.Equal(t, int64(2), checklistVersion(t, checklistID))
+	require.Equal(t, int64(2), accountVersion(t, ownerUID))
 }
 
 func TestPublishDivergentHistoricalRetryConsumesNoVersion(t *testing.T) {
@@ -198,7 +238,7 @@ func TestPublishDivergentHistoricalRetryConsumesNoVersion(t *testing.T) {
 	)
 	require.NoError(t, err)
 	firstPublication := preparePublication(t, first.Input, 1)
-	published, err := repository.Publish(
+	_, err = repository.Publish(
 		context.Background(), ownerUID, checklistID, firstPublication,
 		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
 	)
@@ -209,7 +249,7 @@ func TestPublishDivergentHistoricalRetryConsumesNoVersion(t *testing.T) {
 	divergent := preparePublication(t, divergentInput, 1)
 	_, err = repository.Publish(
 		context.Background(), ownerUID, checklistID, divergent,
-		checklistPrecondition(checklistID, published.Aggregate.SyncVersion),
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
 	)
 
 	requireAPIIntegrationError(t, err, 412, "stale_precondition")
@@ -221,7 +261,7 @@ func TestPublishDivergentHistoricalRetryConsumesNoVersion(t *testing.T) {
 	reusedNumber.Input.RevisionNumber = &number
 	_, err = repository.Publish(
 		context.Background(), ownerUID, checklistID, reusedNumber,
-		checklistPrecondition(checklistID, published.Aggregate.SyncVersion),
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
 	)
 	requireAPIIntegrationError(t, err, 409, "invalid_transition")
 	require.Equal(t, int64(2), checklistVersion(t, checklistID))
@@ -318,6 +358,76 @@ func TestHistoricalOwnerOnlyAndDraftHidden(t *testing.T) {
 	require.Equal(t, int64(2), published.Aggregate.SyncVersion)
 }
 
+func TestHistoricalHTTPBodyAndETagRemainByteExactAfterSupersession(t *testing.T) {
+	ownerUID := newUserPmcsTestUser(t)
+	config := shared.DefaultConfig()
+	repository := owned.NewRepository(
+		persistence.NewStore(testDB, config.TransactionMaxAttempts),
+		config,
+	)
+	service := owned.NewService(repository, config)
+	router := historicalTestRouter(ownerUID, service, config)
+	checklistID := uuid.New()
+	first := preparedTree(t, uuid.New())
+	created, err := repository.Create(
+		context.Background(), ownerUID, checklistID, first,
+		shared.Precondition{Mode: shared.PreconditionCreate},
+	)
+	require.NoError(t, err)
+	firstPublication := preparePublication(t, first.Input, 1)
+	publishedFirst, err := repository.Publish(
+		context.Background(), ownerUID, checklistID, firstPublication,
+		checklistPrecondition(checklistID, created.Aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+
+	path := "/api/v1/auth/user-pmcs/checklists/" + checklistID.String() +
+		"/revisions/" + first.Input.ID.String()
+	before := httptest.NewRecorder()
+	router.ServeHTTP(
+		before,
+		httptest.NewRequest(http.MethodGet, path, nil),
+	)
+	require.Equal(t, http.StatusOK, before.Code)
+	beforeBody := bytes.Clone(before.Body.Bytes())
+	beforeETag := before.Header().Get("ETag")
+	require.NotEmpty(t, beforeETag)
+	require.NotContains(t, string(beforeBody), `"state"`)
+	require.NotContains(t, string(beforeBody), ownerUID)
+
+	second := preparePublication(t, preparedTree(t, uuid.New()).Input, 2)
+	_, err = repository.Publish(
+		context.Background(), ownerUID, checklistID, second,
+		checklistPrecondition(
+			checklistID,
+			publishedFirst.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	after := httptest.NewRecorder()
+	router.ServeHTTP(
+		after,
+		httptest.NewRequest(http.MethodGet, path, nil),
+	)
+	require.Equal(t, http.StatusOK, after.Code)
+	require.Equal(t, beforeBody, after.Body.Bytes())
+	require.Equal(t, beforeETag, after.Header().Get("ETag"))
+
+	conditionalRequest := httptest.NewRequest(http.MethodGet, path, nil)
+	conditionalRequest.Header.Set("If-None-Match", beforeETag)
+	notModified := httptest.NewRecorder()
+	router.ServeHTTP(notModified, conditionalRequest)
+	require.Equal(t, http.StatusNotModified, notModified.Code)
+	require.Empty(t, notModified.Body.Bytes())
+	require.Equal(t, beforeETag, notModified.Header().Get("ETag"))
+	require.Equal(
+		t,
+		"private, max-age=31536000, immutable",
+		notModified.Header().Get("Cache-Control"),
+	)
+}
+
 func TestOfflineReplayResumesWithExactUUIDsAndNumbers(t *testing.T) {
 	ownerUID := newUserPmcsTestUser(t)
 	repository := newOwnedRepository()
@@ -404,4 +514,30 @@ func revisionCount(t *testing.T, revisionID uuid.UUID) int {
 		revisionID,
 	).Scan(&count))
 	return count
+}
+
+func revisionState(t *testing.T, revisionID uuid.UUID) string {
+	t.Helper()
+	var state string
+	require.NoError(t, testDB.QueryRowContext(
+		context.Background(),
+		`SELECT state FROM user_pmcs_revisions WHERE id = $1`,
+		revisionID,
+	).Scan(&state))
+	return state
+}
+
+func historicalTestRouter(
+	ownerUID string,
+	service owned.Service,
+	config shared.Config,
+) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(context *gin.Context) {
+		context.Set("user", &bootstrap.User{UserID: ownerUID})
+		context.Next()
+	})
+	owned.RegisterRoutes(router.Group("/api/v1/auth"), service, config)
+	return router
 }
