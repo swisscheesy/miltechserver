@@ -413,11 +413,17 @@ Document every route with:
 Copy exact field names from implemented DTO tags. Do not document aspirational
 fields.
 
-- [ ] **Step 2: Rehearse migration in a disposable database**
+- [ ] **Step 2: Rehearse and verify both non-production databases**
 
-Run forward -> schema tests -> rollback -> absence checks -> forward -> Jet
-regeneration. Confirm the regenerated `.gen` tree is identical to committed
-generated output.
+Using `TEST_DATABASE_URL`, first confirm the target is `miltech_ng_test`, then
+run forward -> schema tests -> rollback -> absence checks -> forward. Next
+confirm the standard development connection targets `miltech_ng`, apply the
+forward migration there once, and verify the schema exists. Do not roll back
+`miltech_ng`, and never target production.
+
+Regenerate Jet from the migrated `miltech_ng` schema. Confirm the regenerated
+`.gen` tree is identical to committed generated output and record the exact
+result for each database separately in the progress ledger.
 
 - [ ] **Step 3: Run the complete verification matrix**
 
@@ -472,6 +478,8 @@ Report:
 - final HEAD;
 - every task commit;
 - exact focused/full/race/migration results;
+- separate forward-migration verification for `miltech_ng_test` and
+  `miltech_ng`, plus rollback-rehearsal results for `miltech_ng_test`;
 - captured performance and query-plan evidence;
 - accepted baseline failures;
 - exact worktree status;

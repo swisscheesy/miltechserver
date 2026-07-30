@@ -15,8 +15,9 @@ short transactions; a shared persistence package performs deterministic
 locking and batched relational reads/writes.
 
 **Tech Stack:** PostgreSQL, Jet 2.13.0, Go 1.23, `database/sql`,
-`github.com/google/uuid`, `github.com/clipperhouse/uax29/v2/graphemes`
-v2.4.0, `testify/require`.
+`github.com/google/uuid`, `github.com/clipperhouse/uax29/v2` v2.4.0
+(package import `github.com/clipperhouse/uax29/v2/graphemes`),
+`testify/require`.
 
 ## Global constraints
 
@@ -373,18 +374,59 @@ COMMIT;
 
 - [ ] **Step 5: Verify forward, rollback, and forward**
 
-Apply the forward migration to the configured disposable test database, run
-the schema test, apply rollback, prove the tables are absent, then reapply
-forward and rerun the test. Use `TEST_DATABASE_URL`; do not embed credentials
+First confirm `TEST_DATABASE_URL` connects to `miltech_ng_test`. Apply the
+forward migration there, run the schema test, apply rollback, prove the tables
+are absent, then reapply forward and rerun the test. Do not embed credentials
 or a fallback DSN in new tests.
 
-Expected: every command succeeds and the final schema test passes.
+After the complete rehearsal passes on `miltech_ng_test`, confirm the standard
+development connection targets `miltech_ng`, apply the forward migration there
+once, and verify the schema. Do not run the rollback against `miltech_ng`;
+client testing may depend on its data. Never run either migration against a
+production database.
+
+Run:
+
+```bash
+set -euo pipefail
+
+test "$(psql "$TEST_DATABASE_URL" -X -Atqc 'SELECT current_database()')" = \
+  "miltech_ng_test"
+psql "$TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f migrations/009_create_user_pmcs_sync.sql
+go test ./tests/user_pmcs -run TestUserPmcsSchemaIntegrity -count=1
+psql "$TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f migrations/009_rollback_user_pmcs_sync.sql
+psql "$TEST_DATABASE_URL" -X -Atqc \
+  "SELECT to_regclass('public.user_pmcs_sync_state') IS NULL"
+# Expected: t
+psql "$TEST_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -f migrations/009_create_user_pmcs_sync.sql
+go test ./tests/user_pmcs -run TestUserPmcsSchemaIntegrity -count=1
+
+test "$(PGPASSWORD="$DB_PASSWORD" psql -X -Atqc \
+  'SELECT current_database()' \
+  --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USERNAME" \
+  --dbname=miltech_ng)" = "miltech_ng"
+PGPASSWORD="$DB_PASSWORD" psql -X -v ON_ERROR_STOP=1 \
+  --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USERNAME" \
+  --dbname=miltech_ng -f migrations/009_create_user_pmcs_sync.sql
+PGPASSWORD="$DB_PASSWORD" psql -X -Atqc \
+  "SELECT to_regclass('public.user_pmcs_sync_state')" \
+  --host="$DB_HOST" --port="$DB_PORT" --username="$DB_USERNAME" \
+  --dbname=miltech_ng
+# Expected: user_pmcs_sync_state
+```
+
+Expected: every command succeeds, the final schema test passes against
+`miltech_ng_test`, and the new schema exists in both non-production databases.
 
 - [ ] **Step 6: Regenerate Jet**
 
-Run the repository's current Jet generator against the migrated development
-schema. Confirm generated models use `uuid.UUID`, nullable pointers, `[]byte`
-for `content_hash`, and no generated UUID defaults.
+Run the repository's current Jet generator against the migrated `miltech_ng`
+development schema, after Step 5 has migrated and verified both
+non-production databases. Confirm generated models use `uuid.UUID`, nullable
+pointers, `[]byte` for `content_hash`, and no generated UUID defaults.
 
 Run:
 
@@ -787,8 +829,16 @@ go test ./api/user_pmcs/shared -run 'Test(Normalize|Draft|Publication|Canonical)
 - [ ] **Step 3: Pin the Unicode-compatible library**
 
 ```bash
-go get github.com/clipperhouse/uax29/v2@v2.4.0
+go get github.com/clipperhouse/uax29/v2/graphemes@v2.4.0
+go list -m github.com/clipperhouse/uax29/v2
+go list github.com/clipperhouse/uax29/v2/graphemes
 ```
+
+The module requirement is `github.com/clipperhouse/uax29/v2` at v2.4.0; the
+Go package imported by validation code is
+`github.com/clipperhouse/uax29/v2/graphemes`. The `/v2` segment is Go's
+major-version module-path suffix and does not imply that the GitHub repository
+contains a physical `v2/` directory.
 
 Do not use `rivo/uniseg` v0.4.7: its Unicode 15 data does not match the
 mobile client's Unicode 16 `characters` 1.4.1.

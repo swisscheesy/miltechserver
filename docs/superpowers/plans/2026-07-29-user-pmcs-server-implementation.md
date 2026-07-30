@@ -19,7 +19,9 @@ and are loaded/written in batches.
 
 **Tech Stack:** Go 1.23, Gin 1.10.1, PostgreSQL, Jet 2.13.0,
 `database/sql`, `github.com/google/uuid`, `github.com/clipperhouse/uax29/v2`
-v2.4.0, `testify/require`, Firebase-authenticated `bootstrap.User`.
+v2.4.0 (package import
+`github.com/clipperhouse/uax29/v2/graphemes`), `testify/require`,
+Firebase-authenticated `bootstrap.User`.
 
 ## Authoritative inputs
 
@@ -65,8 +67,11 @@ before changing code.
   8 MiB, reject unknown fields, reject trailing JSON, and validate UTF-8.
 - Short authored fields allow 200 Unicode extended grapheme clusters and
   8 KiB; long fields allow 4,000 graphemes and 64 KiB.
-- Use `github.com/clipperhouse/uax29/v2/graphemes` v2.4.0 because it uses
+- Pin module `github.com/clipperhouse/uax29/v2` at v2.4.0 and import package
+  `github.com/clipperhouse/uax29/v2/graphemes` because that version uses
   Unicode 16 data, matching the mobile client's locked `characters` 1.4.1.
+  The `/v2` segment is Go's required major-version module-path suffix, not a
+  physical `v2` directory in the GitHub repository.
 - Initial per-revision limits are: 100 checklist models, 100 sections, 100
   section models per section, 1,000 section models total, 500 items per
   section, 2,000 items total, 100 notices per item, 4,000 notices total, 250
@@ -95,6 +100,16 @@ before changing code.
 - Never log authored text, email, tokens, request bodies, or Firebase claims.
 - Do not modify the unrelated shops changes introduced at current HEAD unless
   a fresh user request explicitly changes scope.
+- Apply every forward migration to both non-production databases:
+  `miltech_ng_test`, reached only through `TEST_DATABASE_URL`, and
+  `miltech_ng`, reached through the standard `DB_HOST`, `DB_PORT`,
+  `DB_USERNAME`, and `DB_PASSWORD` development connection variables.
+- Rehearse forward -> rollback -> forward only on `miltech_ng_test`. After that
+  rehearsal and its schema tests pass, apply the forward migration once to
+  `miltech_ng` and verify it there. Never roll back `miltech_ng` as part of a
+  rehearsal, and never apply these plans' migrations to production.
+- Regenerate Jet from the migrated `miltech_ng` schema only after the forward
+  migration has succeeded on both non-production databases.
 - Never hand-edit `.gen`; regenerate Jet output from the migrated schema.
 
 ## Review-finding resolution matrix
@@ -221,9 +236,10 @@ After all four plans:
 1. run every focused unit and integration package;
 2. run `go test ./...` once against the configured test database;
 3. run `go test -race` for user-PMCS unit packages;
-4. run migration forward/rollback/forward verification in a disposable
-   database;
-5. regenerate Jet and prove a clean generated diff;
+4. run migration forward/rollback/forward verification against
+   `miltech_ng_test` through `TEST_DATABASE_URL`;
+5. apply and verify the forward migration against non-production
+   `miltech_ng`, then regenerate Jet and prove a clean generated diff;
 6. run the performance scenarios at approved ceilings;
 7. inspect every route registration and authentication boundary;
 8. perform a whole-branch review by an independent reviewer;
