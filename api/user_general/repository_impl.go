@@ -1,6 +1,7 @@
 package user_general
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -13,11 +14,15 @@ import (
 )
 
 type RepositoryImpl struct {
-	db *sql.DB
+	db             *sql.DB
+	accountCleaner AccountCleaner
 }
 
-func NewRepository(db *sql.DB) *RepositoryImpl {
-	return &RepositoryImpl{db: db}
+func NewRepository(
+	db *sql.DB,
+	accountCleaner AccountCleaner,
+) *RepositoryImpl {
+	return &RepositoryImpl{db: db, accountCleaner: accountCleaner}
 }
 
 func (repo *RepositoryImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDto) error {
@@ -51,10 +56,25 @@ func (repo *RepositoryImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDt
 	return nil
 }
 
-func (repo *RepositoryImpl) DeleteUser(uid string) error {
-	stmt := table.Users.DELETE().WHERE(table.Users.UID.EQ(String(uid)))
+func (repo *RepositoryImpl) DeleteUser(
+	ctx context.Context,
+	uid string,
+) error {
+	tx, err := repo.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin user deletion transaction: %w", err)
+	}
+	defer tx.Rollback()
 
-	result, err := stmt.Exec(repo.db)
+	if err := repo.accountCleaner.CleanupAccount(ctx, tx, uid); err != nil {
+		return fmt.Errorf("clean up user PMCS account data: %w", err)
+	}
+
+	result, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM users WHERE uid = $1`,
+		uid,
+	)
 	if err != nil {
 		return fmt.Errorf("error deleting user: %w", err)
 	}
@@ -66,6 +86,10 @@ func (repo *RepositoryImpl) DeleteUser(uid string) error {
 
 	if rowsAffected == 0 {
 		return ErrUserNotFound
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit user deletion transaction: %w", err)
 	}
 
 	slog.Info("user DELETED", "user_id", uid)

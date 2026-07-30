@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"miltechserver/api/auth"
+	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/bootstrap"
 )
 
@@ -20,7 +22,7 @@ type Handler struct {
 }
 
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
-	repo := NewRepository(deps.DB)
+	repo := NewRepository(deps.DB, persistence.NewAccountCleaner())
 	svc := NewService(repo)
 	registerHandlers(router, svc)
 }
@@ -59,24 +61,22 @@ func (handler *Handler) upsertUser(c *gin.Context) {
 }
 
 func (handler *Handler) deleteUser(c *gin.Context) {
-	_, ok := c.Get("user")
-	if !ok {
+	value, exists := c.Get("user")
+	currentUser, ok := value.(*bootstrap.User)
+	if !exists || !ok || currentUser == nil ||
+		strings.TrimSpace(currentUser.UserID) == "" {
 		c.JSON(401, gin.H{"message": "unauthorized"})
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	var deleteRequest DeleteRequest
-	if err := c.ShouldBindJSON(&deleteRequest); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request body"})
-		slog.Info("Invalid request body", "error", err)
-		return
-	}
-
-	if err := handler.service.DeleteUser(deleteRequest.UID); err != nil {
+	if err := handler.service.DeleteUser(
+		c.Request.Context(),
+		currentUser.UserID,
+	); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			c.JSON(404, gin.H{"message": "user not found"})
-			slog.Info("User not found", "uid", deleteRequest.UID)
+			slog.Info("User not found", "uid", currentUser.UserID)
 			return
 		}
 		c.Error(err)
@@ -84,7 +84,7 @@ func (handler *Handler) deleteUser(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "user deleted successfully"})
-	slog.Info("User deleted successfully", "uid", deleteRequest.UID)
+	slog.Info("User deleted successfully", "uid", currentUser.UserID)
 }
 
 func (handler *Handler) updateUserDisplayName(c *gin.Context) {

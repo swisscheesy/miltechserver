@@ -1,6 +1,8 @@
 package user_general
 
 import (
+	"context"
+
 	"miltechserver/api/auth"
 	"miltechserver/bootstrap"
 )
@@ -17,8 +19,11 @@ func (service *ServiceImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDt
 	return service.repo.UpsertUser(user, userDto)
 }
 
-func (service *ServiceImpl) DeleteUser(uid string) error {
-	return service.repo.DeleteUser(uid)
+func (service *ServiceImpl) DeleteUser(
+	ctx context.Context,
+	uid string,
+) error {
+	return service.repo.DeleteUser(ctx, uid)
 }
 
 func (service *ServiceImpl) UpdateUserDisplayName(uid string, displayName string) error {
