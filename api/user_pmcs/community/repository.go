@@ -29,6 +29,14 @@ type Repository interface {
 		checklistID uuid.UUID,
 		precondition shared.Precondition,
 	) (*ReleaseMutationResult, error)
+	Browse(
+		ctx context.Context,
+		filter shared.CommunityBrowseFilter,
+	) (*shared.CommunityPage, error)
+	GetCurrentRelease(
+		ctx context.Context,
+		checklistID uuid.UUID,
+	) (*shared.PublicChecklistRelease, error)
 }
 
 type ReleaseMutationResult struct {

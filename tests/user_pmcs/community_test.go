@@ -344,6 +344,405 @@ func TestReleaseConcurrentHigherRevisionsSerialize(t *testing.T) {
 	require.Equal(t, first.Aggregate.SyncVersion+1, checklistVersion(t, fixture.checklist))
 }
 
+func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
+	baseTime := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	normalizedModel := "task10-" + uuid.NewString()
+	historicalModel := "task10-historical-" + uuid.NewString()
+	fixtures := []*releasedChecklistFixture{
+		newReleasedChecklistFixture(t, 1),
+		newReleasedChecklistFixture(t, 2),
+		newReleasedChecklistFixture(t, 1),
+		newReleasedChecklistFixture(t, 1),
+	}
+	for index, fixture := range fixtures {
+		revisionIndex := len(fixture.revisions) - 1
+		_, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[revisionIndex].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_revision_models
+			 SET display_text = $1, normalized_text = $1
+			 WHERE revision_id = $2`,
+			normalizedModel,
+			fixture.revisions[revisionIndex].Input.ID,
+		)
+		require.NoError(t, err)
+		if len(fixture.revisions) > 1 {
+			_, err = testDB.ExecContext(
+				context.Background(),
+				`UPDATE user_pmcs_revision_models
+				 SET display_text = $1, normalized_text = $1
+				 WHERE revision_id = $2`,
+				historicalModel,
+				fixture.revisions[0].Input.ID,
+			)
+			require.NoError(t, err)
+		}
+		updatedAt := baseTime.Add(-time.Duration(index/2) * time.Hour)
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			updatedAt,
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE users SET username = $1 WHERE uid = $2`,
+			fmt.Sprintf("Creator %d", index),
+			fixture.ownerUID,
+		)
+		require.NoError(t, err)
+	}
+	_, err := testDB.ExecContext(
+		context.Background(),
+		`UPDATE users SET username = NULL WHERE uid = $1`,
+		fixtures[2].ownerUID,
+	)
+	require.NoError(t, err)
+
+	retired := fixtures[3]
+	_, err = retired.repository.Retire(
+		context.Background(),
+		retired.ownerUID,
+		retired.checklist,
+		checklistPrecondition(
+			retired.checklist,
+			checklistVersion(t, retired.checklist),
+		),
+	)
+	require.NoError(t, err)
+
+	repository := fixtures[0].repository
+	firstPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           2,
+			NormalizedModel: normalizedModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, firstPage.Items, 2)
+	require.True(t, firstPage.HasMore)
+	require.NotNil(t, firstPage.NextCursor)
+
+	firstCursor, err := shared.DecodeCommunityCursor(*firstPage.NextCursor)
+	require.NoError(t, err)
+	secondPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			After:           &firstCursor,
+			Limit:           2,
+			NormalizedModel: normalizedModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, secondPage.Items, 1)
+	require.False(t, secondPage.HasMore)
+	require.Nil(t, secondPage.NextCursor)
+
+	allItems := append(
+		append([]shared.PublicCommunitySummary{}, firstPage.Items...),
+		secondPage.Items...,
+	)
+	require.Len(t, allItems, 3)
+	seen := make(map[uuid.UUID]struct{}, len(allItems))
+	for _, item := range allItems {
+		_, duplicate := seen[item.ChecklistID]
+		require.False(t, duplicate)
+		seen[item.ChecklistID] = struct{}{}
+		require.NotEqual(t, retired.checklist, item.ChecklistID)
+		require.NotEmpty(t, item.Models)
+		require.NotEmpty(t, item.CreatorDisplayName)
+	}
+	require.Equal(
+		t,
+		"Creator 0",
+		summaryCreator(t, allItems, fixtures[0].checklist),
+	)
+	require.Equal(
+		t,
+		"Deleted user",
+		summaryCreator(t, allItems, fixtures[2].checklist),
+	)
+	require.True(t, baseTime.Equal(allItems[0].UpdatedAt))
+	require.True(t, baseTime.Equal(allItems[1].UpdatedAt))
+	require.Less(
+		t,
+		allItems[0].ChecklistID.String(),
+		allItems[1].ChecklistID.String(),
+	)
+	require.Equal(t, fixtures[1].revisions[1].Input.ID, summaryRevision(
+		t,
+		allItems,
+		fixtures[1].checklist,
+	))
+
+	filtered, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           50,
+			NormalizedModel: normalizedModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, filtered.Items, 3)
+	none, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           50,
+			NormalizedModel: normalizedModel + "-other",
+		},
+	)
+	require.NoError(t, err)
+	require.Empty(t, none.Items)
+	historicalOnly, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           50,
+			NormalizedModel: historicalModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Empty(t, historicalOnly.Items)
+}
+
+func TestCommunityDetailLoadsCompleteCurrentReleaseAndVisibility(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 2)
+	first, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	current, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[1].Input.ID,
+		checklistPrecondition(fixture.checklist, first.Aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		context.Background(),
+		`UPDATE users SET username = NULL WHERE uid = $1`,
+		fixture.ownerUID,
+	)
+	require.NoError(t, err)
+
+	release, err := fixture.repository.GetCurrentRelease(
+		context.Background(),
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, fixture.checklist, release.ChecklistID)
+	require.Equal(t, fixture.revisions[1].Input.ID, release.Revision.ID)
+	require.Equal(t, fixture.revisions[1].Input.Name, release.Revision.Name)
+	require.Equal(t, "Deleted user", release.CreatorDisplayName)
+	require.NotZero(t, release.ReleasedAt)
+	require.NotEmpty(t, release.Revision.Sections)
+	require.NotEmpty(t, release.Revision.Sections[0].Items)
+	require.NotEmpty(t, release.Revision.Sections[0].Items[0].Notices)
+	require.NotEmpty(t, release.Revision.Sections[0].Items[0].ProcedureSteps)
+
+	service := community.NewService(fixture.repository, shared.DefaultConfig())
+	serviceRelease, etag, err := service.GetCurrentRelease(
+		context.Background(),
+		fixture.checklist.String(),
+	)
+	require.NoError(t, err)
+	require.Equal(t, release, serviceRelease)
+	require.NotEmpty(t, etag)
+	require.Equal(t, '"', rune(etag[0]))
+	require.Equal(t, '"', rune(etag[len(etag)-1]))
+
+	_, err = testDB.ExecContext(
+		context.Background(),
+		`UPDATE user_pmcs_revisions
+		 SET content_hash = decode(repeat('00', 32), 'hex')
+		 WHERE id = $1`,
+		fixture.revisions[1].Input.ID,
+	)
+	require.NoError(t, err)
+	_, err = fixture.repository.GetCurrentRelease(
+		context.Background(),
+		fixture.checklist,
+	)
+	require.ErrorContains(t, err, "content hash mismatch")
+	currentHash := fixture.revisions[1].Hash
+	_, err = testDB.ExecContext(
+		context.Background(),
+		`UPDATE user_pmcs_revisions SET content_hash = $1 WHERE id = $2`,
+		currentHash[:],
+		fixture.revisions[1].Input.ID,
+	)
+	require.NoError(t, err)
+
+	neverReleased := newReleasedChecklistFixture(t, 1)
+	_, _, err = service.GetCurrentRelease(
+		context.Background(),
+		neverReleased.checklist.String(),
+	)
+	requireAPIIntegrationError(t, err, 404, "resource_not_found")
+
+	retired, err := fixture.repository.Retire(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		checklistPrecondition(
+			fixture.checklist,
+			current.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = fixture.repository.GetCurrentRelease(
+		context.Background(),
+		fixture.checklist,
+	)
+	requireAPIIntegrationError(t, err, 404, "resource_not_found")
+	deleted, err := fixture.owned.DeleteChecklist(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		checklistPrecondition(
+			fixture.checklist,
+			retired.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, deleted.Aggregate.DeletedAt)
+	_, err = fixture.repository.GetCurrentRelease(
+		context.Background(),
+		fixture.checklist,
+	)
+	requireAPIIntegrationError(t, err, 404, "resource_not_found")
+}
+
+func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
+	baseTime := time.Now().UTC().Add(-24 * time.Hour)
+	normalizedModel := "task10-moving-" + uuid.NewString()
+	older := newReleasedChecklistFixture(t, 2)
+	newer := newReleasedChecklistFixture(t, 1)
+	for index, fixture := range []*releasedChecklistFixture{older, newer} {
+		first, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+		)
+		require.NoError(t, err)
+		fixture.aggregate = first.Aggregate
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_revision_models
+			 SET display_text = $1, normalized_text = $1
+			 WHERE revision_id = $2`,
+			normalizedModel,
+			fixture.revisions[0].Input.ID,
+		)
+		require.NoError(t, err)
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			baseTime.Add(time.Duration(index)*time.Hour),
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+	}
+
+	firstPage, err := older.repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           1,
+			NormalizedModel: normalizedModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, newer.checklist, firstPage.Items[0].ChecklistID)
+
+	advanced, err := older.repository.Release(
+		context.Background(),
+		older.ownerUID,
+		older.checklist,
+		older.revisions[1].Input.ID,
+		checklistPrecondition(older.checklist, older.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, advanced.Aggregate.Community)
+	require.NotNil(t, advanced.Aggregate.Community.CurrentReleaseRevisionID)
+	require.Equal(
+		t,
+		older.revisions[1].Input.ID,
+		*advanced.Aggregate.Community.CurrentReleaseRevisionID,
+	)
+	_, err = testDB.ExecContext(
+		context.Background(),
+		`UPDATE user_pmcs_revision_models
+		 SET display_text = $1, normalized_text = $1
+		 WHERE revision_id = $2`,
+		normalizedModel,
+		older.revisions[1].Input.ID,
+	)
+	require.NoError(t, err)
+
+	restarted, err := older.repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           1,
+			NormalizedModel: normalizedModel,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, older.checklist, restarted.Items[0].ChecklistID)
+	require.Equal(t, older.revisions[1].Input.ID, restarted.Items[0].RevisionID)
+}
+
+func summaryRevision(
+	t *testing.T,
+	items []shared.PublicCommunitySummary,
+	checklistID uuid.UUID,
+) uuid.UUID {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item.RevisionID
+		}
+	}
+	t.Fatalf("summary for checklist %s was not returned", checklistID)
+	return uuid.Nil
+}
+
+func summaryCreator(
+	t *testing.T,
+	items []shared.PublicCommunitySummary,
+	checklistID uuid.UUID,
+) string {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item.CreatorDisplayName
+		}
+	}
+	t.Fatalf("summary for checklist %s was not returned", checklistID)
+	return ""
+}
+
 func newReleasedChecklistFixture(
 	t *testing.T,
 	publicationCount int,

@@ -2,6 +2,10 @@ package community
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,10 +16,15 @@ import (
 
 type ServiceImpl struct {
 	repository Repository
+	config     shared.Config
 }
 
-func NewService(repository Repository) Service {
-	return &ServiceImpl{repository: repository}
+func NewService(repository Repository, configs ...shared.Config) Service {
+	config := shared.DefaultConfig()
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	return &ServiceImpl{repository: repository, config: config}
 }
 
 func (service *ServiceImpl) Release(
@@ -76,6 +85,102 @@ func (service *ServiceImpl) Retire(
 		precondition,
 	)
 	return mutationResponse(result, err)
+}
+
+func (service *ServiceImpl) Browse(
+	ctx context.Context,
+	after string,
+	limit string,
+	model string,
+) (*shared.CommunityPage, error) {
+	filter := shared.CommunityBrowseFilter{
+		Limit: service.config.CommunityDefaultLimit,
+	}
+	if strings.TrimSpace(limit) != "" {
+		parsedLimit, err := strconv.Atoi(limit)
+		if err != nil || parsedLimit <= 0 ||
+			parsedLimit > service.config.CommunityMaxLimit {
+			return nil, shared.NewInvalidRequest(
+				fmt.Sprintf(
+					"limit must be between 1 and %d",
+					service.config.CommunityMaxLimit,
+				),
+				map[string]any{"limit": service.config.CommunityMaxLimit},
+			)
+		}
+		filter.Limit = parsedLimit
+	}
+	if strings.TrimSpace(after) != "" {
+		cursor, err := shared.DecodeCommunityCursor(after)
+		if err != nil {
+			return nil, shared.NewInvalidRequest(
+				"invalid community cursor",
+				nil,
+			)
+		}
+		filter.After = &cursor
+	}
+	if strings.TrimSpace(model) != "" {
+		normalized, err := shared.NormalizeModel(model)
+		if err != nil {
+			return nil, err
+		}
+		if normalized == "" {
+			return nil, shared.NewInvalidRequest(
+				"model filter must contain text",
+				nil,
+			)
+		}
+		filter.NormalizedModel = normalized
+	}
+	return service.repository.Browse(ctx, filter)
+}
+
+func (service *ServiceImpl) GetCurrentRelease(
+	ctx context.Context,
+	checklistID string,
+) (*shared.PublicChecklistRelease, string, error) {
+	parsedChecklistID, apiError := parseUUID("checklist_id", checklistID)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	release, err := service.repository.GetCurrentRelease(
+		ctx,
+		parsedChecklistID,
+	)
+	if err != nil {
+		return nil, "", err
+	}
+	if release == nil {
+		return nil, "", shared.NewInternalError(
+			"repository returned an empty public release",
+			nil,
+		)
+	}
+	contentHash, err := shared.CanonicalRevisionHash(
+		revisionInput(release.Revision),
+	)
+	if err != nil {
+		return nil, "", err
+	}
+	return release, makePublicReleaseETag(
+		release.ChecklistID,
+		release.Revision.ID,
+		contentHash,
+	), nil
+}
+
+func makePublicReleaseETag(
+	checklistID uuid.UUID,
+	revisionID uuid.UUID,
+	contentHash [sha256.Size]byte,
+) string {
+	digest := sha256.New()
+	_, _ = digest.Write([]byte("community-release"))
+	_, _ = digest.Write(checklistID[:])
+	_, _ = digest.Write(revisionID[:])
+	_, _ = digest.Write(contentHash[:])
+	return `"` + base64.RawURLEncoding.EncodeToString(digest.Sum(nil)) + `"`
 }
 
 func authenticatedUID(user *bootstrap.User) (string, *shared.APIError) {

@@ -126,3 +126,34 @@ type InstalledChecklistRelease struct {
 	ReleasedAt         time.Time `json:"released_at"`
 	Revision           Revision  `json:"revision"`
 }
+
+type CommunityBrowseFilter struct {
+	After           *CommunityCursor
+	Limit           int
+	NormalizedModel string
+}
+
+type PublicCommunitySummary struct {
+	ChecklistID        uuid.UUID    `json:"checklist_id"`
+	RevisionID         uuid.UUID    `json:"revision_id"`
+	RevisionNumber     int32        `json:"revision_number"`
+	Name               string       `json:"name"`
+	Description        string       `json:"description"`
+	Models             []ModelValue `json:"models"`
+	CreatorDisplayName string       `json:"creator_display_name"`
+	ReleasedAt         time.Time    `json:"released_at"`
+	UpdatedAt          time.Time    `json:"updated_at"`
+}
+
+type CommunityPage struct {
+	NextCursor *string                  `json:"next_cursor,omitempty"`
+	HasMore    bool                     `json:"has_more"`
+	Items      []PublicCommunitySummary `json:"items"`
+}
+
+type PublicChecklistRelease struct {
+	ChecklistID        uuid.UUID `json:"checklist_id"`
+	CreatorDisplayName string    `json:"creator_display_name"`
+	ReleasedAt         time.Time `json:"released_at"`
+	Revision           Revision  `json:"revision"`
+}
