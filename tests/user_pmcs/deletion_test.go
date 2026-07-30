@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -321,6 +322,178 @@ func TestDeleteChecklistTombstoneDefeatsLaterCreateDraftAndPublication(t *testin
 	require.Nil(t, aggregate.Community)
 	require.Equal(t, int64(2), accountVersion(t, ownerUID))
 	require.Equal(t, 0, deletionRowCount(t, "user_pmcs_revisions", "checklist_id", checklistID))
+}
+
+func TestDeleteChecklistWaitsForConcurrentUnsubscribeBeforePinDiscovery(
+	t *testing.T,
+) {
+	ownerUID := newUserPmcsTestUser(t)
+	subscriberUID := newUserPmcsTestUser(t)
+	repository := newOwnedRepository()
+	checklistID := uuid.New()
+	publication := createPublishedChecklistForDeletion(
+		t,
+		repository,
+		ownerUID,
+		checklistID,
+	)
+	revisionID := publication.Aggregate.Publication.ID
+	insertCommunityReleaseForDeletion(t, checklistID, revisionID, 1)
+	insertActiveSubscriptionForDeletion(
+		t,
+		subscriberUID,
+		checklistID,
+		revisionID,
+	)
+	registerCommunityDeletionCleanup(t, checklistID)
+
+	ctx := context.Background()
+	unsubscribeConnection, err := testDB.Conn(ctx)
+	require.NoError(t, err)
+	var unsubscribeCommitted bool
+	unsubscribeTransaction, err := unsubscribeConnection.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if !unsubscribeCommitted {
+			_ = unsubscribeTransaction.Rollback()
+		}
+		require.NoError(t, unsubscribeConnection.Close())
+	})
+
+	_, err = unsubscribeTransaction.ExecContext(
+		ctx,
+		`UPDATE user_pmcs_subscriptions
+		 SET installed_revision_id = NULL,
+		     sync_version = sync_version + 1,
+		     account_change_version = account_change_version + 1,
+		     updated_at = now(),
+		     deleted_at = now()
+		 WHERE subscriber_uid = $1
+		   AND checklist_id = $2`,
+		subscriberUID,
+		checklistID,
+	)
+	require.NoError(t, err)
+	_, err = unsubscribeTransaction.ExecContext(
+		ctx,
+		`SAVEPOINT deletion_source_barrier`,
+	)
+	require.NoError(t, err)
+	var lockedSourceID uuid.UUID
+	err = unsubscribeTransaction.QueryRowContext(
+		ctx,
+		`SELECT checklist_id
+		 FROM user_pmcs_community_sources
+		 WHERE checklist_id = $1
+		 FOR UPDATE`,
+		checklistID,
+	).Scan(&lockedSourceID)
+	require.NoError(t, err)
+	require.Equal(t, checklistID, lockedSourceID)
+
+	type deleteOutcome struct {
+		result *owned.MutationResult
+		err    error
+	}
+	deleteCompleted := make(chan deleteOutcome, 1)
+	go func() {
+		result, deleteErr := repository.DeleteChecklist(
+			context.Background(),
+			ownerUID,
+			checklistID,
+			checklistPrecondition(
+				checklistID,
+				publication.Aggregate.SyncVersion,
+			),
+		)
+		deleteCompleted <- deleteOutcome{result: result, err: deleteErr}
+	}()
+
+	reachedSourceBarrier := waitForDatabaseActivity(
+		5*time.Second,
+		`lower(wait_event_type) = 'lock'
+		 AND query LIKE '%UPDATE user_pmcs_community_sources%'`,
+	)
+	_, err = unsubscribeTransaction.ExecContext(
+		ctx,
+		`ROLLBACK TO SAVEPOINT deletion_source_barrier`,
+	)
+	require.NoError(t, err)
+
+	waitedForUnsubscribe := waitForDatabaseActivity(
+		5*time.Second,
+		`lower(wait_event_type) = 'lock'
+		 AND query LIKE '%SELECT installed_revision_id%'
+		 AND query LIKE '%user_pmcs_subscriptions%'`,
+	)
+	require.NoError(t, unsubscribeTransaction.Commit())
+	unsubscribeCommitted = true
+
+	var deletion deleteOutcome
+	select {
+	case deletion = <-deleteCompleted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("checklist deletion did not complete after unsubscribe committed")
+	}
+
+	require.True(t, reachedSourceBarrier, "deletion did not reach source barrier")
+	require.True(
+		t,
+		waitedForUnsubscribe,
+		"deletion did not wait for the concurrent unsubscribe row lock",
+	)
+	require.NoError(t, deletion.err)
+	require.NotNil(t, deletion.result)
+	require.Equal(t, int64(3), deletion.result.Aggregate.SyncVersion)
+	require.Equal(t, int64(3), deletion.result.Aggregate.AccountChangeVersion)
+	require.Equal(t, int64(3), accountVersion(t, ownerUID))
+
+	var (
+		installedReleaseCleared bool
+		unsubscribed            bool
+		subscriptionVersion     int64
+		subscriptionChange      int64
+	)
+	require.NoError(t, testDB.QueryRowContext(
+		ctx,
+		`SELECT installed_revision_id IS NULL,
+		        deleted_at IS NOT NULL,
+		        sync_version,
+		        account_change_version
+		 FROM user_pmcs_subscriptions
+		 WHERE subscriber_uid = $1
+		   AND checklist_id = $2`,
+		subscriberUID,
+		checklistID,
+	).Scan(
+		&installedReleaseCleared,
+		&unsubscribed,
+		&subscriptionVersion,
+		&subscriptionChange,
+	))
+	require.True(t, installedReleaseCleared)
+	require.True(t, unsubscribed)
+	require.Equal(t, int64(2), subscriptionVersion)
+	require.Equal(t, int64(2), subscriptionChange)
+	require.Equal(t, 0, deletionRowCount(
+		t,
+		"user_pmcs_community_releases",
+		"checklist_id",
+		checklistID,
+	))
+	require.Equal(t, 0, deletionRowCount(
+		t,
+		"user_pmcs_revisions",
+		"checklist_id",
+		checklistID,
+	))
+	require.Equal(t, 0, deletionRowCount(
+		t,
+		"user_pmcs_sections",
+		"revision_id",
+		revisionID,
+	))
+	requireCommunitySourceRetired(t, checklistID, 1)
 }
 
 func TestDeleteChecklistHTTPReturnsVersionedPrivateTombstone(t *testing.T) {

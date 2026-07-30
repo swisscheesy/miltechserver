@@ -647,13 +647,16 @@ func activePinnedRevisionIDs(
 	tx *sql.Tx,
 	checklistID uuid.UUID,
 ) ([]uuid.UUID, error) {
+	// Lock pins in stable order so an in-flight unsubscribe commits before
+	// retention is decided and READ COMMITTED rechecks the active-row predicate.
 	rows, err := tx.QueryContext(
 		ctx,
 		`SELECT installed_revision_id
 		 FROM user_pmcs_subscriptions
 		 WHERE checklist_id = $1
 		   AND deleted_at IS NULL
-		 ORDER BY subscriber_uid`,
+		 ORDER BY subscriber_uid
+		 FOR UPDATE`,
 		checklistID,
 	)
 	if err != nil {
