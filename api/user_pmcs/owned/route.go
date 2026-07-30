@@ -15,6 +15,7 @@ func RegisterRoutes(
 	group := authGroup.Group("/user-pmcs")
 	group.GET("/checklists/:checklist_id", handler.get)
 	group.PUT("/checklists/:checklist_id", handler.create)
+	group.DELETE("/checklists/:checklist_id", handler.deleteChecklist)
 	group.PUT(
 		"/checklists/:checklist_id/drafts/:revision_id",
 		handler.putDraft,

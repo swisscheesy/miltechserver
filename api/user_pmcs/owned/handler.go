@@ -141,6 +141,27 @@ func (handler Handler) deleteDraft(context *gin.Context) {
 	writeSuccess(context, http.StatusOK, result.Aggregate)
 }
 
+func (handler Handler) deleteChecklist(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	result, etag, err := handler.service.DeleteChecklist(
+		context.Request.Context(),
+		user,
+		context.Param("checklist_id"),
+		context.GetHeader("If-Match"),
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+
+	setImmutableOwnedHeaders(context, etag)
+	writeSuccess(context, http.StatusOK, result.Aggregate)
+}
+
 func (handler Handler) publish(context *gin.Context) {
 	user, apiError := userFromContext(context)
 	if apiError != nil {

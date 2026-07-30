@@ -35,6 +35,12 @@ type Service interface {
 		revisionID string,
 		ifMatch string,
 	) (*MutationResult, string, error)
+	DeleteChecklist(
+		ctx context.Context,
+		user *bootstrap.User,
+		checklistID string,
+		ifMatch string,
+	) (*MutationResult, string, error)
 	Publish(
 		ctx context.Context,
 		user *bootstrap.User,

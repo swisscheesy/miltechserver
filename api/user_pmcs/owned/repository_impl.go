@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
@@ -511,6 +512,172 @@ func (repository *RepositoryImpl) DeleteDraft(
 			return &MutationResult{Aggregate: *aggregate}, nil
 		},
 	)
+}
+
+func (repository *RepositoryImpl) DeleteChecklist(
+	ctx context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	return persistence.WithWriteTx(
+		ctx,
+		repository.store.DB,
+		repository.store.MaxWriteAttempts,
+		func(tx *sql.Tx) (*MutationResult, error) {
+			if _, err := persistence.LockAccountVersion(
+				ctx,
+				tx,
+				ownerUID,
+			); err != nil {
+				return nil, err
+			}
+			checklist, found, err := lockChecklist(ctx, tx, checklistID)
+			if err != nil {
+				return nil, err
+			}
+			if !found || checklist.ownerUID == nil ||
+				*checklist.ownerUID != ownerUID {
+				return nil, hiddenChecklistError()
+			}
+			if checklist.deletedAt != nil {
+				aggregate, err := loadOwnedAggregate(
+					ctx,
+					tx,
+					ownerUID,
+					checklistID,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return &MutationResult{
+					Aggregate:  *aggregate,
+					Idempotent: true,
+				}, nil
+			}
+			if !precondition.Matches(shared.MakeChecklistETag(
+				checklistID,
+				checklist.syncVersion,
+			)) {
+				return nil, staleChecklistError()
+			}
+
+			if _, err := tx.ExecContext(
+				ctx,
+				`UPDATE user_pmcs_community_sources
+				 SET status = 'retired',
+				     current_release_revision_id = NULL,
+				     updated_at = now(),
+				     retired_at = COALESCE(retired_at, now())
+				 WHERE checklist_id = $1`,
+				checklistID,
+			); err != nil {
+				return nil, fmt.Errorf("retire deleted checklist source: %w", err)
+			}
+
+			pinnedRevisionIDs, err := activePinnedRevisionIDs(
+				ctx,
+				tx,
+				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				`DELETE FROM user_pmcs_community_releases
+				 WHERE checklist_id = $1
+				   AND NOT (revision_id = ANY($2::uuid[]))`,
+				checklistID,
+				pq.Array(pinnedRevisionIDs),
+			); err != nil {
+				return nil, fmt.Errorf(
+					"delete unpinned community releases: %w",
+					err,
+				)
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				`DELETE FROM user_pmcs_revisions
+				 WHERE checklist_id = $1
+				   AND NOT (id = ANY($2::uuid[]))`,
+				checklistID,
+				pq.Array(pinnedRevisionIDs),
+			); err != nil {
+				return nil, fmt.Errorf("delete unpinned revisions: %w", err)
+			}
+
+			accountVersion, err := persistence.AdvanceAccountVersion(
+				ctx,
+				tx,
+				ownerUID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				`UPDATE user_pmcs_checklists
+				 SET sync_version = sync_version + 1,
+				     account_change_version = $1,
+				     updated_at = now(),
+				     deleted_at = now()
+				 WHERE id = $2`,
+				accountVersion,
+				checklistID,
+			); err != nil {
+				return nil, fmt.Errorf("tombstone owned checklist: %w", err)
+			}
+			aggregate, err := loadOwnedAggregate(
+				ctx,
+				tx,
+				ownerUID,
+				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return &MutationResult{Aggregate: *aggregate}, nil
+		},
+	)
+}
+
+func activePinnedRevisionIDs(
+	ctx context.Context,
+	tx *sql.Tx,
+	checklistID uuid.UUID,
+) ([]uuid.UUID, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT installed_revision_id
+		 FROM user_pmcs_subscriptions
+		 WHERE checklist_id = $1
+		   AND deleted_at IS NULL
+		 ORDER BY subscriber_uid`,
+		checklistID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query active subscription pins: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	revisionIDs := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var revisionID uuid.UUID
+		if err := rows.Scan(&revisionID); err != nil {
+			return nil, fmt.Errorf("scan active subscription pin: %w", err)
+		}
+		revisionIDs = append(revisionIDs, revisionID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate active subscription pins: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close active subscription pins: %w", err)
+	}
+	return revisionIDs, nil
 }
 
 func (repository *RepositoryImpl) Publish(

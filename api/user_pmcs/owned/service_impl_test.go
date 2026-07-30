@@ -101,6 +101,18 @@ func (stub *repositoryStub) DeleteDraft(
 	return stub.mutationResult, stub.mutationError
 }
 
+func (stub *repositoryStub) DeleteChecklist(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedCondition = precondition
+	return stub.mutationResult, stub.mutationError
+}
+
 func (stub *repositoryStub) Publish(
 	_ context.Context,
 	ownerUID string,

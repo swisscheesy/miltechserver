@@ -84,6 +84,15 @@ func (stub *serviceStub) DeleteDraft(
 	return stub.mutationResult, stub.mutationETag, stub.mutationError
 }
 
+func (stub *serviceStub) DeleteChecklist(
+	_ context.Context,
+	_ *bootstrap.User,
+	_ string,
+	_ string,
+) (*MutationResult, string, error) {
+	return stub.mutationResult, stub.mutationETag, stub.mutationError
+}
+
 func (stub *serviceStub) Publish(
 	_ context.Context,
 	_ *bootstrap.User,

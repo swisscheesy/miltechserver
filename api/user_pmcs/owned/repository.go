@@ -45,6 +45,12 @@ type Repository interface {
 		revisionID uuid.UUID,
 		precondition shared.Precondition,
 	) (*MutationResult, error)
+	DeleteChecklist(
+		ctx context.Context,
+		ownerUID string,
+		checklistID uuid.UUID,
+		precondition shared.Precondition,
+	) (*MutationResult, error)
 	Publish(
 		ctx context.Context,
 		ownerUID string,

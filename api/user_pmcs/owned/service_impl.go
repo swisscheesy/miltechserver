@@ -162,6 +162,34 @@ func (service *ServiceImpl) DeleteDraft(
 	return mutationResponse(result, err)
 }
 
+func (service *ServiceImpl) DeleteChecklist(
+	ctx context.Context,
+	user *bootstrap.User,
+	checklistID string,
+	ifMatch string,
+) (*MutationResult, string, error) {
+	ownerUID, apiError := authenticatedUID(user)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	parsedChecklistID, apiError := parseUUID("checklist_id", checklistID)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	precondition, err := shared.ParseExistingPrecondition(ifMatch)
+	if err != nil {
+		return nil, "", err
+	}
+
+	result, err := service.repository.DeleteChecklist(
+		ctx,
+		ownerUID,
+		parsedChecklistID,
+		precondition,
+	)
+	return mutationResponse(result, err)
+}
+
 func (service *ServiceImpl) Publish(
 	ctx context.Context,
 	user *bootstrap.User,
