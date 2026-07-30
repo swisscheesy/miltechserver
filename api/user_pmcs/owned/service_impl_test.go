@@ -300,6 +300,34 @@ func TestPreparedTreeAdvisoryKeysAreStableSortedAndDeduplicated(t *testing.T) {
 	require.Equal(t, keys, preparedTreeAdvisoryKeys(reordered))
 }
 
+func TestPreparedTreeAdvisoryKeysAreBoundedAtMaximumTreeCeiling(t *testing.T) {
+	input := shared.RevisionInput{ID: uuid.New()}
+	for sectionIndex := 0; sectionIndex < 100; sectionIndex++ {
+		section := shared.SectionInput{ID: uuid.New()}
+		for itemIndex := 0; itemIndex < 20; itemIndex++ {
+			item := shared.ItemInput{ID: uuid.New()}
+			for noticeIndex := 0; noticeIndex < 2; noticeIndex++ {
+				item.Notices = append(
+					item.Notices,
+					shared.NoticeInput{ID: uuid.New()},
+				)
+			}
+			for stepIndex := 0; stepIndex < 5; stepIndex++ {
+				item.ProcedureSteps = append(
+					item.ProcedureSteps,
+					shared.ProcedureStepInput{ID: uuid.New()},
+				)
+			}
+			section.Items = append(section.Items, item)
+		}
+		input.Sections = append(input.Sections, section)
+	}
+
+	keys := preparedTreeAdvisoryKeys(input)
+
+	require.LessOrEqual(t, len(keys), 32)
+}
+
 func validDraftInput(revisionID uuid.UUID) shared.RevisionInput {
 	return shared.RevisionInput{
 		ID:          revisionID,

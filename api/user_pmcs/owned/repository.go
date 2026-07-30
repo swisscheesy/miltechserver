@@ -60,6 +60,16 @@ type lockedChecklist struct {
 	deletedAt   *time.Time
 }
 
+const (
+	// The verified server baseline has max_locks_per_transaction=64. Capping
+	// one submitted tree at half that value bounds shared lock-table pressure
+	// and leaves capacity for relation locks and concurrent writers.
+	preparedTreeAdvisoryStripeCount uint64 = 32
+
+	// 0x55504d43 is ASCII "UPMC"; the low bits identify a UUID stripe.
+	preparedTreeAdvisoryNamespace int64 = 0x55504d4300000000
+)
+
 func lockChecklist(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -233,24 +243,19 @@ func preparedTreeAdvisoryKeys(revision shared.RevisionInput) []int64 {
 			}
 		}
 	}
-	sort.Slice(ids, func(left, right int) bool {
-		return bytes.Compare(ids[left][:], ids[right][:]) < 0
-	})
 
 	keys := make([]int64, 0, len(ids))
-	var previousID uuid.UUID
-	for index, id := range ids {
-		if index > 0 && id == previousID {
-			continue
-		}
-		// A hash collision only causes conservative serialization; it cannot
-		// allow the same submitted UUID to be checked concurrently.
+	for _, id := range ids {
 		digest := sha256.Sum256(id[:])
-		keys = append(keys, int64(binary.BigEndian.Uint64(digest[:8])))
-		previousID = id
+		stripe := int64(
+			binary.BigEndian.Uint64(digest[:8]) %
+				preparedTreeAdvisoryStripeCount,
+		)
+		keys = append(keys, preparedTreeAdvisoryNamespace+stripe)
 	}
-	// Every writer acquires shared keys in the same order to avoid advisory
-	// lock deadlocks when submitted trees overlap by more than one UUID.
+	// Identical UUIDs always share a stripe. Stripe collisions only add
+	// contention, and sorted acquisition prevents overlapping trees from
+	// deadlocking.
 	sort.Slice(keys, func(left, right int) bool {
 		return keys[left] < keys[right]
 	})

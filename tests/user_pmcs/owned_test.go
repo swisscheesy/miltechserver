@@ -830,19 +830,75 @@ func installChecklistUpdateBarrier(
 	connection, err := testDB.Conn(ctx)
 	require.NoError(t, err)
 
+	var (
+		connectionClosed bool
+		lockAcquired     bool
+		functionCreated  bool
+		triggerCreated   bool
+		quotedFunction   string
+		quotedTrigger    string
+	)
+	closeConnection := func() {
+		if connectionClosed {
+			return
+		}
+		if closeErr := connection.Close(); closeErr != nil {
+			t.Errorf("close barrier connection: %v", closeErr)
+		}
+		connectionClosed = true
+	}
 	lockKey := time.Now().UnixNano()
+	release := func() {
+		if !lockAcquired {
+			return
+		}
+		if _, unlockErr := connection.ExecContext(
+			context.Background(),
+			`SELECT pg_advisory_unlock($1)`,
+			lockKey,
+		); unlockErr != nil {
+			t.Errorf("release barrier advisory lock: %v", unlockErr)
+			closeConnection()
+		}
+		lockAcquired = false
+	}
+	t.Cleanup(func() {
+		release()
+		if triggerCreated {
+			if _, dropErr := testDB.ExecContext(
+				context.Background(),
+				fmt.Sprintf(
+					`DROP TRIGGER %s ON user_pmcs_checklists`,
+					quotedTrigger,
+				),
+			); dropErr != nil {
+				t.Errorf("drop barrier trigger: %v", dropErr)
+			}
+		}
+		if functionCreated {
+			if _, dropErr := testDB.ExecContext(
+				context.Background(),
+				fmt.Sprintf(`DROP FUNCTION %s()`, quotedFunction),
+			); dropErr != nil {
+				t.Errorf("drop barrier function: %v", dropErr)
+			}
+		}
+		closeConnection()
+	})
+
 	_, err = connection.ExecContext(
 		ctx,
 		`SELECT pg_advisory_lock($1)`,
 		lockKey,
 	)
 	require.NoError(t, err)
+	lockAcquired = true
 
 	suffix := strings.ReplaceAll(uuid.NewString(), "-", "")
 	functionName := "user_pmcs_test_barrier_function_" + suffix
 	triggerName := "user_pmcs_test_barrier_trigger_" + suffix
-	quotedFunction := pq.QuoteIdentifier(functionName)
-	quotedTrigger := pq.QuoteIdentifier(triggerName)
+	quotedFunction = pq.QuoteIdentifier(functionName)
+	quotedTrigger = pq.QuoteIdentifier(triggerName)
 	_, err = testDB.ExecContext(
 		ctx,
 		fmt.Sprintf(
@@ -861,6 +917,7 @@ func installChecklistUpdateBarrier(
 		),
 	)
 	require.NoError(t, err)
+	functionCreated = true
 	_, err = testDB.ExecContext(
 		ctx,
 		fmt.Sprintf(
@@ -872,35 +929,7 @@ func installChecklistUpdateBarrier(
 		),
 	)
 	require.NoError(t, err)
-
-	var releaseOnce sync.Once
-	release := func() {
-		releaseOnce.Do(func() {
-			_, unlockErr := connection.ExecContext(
-				context.Background(),
-				`SELECT pg_advisory_unlock($1)`,
-				lockKey,
-			)
-			require.NoError(t, unlockErr)
-		})
-	}
-	t.Cleanup(func() {
-		release()
-		_, dropTriggerErr := testDB.ExecContext(
-			context.Background(),
-			fmt.Sprintf(
-				`DROP TRIGGER IF EXISTS %s ON user_pmcs_checklists`,
-				quotedTrigger,
-			),
-		)
-		require.NoError(t, dropTriggerErr)
-		_, dropFunctionErr := testDB.ExecContext(
-			context.Background(),
-			fmt.Sprintf(`DROP FUNCTION IF EXISTS %s()`, quotedFunction),
-		)
-		require.NoError(t, dropFunctionErr)
-		require.NoError(t, connection.Close())
-	})
+	triggerCreated = true
 	return release
 }
 
