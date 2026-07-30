@@ -55,15 +55,6 @@ func (handler Handler) getInstalledRelease(context *gin.Context) {
 		shared.WriteAPIError(context, apiError)
 		return
 	}
-	conditional := context.GetHeader("If-None-Match")
-	if conditional != "" {
-		precondition, err := shared.ParseExistingPrecondition(conditional)
-		if err != nil {
-			writeSubscriptionError(context, err)
-			return
-		}
-		conditional = precondition.ETag
-	}
 	release, etag, err := handler.service.GetInstalledRelease(context.Request.Context(), user, context.Param("checklist_id"), context.Param("revision_id"))
 	if err != nil {
 		writeSubscriptionError(context, err)
@@ -71,7 +62,12 @@ func (handler Handler) getInstalledRelease(context *gin.Context) {
 	}
 	context.Header("ETag", etag)
 	context.Header("Cache-Control", immutableSubscriptionCacheControl)
-	if conditional == etag {
+	matches, apiError := shared.IfNoneMatchMatches(context.Request.Header.Values("If-None-Match"), etag)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	if matches {
 		context.Status(http.StatusNotModified)
 		return
 	}

@@ -63,6 +63,89 @@ func ParseCreatePrecondition(header string) (Precondition, error) {
 	return Precondition{Mode: PreconditionCreate}, nil
 }
 
+func IfNoneMatchMatches(fieldValues []string, currentETag string) (bool, *APIError) {
+	if len(fieldValues) == 0 {
+		return false, nil
+	}
+	value := strings.TrimSpace(strings.Join(fieldValues, ","))
+	if value == "*" {
+		return true, nil
+	}
+	tags, valid := splitEntityTagList(value)
+	if !valid {
+		return false, invalidIfNoneMatch()
+	}
+	currentOpaque, valid := weakEntityTagValue(currentETag)
+	if !valid {
+		return false, NewInternalError("invalid current ETag", nil)
+	}
+	for _, tag := range tags {
+		if tag == "*" {
+			return false, invalidIfNoneMatch()
+		}
+		opaque, tagValid := weakEntityTagValue(tag)
+		if !tagValid {
+			return false, invalidIfNoneMatch()
+		}
+		if opaque == currentOpaque {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func invalidIfNoneMatch() *APIError {
+	return NewInvalidPrecondition("If-None-Match must be * or a valid entity-tag list", nil)
+}
+
+func splitEntityTagList(value string) ([]string, bool) {
+	if value == "" {
+		return nil, true
+	}
+	var tags []string
+	start, inQuotes := 0, false
+	for index, character := range value {
+		switch character {
+		case '"':
+			inQuotes = !inQuotes
+		case ',':
+			if !inQuotes {
+				tag := strings.TrimSpace(value[start:index])
+				if tag == "" {
+					return nil, false
+				}
+				tags = append(tags, tag)
+				start = index + 1
+			}
+		}
+	}
+	if inQuotes {
+		return nil, false
+	}
+	last := strings.TrimSpace(value[start:])
+	if last == "" {
+		return nil, false
+	}
+	return append(tags, last), true
+}
+
+func weakEntityTagValue(value string) (string, bool) {
+	tag := strings.TrimSpace(value)
+	if strings.HasPrefix(tag, "W/") {
+		tag = tag[2:]
+	}
+	if len(tag) < 2 || tag[0] != '"' || tag[len(tag)-1] != '"' {
+		return "", false
+	}
+	opaque := tag[1 : len(tag)-1]
+	for _, character := range opaque {
+		if character == '"' || character <= 0x20 || character == 0x7f {
+			return "", false
+		}
+	}
+	return opaque, true
+}
+
 func DecodeStrictJSON(context *gin.Context, destination any, maxBytes int64) *APIError {
 	if maxBytes <= 0 {
 		return NewInternalError("invalid JSON body limit", nil)

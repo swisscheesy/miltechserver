@@ -87,6 +87,9 @@ func (repository *RepositoryImpl) Install(ctx context.Context, subscriberUID str
 			return loadMutation(ctx, tx, subscriberUID, checklistID, false, false)
 		}
 		if current.InstalledRevisionID != nil && *current.InstalledRevisionID == *source.currentRevisionID {
+			if precondition.Mode != shared.PreconditionCreate && !precondition.Matches(shared.MakeSubscriptionETag(checklistID, current.SyncVersion)) {
+				return nil, staleSubscriptionError()
+			}
 			return loadMutation(ctx, tx, subscriberUID, checklistID, false, true)
 		}
 		return nil, staleSubscriptionError()
@@ -128,8 +131,15 @@ func (repository *RepositoryImpl) GetInstalledRelease(ctx context.Context, subsc
 
 func lockActiveSource(ctx context.Context, tx *sql.Tx, checklistID uuid.UUID) (lockedSource, bool, error) {
 	var source lockedSource
+	err := tx.QueryRowContext(ctx, `SELECT owner_uid, deleted_at FROM user_pmcs_checklists WHERE id = $1 FOR UPDATE`, checklistID).Scan(&source.ownerUID, &source.deletedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return lockedSource{}, false, nil
+	}
+	if err != nil {
+		return lockedSource{}, false, fmt.Errorf("lock source checklist: %w", err)
+	}
 	var current uuid.NullUUID
-	err := tx.QueryRowContext(ctx, `SELECT status, current_release_revision_id FROM user_pmcs_community_sources WHERE checklist_id = $1 FOR UPDATE`, checklistID).Scan(&source.status, &current)
+	err = tx.QueryRowContext(ctx, `SELECT status, current_release_revision_id FROM user_pmcs_community_sources WHERE checklist_id = $1 FOR UPDATE`, checklistID).Scan(&source.status, &current)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedSource{}, false, nil
 	}
@@ -139,13 +149,6 @@ func lockActiveSource(ctx context.Context, tx *sql.Tx, checklistID uuid.UUID) (l
 	if current.Valid {
 		value := current.UUID
 		source.currentRevisionID = &value
-	}
-	err = tx.QueryRowContext(ctx, `SELECT owner_uid, deleted_at FROM user_pmcs_checklists WHERE id = $1 FOR UPDATE`, checklistID).Scan(&source.ownerUID, &source.deletedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return lockedSource{}, false, nil
-	}
-	if err != nil {
-		return lockedSource{}, false, fmt.Errorf("lock source checklist: %w", err)
 	}
 	return source, true, nil
 }
