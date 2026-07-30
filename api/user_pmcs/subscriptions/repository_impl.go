@@ -105,18 +105,41 @@ func (repository *RepositoryImpl) Unsubscribe(ctx context.Context, subscriberUID
 		if err != nil {
 			return nil, err
 		}
-		subscriptions, err := lockChecklistSubscriptions(
-			ctx,
-			tx,
-			checklistID,
+		finalizerCandidate := sourceFound &&
+			source.ownerUID == nil &&
+			source.deletedAt != nil &&
+			source.status == "retired" &&
+			source.currentRevisionID == nil
+		var (
+			subscription  lockedSubscription
+			subscriptions []checklistSubscriptionLock
+			found         bool
 		)
-		if err != nil {
-			return nil, err
+		if finalizerCandidate {
+			subscriptions, err = lockFinalizerSubscriptions(
+				ctx,
+				tx,
+				checklistID,
+				subscriberUID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			subscription, found = findLockedSubscription(
+				subscriptions,
+				subscriberUID,
+			)
+		} else {
+			subscription, found, err = lockSubscription(
+				ctx,
+				tx,
+				subscriberUID,
+				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
-		subscription, found := findLockedSubscription(
-			subscriptions,
-			subscriberUID,
-		)
 		if !found {
 			return nil, shared.NewResourceNotFound("subscription not found", nil)
 		}
@@ -126,11 +149,7 @@ func (repository *RepositoryImpl) Unsubscribe(ctx context.Context, subscriberUID
 		if !precondition.Matches(shared.MakeSubscriptionETag(checklistID, subscription.subscription.SyncVersion)) {
 			return nil, staleSubscriptionError()
 		}
-		finalizeRetainedContent := sourceFound &&
-			source.ownerUID == nil &&
-			source.deletedAt != nil &&
-			source.status == "retired" &&
-			source.currentRevisionID == nil &&
+		finalizeRetainedContent := finalizerCandidate &&
 			!hasOtherActivePin(subscriptions, subscriberUID)
 		if finalizeRetainedContent {
 			if err := lockRetainedContentDependencies(
@@ -338,10 +357,11 @@ type checklistSubscriptionLock struct {
 	lockedSubscription
 }
 
-func lockChecklistSubscriptions(
+func lockFinalizerSubscriptions(
 	ctx context.Context,
 	tx *sql.Tx,
 	checklistID uuid.UUID,
+	subscriberUID string,
 ) ([]checklistSubscriptionLock, error) {
 	rows, err := tx.QueryContext(
 		ctx,
@@ -350,12 +370,17 @@ func lockChecklistSubscriptions(
 		        deleted_at
 		   FROM user_pmcs_subscriptions
 		  WHERE checklist_id = $1
+		    AND (
+		           subscriber_uid = $2
+		        OR deleted_at IS NULL
+		    )
 		  ORDER BY checklist_id, subscriber_uid
 		  FOR UPDATE`,
 		checklistID,
+		subscriberUID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("lock checklist subscriptions: %w", err)
+		return nil, fmt.Errorf("lock finalizer subscriptions: %w", err)
 	}
 	defer rows.Close()
 

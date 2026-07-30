@@ -236,7 +236,10 @@ func lockAccountSubscriptions(
 		`SELECT checklist_id, subscriber_uid, installed_revision_id, deleted_at
 		   FROM user_pmcs_subscriptions
 		  WHERE subscriber_uid = $1
-		     OR checklist_id = ANY($2::uuid[])
+		     OR (
+		            checklist_id = ANY($2::uuid[])
+		        AND deleted_at IS NULL
+		     )
 		  ORDER BY checklist_id, subscriber_uid
 		  FOR UPDATE`,
 		uid,
