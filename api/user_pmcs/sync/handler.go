@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"miltechserver/api/response"
 	"miltechserver/api/user_pmcs/shared"
 	"miltechserver/bootstrap"
 )
@@ -35,11 +34,7 @@ func (handler Handler) getDelta(context *gin.Context) {
 		return
 	}
 
-	context.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    delta,
-	})
+	context.JSON(http.StatusOK, accountDeltaEnvelope(delta))
 }
 
 func authenticatedUser(

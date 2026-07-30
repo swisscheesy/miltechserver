@@ -3,6 +3,7 @@ package user_pmcs_test
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"miltechserver/api/response"
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
 	userpmcssync "miltechserver/api/user_pmcs/sync"
@@ -263,6 +265,73 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.NotNil(t, subscriptionTombstone.Subscription.DeletedAt)
 	require.Nil(t, subscriptionTombstone.Subscription.InstalledRevisionID)
 	require.Nil(t, subscriptionTombstone.Installed)
+
+	firstChangeDelta := &userpmcssync.AccountDelta{
+		FromCursor:     0,
+		ThroughCursor:  delta.Changes[0].AccountChangeVersion,
+		AccountVersion: delta.AccountVersion,
+		HasMore:        true,
+		Changes:        delta.Changes[:1],
+	}
+	firstChangeResponse, err := json.Marshal(response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "",
+		Data:    firstChangeDelta,
+	})
+	require.NoError(t, err)
+	firstTwoDelta := &userpmcssync.AccountDelta{
+		FromCursor:     0,
+		ThroughCursor:  delta.Changes[1].AccountChangeVersion,
+		AccountVersion: delta.AccountVersion,
+		HasMore:        true,
+		Changes:        delta.Changes[:2],
+	}
+	firstTwoResponse, err := json.Marshal(response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "",
+		Data:    firstTwoDelta,
+	})
+	require.NoError(t, err)
+	exactBoundary := len(firstTwoResponse) - 1
+	require.LessOrEqual(t, len(firstChangeResponse), exactBoundary)
+
+	byteBounded, err := repository.GetDelta(
+		ctx,
+		subscriberUID,
+		0,
+		25,
+		exactBoundary,
+	)
+	require.NoError(t, err)
+	byteBoundedResponse, err := json.Marshal(response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "",
+		Data:    byteBounded,
+	})
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(byteBoundedResponse), exactBoundary)
+	require.Len(t, byteBounded.Changes, 1)
+	require.Equal(
+		t,
+		delta.Changes[0].AccountChangeVersion,
+		byteBounded.ThroughCursor,
+	)
+	require.True(t, byteBounded.HasMore)
+	require.NotNil(t, byteBounded.Changes[0].Checklist)
+	require.NotNil(t, byteBounded.Changes[0].Checklist.Draft)
+	require.NotEmpty(t, byteBounded.Changes[0].Checklist.Draft.Sections)
+
+	remainder, err := repository.GetDelta(
+		ctx,
+		subscriberUID,
+		byteBounded.ThroughCursor,
+		25,
+		shared.DefaultConfig().MaxDeltaResponseBytes,
+	)
+	require.NoError(t, err)
+	require.Equal(t, delta.Changes[1:], remainder.Changes)
+	require.Equal(t, delta.ThroughCursor, remainder.ThroughCursor)
+	require.False(t, remainder.HasMore)
 
 	limited, err := repository.GetDelta(
 		ctx,

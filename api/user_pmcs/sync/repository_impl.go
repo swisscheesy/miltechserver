@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 
+	"miltechserver/api/response"
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
 )
@@ -58,13 +60,19 @@ func (repository *RepositoryImpl) GetDelta(
 	if err != nil {
 		return nil, rollbackDelta(tx, err)
 	}
-	included, byteTruncated, err := fitCompleteChanges(changes, byteLimit)
-	if err != nil {
-		return nil, rollbackDelta(tx, err)
-	}
-
+	rootTruncated := len(roots) > limit
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("commit account delta snapshot: %w", err)
+	}
+	included, byteTruncated, err := fitCompleteChanges(
+		changes,
+		after,
+		accountVersion,
+		rootTruncated,
+		byteLimit,
+	)
+	if err != nil {
+		return nil, err
 	}
 	through := after
 	if len(included) > 0 {
@@ -74,7 +82,7 @@ func (repository *RepositoryImpl) GetDelta(
 		FromCursor:     after,
 		ThroughCursor:  through,
 		AccountVersion: accountVersion,
-		HasMore:        len(roots) > limit || byteTruncated,
+		HasMore:        rootTruncated || byteTruncated,
 		Changes:        included,
 	}, nil
 }
@@ -211,7 +219,9 @@ func loadAccountChanges(
 			if !found {
 				return nil, fmt.Errorf("account delta checklist root disappeared")
 			}
-			attachChecklistTrees(&loaded, trees)
+			if err := attachChecklistTrees(&loaded, trees); err != nil {
+				return nil, err
+			}
 			change.Checklist = &loaded.aggregate
 		case ChangeKindSubscription:
 			loaded, found := subscriptions[root.identity]
@@ -426,38 +436,63 @@ func loadSubscriptionChanges(
 func attachChecklistTrees(
 	entry *loadedChecklist,
 	trees map[uuid.UUID]shared.Revision,
-) {
+) error {
 	if entry.aggregate.DeletedAt != nil {
-		return
+		return nil
 	}
 	if entry.draftID.Valid {
-		draft := trees[entry.draftID.UUID]
+		draft, found := trees[entry.draftID.UUID]
+		if !found {
+			return fmt.Errorf("account delta draft revision tree disappeared")
+		}
 		entry.aggregate.Draft = &draft
 	}
 	if entry.publicationID.Valid {
-		publication := trees[entry.publicationID.UUID]
+		publication, found := trees[entry.publicationID.UUID]
+		if !found {
+			return fmt.Errorf(
+				"account delta publication revision tree disappeared",
+			)
+		}
 		entry.aggregate.Publication = &publication
 	}
+	return nil
 }
 
 func fitCompleteChanges(
 	changes []AccountChange,
+	after int64,
+	accountVersion int64,
+	rootTruncated bool,
 	byteLimit int,
 ) ([]AccountChange, bool, error) {
-	included := make([]AccountChange, 0, len(changes))
-	total := 0
-	for _, change := range changes {
-		encoded, err := json.Marshal(change)
+	for index := range changes {
+		prefix := changes[:index+1]
+		hasMore := rootTruncated || index+1 < len(changes)
+		candidate := &AccountDelta{
+			FromCursor:     after,
+			ThroughCursor:  prefix[len(prefix)-1].AccountChangeVersion,
+			AccountVersion: accountVersion,
+			HasMore:        hasMore,
+			Changes:        prefix,
+		}
+		encoded, err := json.Marshal(accountDeltaEnvelope(candidate))
 		if err != nil {
-			return nil, false, fmt.Errorf("encode account delta change: %w", err)
+			return nil, false, fmt.Errorf("encode account delta response: %w", err)
 		}
-		if len(included) > 0 && total+len(encoded) > byteLimit {
-			return included, true, nil
+		if index > 0 && len(encoded) > byteLimit {
+			return changes[:index], true, nil
 		}
-		included = append(included, change)
-		total += len(encoded)
 	}
-	return included, false, nil
+	return changes, false, nil
+}
+
+func accountDeltaEnvelope(delta *AccountDelta) response.StandardResponse {
+	return response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "",
+		Data:    delta,
+	}
 }
 
 func rootIDs(roots []deltaRoot, kind string) []uuid.UUID {

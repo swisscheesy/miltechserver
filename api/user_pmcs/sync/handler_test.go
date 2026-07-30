@@ -12,6 +12,7 @@ import (
 
 	ginGzip "github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"miltechserver/api/user_pmcs/shared"
@@ -218,6 +219,51 @@ func TestAccountDeltaServiceValidatesCursorAndLimit(t *testing.T) {
 			require.Equal(t, test.wantAfter, repository.after)
 			require.Equal(t, test.wantLimit, repository.limit)
 			require.Equal(t, config.MaxDeltaResponseBytes, repository.byteLimit)
+		})
+	}
+}
+
+func TestAccountDeltaRejectsMissingSelectedChecklistTree(t *testing.T) {
+	tests := []struct {
+		name      string
+		entry     loadedChecklist
+		wantError string
+	}{
+		{
+			name: "draft",
+			entry: loadedChecklist{
+				aggregate: shared.ChecklistAggregate{ID: uuid.New()},
+				draftID: uuid.NullUUID{
+					UUID:  uuid.New(),
+					Valid: true,
+				},
+			},
+			wantError: "draft revision tree disappeared",
+		},
+		{
+			name: "publication",
+			entry: loadedChecklist{
+				aggregate: shared.ChecklistAggregate{ID: uuid.New()},
+				publicationID: uuid.NullUUID{
+					UUID:  uuid.New(),
+					Valid: true,
+				},
+			},
+			wantError: "publication revision tree disappeared",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			entry := test.entry
+			err := attachChecklistTrees(
+				&entry,
+				map[uuid.UUID]shared.Revision{},
+			)
+
+			require.ErrorContains(t, err, test.wantError)
+			require.Nil(t, entry.aggregate.Draft)
+			require.Nil(t, entry.aggregate.Publication)
 		})
 	}
 }
