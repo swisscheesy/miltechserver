@@ -86,7 +86,15 @@ func (handler Handler) getCurrentRelease(context *gin.Context) {
 	}
 	setPublicHeaders(context)
 	context.Header("ETag", etag)
-	if ifNoneMatchMatches(context.GetHeader("If-None-Match"), etag) {
+	matches, apiError := ifNoneMatchMatches(
+		context.Request.Header.Values("If-None-Match"),
+		etag,
+	)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	if matches {
 		context.Status(http.StatusNotModified)
 		return
 	}
@@ -135,26 +143,48 @@ func setPublicHeaders(context *gin.Context) {
 	context.Header("Vary", "Accept-Encoding")
 }
 
-func ifNoneMatchMatches(header string, currentETag string) bool {
-	value := strings.TrimSpace(header)
+func ifNoneMatchMatches(
+	fieldValues []string,
+	currentETag string,
+) (bool, *shared.APIError) {
+	if len(fieldValues) == 0 {
+		return false, nil
+	}
+	value := strings.TrimSpace(strings.Join(fieldValues, ","))
 	if value == "*" {
-		return true
+		return true, nil
 	}
 	tags, valid := splitEntityTagList(value)
 	if !valid {
-		return false
+		return false, invalidIfNoneMatch()
 	}
 	currentOpaque, valid := weakEntityTagValue(currentETag)
 	if !valid {
-		return false
+		return false, shared.NewInternalError(
+			"invalid public release ETag",
+			nil,
+		)
 	}
 	for _, tag := range tags {
+		if tag == "*" {
+			return false, invalidIfNoneMatch()
+		}
 		opaque, tagValid := weakEntityTagValue(tag)
-		if tagValid && opaque == currentOpaque {
-			return true
+		if !tagValid {
+			return false, invalidIfNoneMatch()
+		}
+		if opaque == currentOpaque {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
+}
+
+func invalidIfNoneMatch() *shared.APIError {
+	return shared.NewInvalidPrecondition(
+		"If-None-Match must be * or a valid entity-tag list",
+		nil,
+	)
 }
 
 func splitEntityTagList(value string) ([]string, bool) {

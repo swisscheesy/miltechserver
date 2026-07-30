@@ -353,6 +353,76 @@ func TestCommunityDetailHandlerUsesPublicCacheAndConditionalGET(t *testing.T) {
 	require.Equal(t, 3, stub.detailCalls)
 }
 
+func TestCommunityDetailCombinesRepeatedIfNoneMatchFieldLines(t *testing.T) {
+	checklistID := uuid.New()
+	etag := `"public-release-validator"`
+	for _, test := range []struct {
+		name       string
+		laterValue string
+	}{
+		{name: "later weak match", laterValue: `W/` + etag},
+		{name: "later strong match", laterValue: etag},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &serviceStub{
+				detailResult: &shared.PublicChecklistRelease{
+					ChecklistID: checklistID,
+					Revision: shared.Revision{
+						ID:       uuid.New(),
+						Models:   []shared.ModelValue{},
+						Sections: []shared.Section{},
+					},
+				},
+				detailETag: etag,
+			}
+			router := communityPublicTestRouter(stub)
+			request := httptest.NewRequest(
+				http.MethodGet,
+				"/api/v1/user-pmcs/community/"+checklistID.String(),
+				nil,
+			)
+			request.Header.Add("If-None-Match", `"not-current"`)
+			request.Header.Add("If-None-Match", test.laterValue)
+
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusNotModified, response.Code)
+			require.Empty(t, response.Body.Bytes())
+			require.Equal(t, etag, response.Header().Get("ETag"))
+		})
+	}
+}
+
+func TestCommunityDetailRejectsWildcardMixedAcrossFieldLines(t *testing.T) {
+	checklistID := uuid.New()
+	stub := &serviceStub{
+		detailResult: &shared.PublicChecklistRelease{
+			ChecklistID: checklistID,
+			Revision: shared.Revision{
+				ID:       uuid.New(),
+				Models:   []shared.ModelValue{},
+				Sections: []shared.Section{},
+			},
+		},
+		detailETag: `"public-release-validator"`,
+	}
+	router := communityPublicTestRouter(stub)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community/"+checklistID.String(),
+		nil,
+	)
+	request.Header.Add("If-None-Match", "*")
+	request.Header.Add("If-None-Match", `"other"`)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	require.Equal(t, "invalid_precondition", responseErrorCode(t, response))
+}
+
 func TestCommunityPublicHandlersReturnTypedErrors(t *testing.T) {
 	stub := &serviceStub{
 		browseError: shared.NewInvalidRequest("invalid community cursor", nil),
