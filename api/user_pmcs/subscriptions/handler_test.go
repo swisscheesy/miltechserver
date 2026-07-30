@@ -44,7 +44,8 @@ func TestSubscriptionPinnedHandlerUsesPrivateImmutableCacheAndConditionalGET(t *
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	require.Equal(t, http.StatusNotModified, response.Code)
-	require.Equal(t, "private, max-age=31536000, immutable", response.Header().Get("Cache-Control"))
+	require.Equal(t, "private, no-cache", response.Header().Get("Cache-Control"))
+	require.NotContains(t, response.Header().Get("Cache-Control"), "immutable")
 	require.Equal(t, `"pinned"`, response.Header().Get("ETag"))
 }
 
@@ -86,6 +87,9 @@ func TestSubscriptionPinnedHandlerUsesWeakIfNoneMatchSemantics(t *testing.T) {
 			if test.wantStatus == http.StatusBadRequest {
 				require.Empty(t, response.Header().Get("ETag"))
 				require.Empty(t, response.Header().Get("Cache-Control"))
+			}
+			if test.wantStatus != http.StatusBadRequest {
+				require.Equal(t, "private, no-cache", response.Header().Get("Cache-Control"))
 			}
 		})
 	}

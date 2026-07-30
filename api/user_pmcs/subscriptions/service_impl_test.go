@@ -59,6 +59,41 @@ func TestSubscriptionPinnedReadUsesImmutableValidator(t *testing.T) {
 	require.NotEmpty(t, etag)
 }
 
+func TestSubscriptionPinnedETagRepresentsLiveMetadataAndCompleteRevision(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	release := &shared.InstalledChecklistRelease{
+		ChecklistID:        checklistID,
+		SourceStatus:       "active",
+		CreatorDisplayName: "Creator",
+		Revision:           shared.Revision{ID: revisionID, Name: "PMCS", Models: []shared.ModelValue{}, Sections: []shared.Section{}},
+	}
+	first, err := installedReleaseETag(release)
+	require.NoError(t, err)
+	second, err := installedReleaseETag(release)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	require.True(t, len(first) > 2 && first[0] == '"' && first[len(first)-1] == '"')
+
+	retired := *release
+	retired.SourceStatus = "retired"
+	retiredETag, err := installedReleaseETag(&retired)
+	require.NoError(t, err)
+	require.NotEqual(t, first, retiredETag)
+
+	renamed := *release
+	renamed.CreatorDisplayName = "Renamed creator"
+	renamedETag, err := installedReleaseETag(&renamed)
+	require.NoError(t, err)
+	require.NotEqual(t, first, renamedETag)
+
+	changedTree := *release
+	changedTree.Revision.Name = "Changed PMCS"
+	changedTreeETag, err := installedReleaseETag(&changedTree)
+	require.NoError(t, err)
+	require.NotEqual(t, first, changedTreeETag)
+}
+
 func requireAPIError(t *testing.T, err error, status int, code string) {
 	t.Helper()
 	var apiError *shared.APIError

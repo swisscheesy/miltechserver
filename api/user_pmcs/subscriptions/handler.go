@@ -12,7 +12,6 @@ import (
 	"miltechserver/bootstrap"
 )
 
-const immutableSubscriptionCacheControl = "private, max-age=31536000, immutable"
 const subscriptionCacheControl = "private, no-cache"
 
 type Handler struct{ service Service }
@@ -66,7 +65,7 @@ func (handler Handler) getInstalledRelease(context *gin.Context) {
 		return
 	}
 	context.Header("ETag", etag)
-	context.Header("Cache-Control", immutableSubscriptionCacheControl)
+	context.Header("Cache-Control", subscriptionCacheControl)
 	if matches {
 		context.Status(http.StatusNotModified)
 		return

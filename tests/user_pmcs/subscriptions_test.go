@@ -2,10 +2,13 @@ package user_pmcs_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -13,6 +16,7 @@ import (
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
 	"miltechserver/api/user_pmcs/subscriptions"
+	"miltechserver/bootstrap"
 )
 
 func TestSubscriptionInstallUnsubscribeResubscribeAndPinnedRead(t *testing.T) {
@@ -140,8 +144,13 @@ func TestSubscriptionUnsubscribeIsIdempotentAndPinnedReadSurvivesRetention(t *te
 	require.NoError(t, err)
 	subscriberUID := newUserPmcsTestUser(t)
 	repository := subscriptions.NewRepository(persistence.NewStore(testDB, 3), shared.DefaultConfig())
+	service := subscriptions.NewService(repository, shared.DefaultConfig())
 	installed, err := repository.Install(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
 	require.NoError(t, err)
+	user := &bootstrap.User{UserID: subscriberUID}
+	beforeRetirement, beforeRetirementETag, err := service.GetInstalledRelease(context.Background(), user, fixture.checklist.String(), fixture.revisions[0].Input.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "active", beforeRetirement.SourceStatus)
 	_, err = fixture.repository.Retire(context.Background(), fixture.ownerUID, fixture.checklist, checklistPrecondition(fixture.checklist, released.Aggregate.SyncVersion))
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -159,6 +168,27 @@ func TestSubscriptionUnsubscribeIsIdempotentAndPinnedReadSurvivesRetention(t *te
 	pinned, err := repository.GetInstalledRelease(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[0].Input.ID)
 	require.NoError(t, err)
 	require.Equal(t, "retired", pinned.SourceStatus)
+	afterRetirement, afterRetirementETag, err := service.GetInstalledRelease(context.Background(), user, fixture.checklist.String(), fixture.revisions[0].Input.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "retired", afterRetirement.SourceStatus)
+	require.NotEqual(t, beforeRetirementETag, afterRetirementETag)
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	group := router.Group("/api/v1/auth")
+	group.Use(func(context *gin.Context) { context.Set("user", user); context.Next() })
+	subscriptions.RegisterRoutes(group, service)
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/auth/user-pmcs/subscriptions/"+fixture.checklist.String()+"/installed-releases/"+fixture.revisions[0].Input.ID.String(), nil)
+	request.Header.Set("If-None-Match", beforeRetirementETag)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), `"source_status":"retired"`)
+	_, err = testDB.ExecContext(context.Background(), `UPDATE users SET username = $1 WHERE uid = $2`, "Renamed creator", fixture.ownerUID)
+	require.NoError(t, err)
+	updatedCreator, updatedCreatorETag, err := service.GetInstalledRelease(context.Background(), user, fixture.checklist.String(), fixture.revisions[0].Input.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "Renamed creator", updatedCreator.CreatorDisplayName)
+	require.NotEqual(t, afterRetirementETag, updatedCreatorETag)
 	_, err = testDB.ExecContext(context.Background(), `UPDATE user_pmcs_checklists SET owner_uid = NULL, deleted_at = now() WHERE id = $1`, fixture.checklist)
 	require.NoError(t, err)
 	_, err = testDB.ExecContext(context.Background(), `DELETE FROM users WHERE uid = $1`, fixture.ownerUID)
@@ -166,6 +196,10 @@ func TestSubscriptionUnsubscribeIsIdempotentAndPinnedReadSurvivesRetention(t *te
 	pinned, err = repository.GetInstalledRelease(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[0].Input.ID)
 	require.NoError(t, err)
 	require.Equal(t, "Deleted user", pinned.CreatorDisplayName)
+	anonymized, anonymizedETag, err := service.GetInstalledRelease(context.Background(), user, fixture.checklist.String(), fixture.revisions[0].Input.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "Deleted user", anonymized.CreatorDisplayName)
+	require.NotEqual(t, updatedCreatorETag, anonymizedETag)
 	unsubscribed, err := repository.Unsubscribe(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionMatch, ETag: shared.MakeSubscriptionETag(fixture.checklist, installed.Subscription.SyncVersion)})
 	require.NoError(t, err)
 	retried, err := repository.Unsubscribe(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionMatch, ETag: `"stale"`})

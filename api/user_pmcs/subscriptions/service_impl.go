@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 
 	"github.com/google/uuid"
@@ -95,7 +96,11 @@ func (service *ServiceImpl) GetInstalledRelease(ctx context.Context, user *boots
 	if release == nil {
 		return nil, "", shared.NewInternalError("repository returned an empty installed release", nil)
 	}
-	return release, installedReleaseETag(parsedChecklistID, parsedRevisionID), nil
+	etag, err := installedReleaseETag(release)
+	if err != nil {
+		return nil, "", err
+	}
+	return release, etag, nil
 }
 
 func subscriptionUID(user *bootstrap.User) (string, *shared.APIError) {
@@ -111,10 +116,13 @@ func subscriptionUUID(value string) (uuid.UUID, *shared.APIError) {
 	}
 	return parsed, nil
 }
-func installedReleaseETag(checklistID, revisionID uuid.UUID) string {
+func installedReleaseETag(release *shared.InstalledChecklistRelease) (string, error) {
+	representation, err := json.Marshal(release)
+	if err != nil {
+		return "", shared.NewInternalError("encode installed release ETag", nil)
+	}
 	digest := sha256.New()
-	_, _ = digest.Write([]byte("subscription-release\x00"))
-	_, _ = digest.Write(checklistID[:])
-	_, _ = digest.Write(revisionID[:])
-	return `"` + base64.RawURLEncoding.EncodeToString(digest.Sum(nil)) + `"`
+	_, _ = digest.Write([]byte("subscription-release-representation\x00"))
+	_, _ = digest.Write(representation)
+	return `"` + base64.RawURLEncoding.EncodeToString(digest.Sum(nil)) + `"`, nil
 }
