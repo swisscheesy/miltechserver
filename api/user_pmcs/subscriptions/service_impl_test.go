@@ -16,6 +16,11 @@ type subscriptionRepositoryStub struct {
 	installError     error
 	installCondition shared.Precondition
 	installedResult  *shared.InstalledChecklistRelease
+	updatesResult    *shared.SubscriptionUpdatePage
+	updatesAfter     *uuid.UUID
+	updatesLimit     int
+	acceptResult     *MutationResult
+	acceptCondition  shared.Precondition
 }
 
 func (stub *subscriptionRepositoryStub) Install(_ context.Context, _ string, _ uuid.UUID, precondition shared.Precondition) (*MutationResult, error) {
@@ -27,6 +32,15 @@ func (stub *subscriptionRepositoryStub) Unsubscribe(context.Context, string, uui
 }
 func (stub *subscriptionRepositoryStub) GetInstalledRelease(context.Context, string, uuid.UUID, uuid.UUID) (*shared.InstalledChecklistRelease, error) {
 	return stub.installedResult, nil
+}
+func (stub *subscriptionRepositoryStub) ListUpdates(_ context.Context, _ string, after *uuid.UUID, limit int) (*shared.SubscriptionUpdatePage, error) {
+	stub.updatesAfter = after
+	stub.updatesLimit = limit
+	return stub.updatesResult, nil
+}
+func (stub *subscriptionRepositoryStub) AcceptUpdate(_ context.Context, _ string, _ uuid.UUID, _ uuid.UUID, precondition shared.Precondition) (*MutationResult, error) {
+	stub.acceptCondition = precondition
+	return stub.acceptResult, nil
 }
 
 func TestSubscriptionInstallParsesCreatePrecondition(t *testing.T) {
@@ -92,6 +106,35 @@ func TestSubscriptionPinnedETagRepresentsLiveMetadataAndCompleteRevision(t *test
 	changedTreeETag, err := installedReleaseETag(&changedTree)
 	require.NoError(t, err)
 	require.NotEqual(t, first, changedTreeETag)
+}
+
+func TestSubscriptionAcceptUpdateRequiresExistingPrecondition(t *testing.T) {
+	service := NewService(&subscriptionRepositoryStub{}, shared.DefaultConfig())
+	_, _, err := service.AcceptUpdate(context.Background(), &bootstrap.User{UserID: "subscriber-1"}, uuid.NewString(), uuid.NewString(), "")
+	requireAPIError(t, err, 428, "precondition_required")
+}
+
+func TestSubscriptionUpdateDiscoveryUsesConfiguredBoundsAndRejectsMalformedCursor(t *testing.T) {
+	checklistID := uuid.New()
+	repository := &subscriptionRepositoryStub{updatesResult: &shared.SubscriptionUpdatePage{Items: []shared.SubscriptionUpdate{}}}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, err := service.ListUpdates(context.Background(), &bootstrap.User{UserID: "subscriber-1"}, "", "")
+	require.NoError(t, err)
+	require.Equal(t, 50, repository.updatesLimit)
+
+	cursor, err := shared.EncodeSubscriptionUpdateCursor(shared.SubscriptionUpdateCursor{Version: 1, Checklist: checklistID})
+	require.NoError(t, err)
+	_, err = service.ListUpdates(context.Background(), &bootstrap.User{UserID: "subscriber-1"}, cursor, "100")
+	require.NoError(t, err)
+	require.Equal(t, 100, repository.updatesLimit)
+	require.NotNil(t, repository.updatesAfter)
+	require.Equal(t, checklistID, *repository.updatesAfter)
+
+	_, err = service.ListUpdates(context.Background(), &bootstrap.User{UserID: "subscriber-1"}, "not-a-cursor", "")
+	requireAPIError(t, err, 400, "invalid_request")
+	_, err = service.ListUpdates(context.Background(), &bootstrap.User{UserID: "subscriber-1"}, "", "101")
+	requireAPIError(t, err, 400, "invalid_request")
 }
 
 func requireAPIError(t *testing.T, err error, status int, code string) {

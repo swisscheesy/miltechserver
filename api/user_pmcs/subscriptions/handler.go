@@ -48,6 +48,34 @@ func (handler Handler) unsubscribe(context *gin.Context) {
 	setSubscriptionHeaders(context, etag)
 	writeSubscriptionSuccess(context, http.StatusOK, result.Subscription)
 }
+func (handler Handler) listUpdates(context *gin.Context) {
+	user, apiError := subscriptionUser(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	page, err := handler.service.ListUpdates(context.Request.Context(), user, context.Query("after"), context.Query("limit"))
+	if err != nil {
+		writeSubscriptionError(context, err)
+		return
+	}
+	context.Header("Cache-Control", subscriptionCacheControl)
+	writeSubscriptionSuccess(context, http.StatusOK, page)
+}
+func (handler Handler) acceptUpdate(context *gin.Context) {
+	user, apiError := subscriptionUser(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	result, etag, err := handler.service.AcceptUpdate(context.Request.Context(), user, context.Param("checklist_id"), context.Param("revision_id"), context.GetHeader("If-Match"))
+	if err != nil {
+		writeSubscriptionError(context, err)
+		return
+	}
+	setSubscriptionHeaders(context, etag)
+	writeSubscriptionSuccess(context, http.StatusOK, result)
+}
 func (handler Handler) getInstalledRelease(context *gin.Context) {
 	user, apiError := subscriptionUser(context)
 	if apiError != nil {

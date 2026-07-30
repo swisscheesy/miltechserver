@@ -129,6 +129,138 @@ func (repository *RepositoryImpl) GetInstalledRelease(ctx context.Context, subsc
 	return loadInstalledRelease(ctx, repository.store.DB, subscriberUID, checklistID, revisionID)
 }
 
+func (repository *RepositoryImpl) ListUpdates(ctx context.Context, subscriberUID string, after *uuid.UUID, limit int) (*shared.SubscriptionUpdatePage, error) {
+	arguments := []any{subscriberUID}
+	query := `SELECT subscription.checklist_id,
+	                 COALESCE(source.status, 'retired'),
+	                 subscription.installed_revision_id,
+	                 installed.revision_number,
+	                 source.current_release_revision_id,
+	                 current_release.revision_number
+	          FROM user_pmcs_subscriptions AS subscription
+	          JOIN user_pmcs_revisions AS installed
+	            ON installed.checklist_id = subscription.checklist_id
+	           AND installed.id = subscription.installed_revision_id
+	          LEFT JOIN user_pmcs_community_sources AS source
+	            ON source.checklist_id = subscription.checklist_id
+	          LEFT JOIN user_pmcs_revisions AS current_release
+	            ON current_release.checklist_id = source.checklist_id
+	           AND current_release.id = source.current_release_revision_id
+	          WHERE subscription.subscriber_uid = $1
+	            AND subscription.deleted_at IS NULL`
+	if after != nil {
+		arguments = append(arguments, *after)
+		query += fmt.Sprintf(" AND subscription.checklist_id > $%d", len(arguments))
+	}
+	arguments = append(arguments, limit+1)
+	query += fmt.Sprintf(" ORDER BY subscription.checklist_id LIMIT $%d", len(arguments))
+
+	rows, err := repository.store.DB.QueryContext(ctx, query, arguments...)
+	if err != nil {
+		return nil, fmt.Errorf("list subscription updates: %w", err)
+	}
+	defer rows.Close()
+	items := make([]shared.SubscriptionUpdate, 0, limit+1)
+	for rows.Next() {
+		var (
+			item          shared.SubscriptionUpdate
+			currentID     uuid.NullUUID
+			currentNumber sql.NullInt32
+		)
+		if err := rows.Scan(&item.ChecklistID, &item.SourceStatus, &item.InstalledRevisionID, &item.InstalledRevisionNumber, &currentID, &currentNumber); err != nil {
+			return nil, fmt.Errorf("scan subscription update: %w", err)
+		}
+		if currentID.Valid && currentNumber.Valid {
+			currentRevisionID := currentID.UUID
+			currentReleaseNumber := currentNumber.Int32
+			item.CurrentReleaseRevisionID = &currentRevisionID
+			item.CurrentReleaseNumber = &currentReleaseNumber
+			item.UpdateAvailable = item.SourceStatus == "active" && currentReleaseNumber > item.InstalledRevisionNumber
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate subscription updates: %w", err)
+	}
+	hasMore := len(items) > limit
+	if hasMore {
+		items = items[:limit]
+	}
+	page := &shared.SubscriptionUpdatePage{HasMore: hasMore, Items: items}
+	if hasMore {
+		cursor, err := shared.EncodeSubscriptionUpdateCursor(shared.SubscriptionUpdateCursor{Version: 1, Checklist: items[len(items)-1].ChecklistID})
+		if err != nil {
+			return nil, fmt.Errorf("encode subscription update cursor: %w", err)
+		}
+		page.NextCursor = &cursor
+	}
+	return page, nil
+}
+
+func (repository *RepositoryImpl) AcceptUpdate(ctx context.Context, subscriberUID string, checklistID, revisionID uuid.UUID, precondition shared.Precondition) (*MutationResult, error) {
+	return persistence.WithWriteTx(ctx, repository.store.DB, repository.store.MaxWriteAttempts, func(tx *sql.Tx) (*MutationResult, error) {
+		if _, err := persistence.LockAccountVersion(ctx, tx, subscriberUID); err != nil {
+			return nil, err
+		}
+		source, found, err := lockActiveSource(ctx, tx, checklistID)
+		if err != nil {
+			return nil, err
+		}
+		if !found || source.deletedAt != nil || source.status != "active" || source.currentRevisionID == nil {
+			return nil, shared.NewInvalidTransition("community checklist is not available for update", nil)
+		}
+		subscription, found, err := lockSubscription(ctx, tx, subscriberUID, checklistID)
+		if err != nil {
+			return nil, err
+		}
+		if !found || subscription.subscription.DeletedAt != nil || subscription.subscription.InstalledRevisionID == nil {
+			return nil, shared.NewResourceNotFound("subscription not found", nil)
+		}
+		if *source.currentRevisionID != revisionID {
+			return nil, shared.NewInvalidTransition("subscription update must target the current community release", nil)
+		}
+		if *subscription.subscription.InstalledRevisionID == revisionID {
+			return loadMutation(ctx, tx, subscriberUID, checklistID, false, true)
+		}
+		if !precondition.Matches(shared.MakeSubscriptionETag(checklistID, subscription.subscription.SyncVersion)) {
+			return nil, staleSubscriptionError()
+		}
+		installedNumber, currentNumber, err := revisionNumbers(ctx, tx, checklistID, *subscription.subscription.InstalledRevisionID, revisionID)
+		if err != nil {
+			return nil, err
+		}
+		if currentNumber <= installedNumber {
+			return nil, shared.NewInvalidTransition("subscription update must advance release", nil)
+		}
+		accountVersion, err := persistence.AdvanceAccountVersion(ctx, tx, subscriberUID)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE user_pmcs_subscriptions
+			SET installed_revision_id = $1, sync_version = sync_version + 1,
+			    account_change_version = $2, updated_at = now()
+			WHERE subscriber_uid = $3 AND checklist_id = $4`, revisionID, accountVersion, subscriberUID, checklistID); err != nil {
+			return nil, fmt.Errorf("accept subscription update: %w", err)
+		}
+		return loadMutation(ctx, tx, subscriberUID, checklistID, false, false)
+	})
+}
+
+func revisionNumbers(ctx context.Context, tx *sql.Tx, checklistID, installedRevisionID, currentRevisionID uuid.UUID) (int32, int32, error) {
+	var installedNumber, currentNumber int32
+	err := tx.QueryRowContext(ctx, `SELECT installed.revision_number, current_release.revision_number
+		FROM user_pmcs_revisions AS installed
+		JOIN user_pmcs_revisions AS current_release ON current_release.checklist_id = installed.checklist_id
+		WHERE installed.checklist_id = $1 AND installed.id = $2 AND current_release.id = $3`, checklistID, installedRevisionID, currentRevisionID).Scan(&installedNumber, &currentNumber)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, shared.NewInvalidTransition("subscription update release is unavailable", nil)
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("read subscription update revision numbers: %w", err)
+	}
+	return installedNumber, currentNumber, nil
+}
+
 func lockActiveSource(ctx context.Context, tx *sql.Tx, checklistID uuid.UUID) (lockedSource, bool, error) {
 	var source lockedSource
 	err := tx.QueryRowContext(ctx, `SELECT owner_uid, deleted_at FROM user_pmcs_checklists WHERE id = $1 FOR UPDATE`, checklistID).Scan(&source.ownerUID, &source.deletedAt)

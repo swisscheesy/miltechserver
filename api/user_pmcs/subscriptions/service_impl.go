@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -101,6 +103,57 @@ func (service *ServiceImpl) GetInstalledRelease(ctx context.Context, user *boots
 		return nil, "", err
 	}
 	return release, etag, nil
+}
+
+func (service *ServiceImpl) ListUpdates(ctx context.Context, user *bootstrap.User, afterValue, limitValue string) (*shared.SubscriptionUpdatePage, error) {
+	uid, apiError := subscriptionUID(user)
+	if apiError != nil {
+		return nil, apiError
+	}
+	limit := service.config.UpdatesDefaultLimit
+	if strings.TrimSpace(limitValue) != "" {
+		parsed, err := strconv.Atoi(limitValue)
+		if err != nil || parsed <= 0 || parsed > service.config.UpdatesMaxLimit {
+			return nil, shared.NewInvalidRequest(fmt.Sprintf("limit must be between 1 and %d", service.config.UpdatesMaxLimit), map[string]any{"limit": service.config.UpdatesMaxLimit})
+		}
+		limit = parsed
+	}
+	var after *uuid.UUID
+	if strings.TrimSpace(afterValue) != "" {
+		cursor, err := shared.DecodeSubscriptionUpdateCursor(afterValue)
+		if err != nil {
+			return nil, shared.NewInvalidRequest("invalid subscription update cursor", nil)
+		}
+		after = &cursor.Checklist
+	}
+	return service.repository.ListUpdates(ctx, uid, after, limit)
+}
+
+func (service *ServiceImpl) AcceptUpdate(ctx context.Context, user *bootstrap.User, checklistID, revisionID, ifMatch string) (*MutationResult, string, error) {
+	uid, apiError := subscriptionUID(user)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	parsedChecklistID, apiError := subscriptionUUID(checklistID)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	parsedRevisionID, apiError := subscriptionUUID(revisionID)
+	if apiError != nil {
+		return nil, "", apiError
+	}
+	precondition, err := shared.ParseExistingPrecondition(ifMatch)
+	if err != nil {
+		return nil, "", err
+	}
+	result, err := service.repository.AcceptUpdate(ctx, uid, parsedChecklistID, parsedRevisionID, precondition)
+	if err != nil {
+		return nil, "", err
+	}
+	if result == nil {
+		return nil, "", shared.NewInternalError("repository returned an empty mutation result", nil)
+	}
+	return result, shared.MakeSubscriptionETag(parsedChecklistID, result.Subscription.SyncVersion), nil
 }
 
 func subscriptionUID(user *bootstrap.User) (string, *shared.APIError) {

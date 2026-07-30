@@ -19,6 +19,9 @@ type subscriptionServiceStub struct {
 	installETag   string
 	installed     *shared.InstalledChecklistRelease
 	installedETag string
+	updates       *shared.SubscriptionUpdatePage
+	acceptResult  *MutationResult
+	acceptETag    string
 }
 
 func (stub *subscriptionServiceStub) Install(context.Context, *bootstrap.User, string, string, string) (*MutationResult, string, error) {
@@ -29,6 +32,12 @@ func (stub *subscriptionServiceStub) Unsubscribe(context.Context, *bootstrap.Use
 }
 func (stub *subscriptionServiceStub) GetInstalledRelease(context.Context, *bootstrap.User, string, string) (*shared.InstalledChecklistRelease, string, error) {
 	return stub.installed, stub.installedETag, nil
+}
+func (stub *subscriptionServiceStub) ListUpdates(context.Context, *bootstrap.User, string, string) (*shared.SubscriptionUpdatePage, error) {
+	return stub.updates, nil
+}
+func (stub *subscriptionServiceStub) AcceptUpdate(context.Context, *bootstrap.User, string, string, string) (*MutationResult, string, error) {
+	return stub.acceptResult, stub.acceptETag, nil
 }
 
 func TestSubscriptionPinnedHandlerUsesPrivateImmutableCacheAndConditionalGET(t *testing.T) {
@@ -94,3 +103,44 @@ func TestSubscriptionPinnedHandlerUsesWeakIfNoneMatchSemantics(t *testing.T) {
 		})
 	}
 }
+
+func TestSubscriptionUpdateAndAcceptanceRoutesReturnCanonicalSubscriptionData(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	checklistID, installedID, currentID := uuid.New(), uuid.New(), uuid.New()
+	stub := &subscriptionServiceStub{
+		updates: &shared.SubscriptionUpdatePage{Items: []shared.SubscriptionUpdate{{
+			ChecklistID:              checklistID,
+			SourceStatus:             "active",
+			InstalledRevisionID:      installedID,
+			InstalledRevisionNumber:  1,
+			CurrentReleaseRevisionID: &currentID,
+			CurrentReleaseNumber:     int32Pointer(2),
+			UpdateAvailable:          true,
+		}}},
+		acceptResult: &MutationResult{Subscription: shared.Subscription{
+			ChecklistID: checklistID, InstalledRevisionID: &currentID, SyncVersion: 2,
+		}},
+		acceptETag: `"accepted"`,
+	}
+	router := gin.New()
+	group := router.Group("/api/v1/auth")
+	group.Use(func(c *gin.Context) { c.Set("user", &bootstrap.User{UserID: "subscriber-1"}); c.Next() })
+	RegisterRoutes(group, stub)
+
+	updatesRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/user-pmcs/subscriptions/updates", nil)
+	updatesResponse := httptest.NewRecorder()
+	router.ServeHTTP(updatesResponse, updatesRequest)
+	require.Equal(t, http.StatusOK, updatesResponse.Code)
+	require.Contains(t, updatesResponse.Body.String(), `"update_available":true`)
+	require.NotContains(t, updatesResponse.Body.String(), `"sections"`)
+
+	acceptRequest := httptest.NewRequest(http.MethodPut, "/api/v1/auth/user-pmcs/subscriptions/"+checklistID.String()+"/installed-releases/"+currentID.String(), nil)
+	acceptRequest.Header.Set("If-Match", `"current"`)
+	acceptResponse := httptest.NewRecorder()
+	router.ServeHTTP(acceptResponse, acceptRequest)
+	require.Equal(t, http.StatusOK, acceptResponse.Code)
+	require.Equal(t, `"accepted"`, acceptResponse.Header().Get("ETag"))
+	require.Contains(t, acceptResponse.Body.String(), currentID.String())
+}
+
+func int32Pointer(value int32) *int32 { return &value }

@@ -127,6 +127,22 @@ type InstalledChecklistRelease struct {
 	Revision           Revision  `json:"revision"`
 }
 
+type SubscriptionUpdate struct {
+	ChecklistID              uuid.UUID  `json:"checklist_id"`
+	SourceStatus             string     `json:"source_status"`
+	InstalledRevisionID      uuid.UUID  `json:"installed_revision_id"`
+	InstalledRevisionNumber  int32      `json:"installed_revision_number"`
+	CurrentReleaseRevisionID *uuid.UUID `json:"current_release_revision_id,omitempty"`
+	CurrentReleaseNumber     *int32     `json:"current_release_revision_number,omitempty"`
+	UpdateAvailable          bool       `json:"update_available"`
+}
+
+type SubscriptionUpdatePage struct {
+	NextCursor *string              `json:"next_cursor,omitempty"`
+	HasMore    bool                 `json:"has_more"`
+	Items      []SubscriptionUpdate `json:"items"`
+}
+
 type CommunityBrowseFilter struct {
 	After           *CommunityCursor
 	Limit           int

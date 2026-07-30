@@ -12,6 +12,8 @@ type Repository interface {
 	Install(context.Context, string, uuid.UUID, shared.Precondition) (*MutationResult, error)
 	Unsubscribe(context.Context, string, uuid.UUID, shared.Precondition) (*MutationResult, error)
 	GetInstalledRelease(context.Context, string, uuid.UUID, uuid.UUID) (*shared.InstalledChecklistRelease, error)
+	ListUpdates(context.Context, string, *uuid.UUID, int) (*shared.SubscriptionUpdatePage, error)
+	AcceptUpdate(context.Context, string, uuid.UUID, uuid.UUID, shared.Precondition) (*MutationResult, error)
 }
 
 type MutationResult struct {

@@ -16,6 +16,7 @@ import (
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
 	"miltechserver/api/user_pmcs/subscriptions"
+	pmcssync "miltechserver/api/user_pmcs/sync"
 	"miltechserver/bootstrap"
 )
 
@@ -223,6 +224,119 @@ func TestSubscriptionInstallEnforcesConfiguredActiveCeiling(t *testing.T) {
 	require.NoError(t, err)
 	_, err = repository.Install(context.Background(), subscriberUID, secondFixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
 	requireAPIIntegrationError(t, err, 409, "invalid_transition")
+}
+
+func TestSubscriptionUpdateDiscoveryAndAcceptance(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 2)
+	firstRelease, err := fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[0].Input.ID, checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion))
+	require.NoError(t, err)
+	subscriberUID := newUserPmcsTestUser(t)
+	repository := subscriptions.NewRepository(persistence.NewStore(testDB, 3), shared.DefaultConfig())
+	installed, err := repository.Install(context.Background(), subscriberUID, fixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
+	require.NoError(t, err)
+	_, err = fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[1].Input.ID, checklistPrecondition(fixture.checklist, firstRelease.Aggregate.SyncVersion))
+	require.NoError(t, err)
+	beforeDiscoveryVersion := installed.Subscription.SyncVersion
+	beforeDiscoveryAccountVersion := installed.Subscription.AccountChangeVersion
+
+	updates, err := repository.ListUpdates(context.Background(), subscriberUID, nil, 50)
+	require.NoError(t, err)
+	require.Len(t, updates.Items, 1)
+	require.Equal(t, fixture.checklist, updates.Items[0].ChecklistID)
+	require.Equal(t, fixture.revisions[0].Input.ID, updates.Items[0].InstalledRevisionID)
+	require.Equal(t, int32(1), updates.Items[0].InstalledRevisionNumber)
+	require.Equal(t, fixture.revisions[1].Input.ID, *updates.Items[0].CurrentReleaseRevisionID)
+	require.Equal(t, int32(2), *updates.Items[0].CurrentReleaseNumber)
+	require.True(t, updates.Items[0].UpdateAvailable)
+	var discoverySyncVersion, discoveryAccountVersion int64
+	err = testDB.QueryRowContext(context.Background(), `SELECT sync_version, account_change_version FROM user_pmcs_subscriptions WHERE subscriber_uid = $1 AND checklist_id = $2`, subscriberUID, fixture.checklist).Scan(&discoverySyncVersion, &discoveryAccountVersion)
+	require.NoError(t, err)
+	require.Equal(t, beforeDiscoveryVersion, discoverySyncVersion)
+	require.Equal(t, beforeDiscoveryAccountVersion, discoveryAccountVersion)
+
+	gateway := gin.New()
+	group := gateway.Group("/api/v1/auth")
+	group.Use(func(context *gin.Context) {
+		context.Set("user", &bootstrap.User{UserID: subscriberUID})
+		context.Next()
+	})
+	service := subscriptions.NewService(repository, shared.DefaultConfig())
+	subscriptions.RegisterRoutes(group, service)
+
+	updatesRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/user-pmcs/subscriptions/updates?limit=1", nil)
+	updatesResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(updatesResponse, updatesRequest)
+	require.Equal(t, http.StatusOK, updatesResponse.Code)
+	require.Contains(t, updatesResponse.Body.String(), fixture.revisions[1].Input.ID.String())
+	require.Contains(t, updatesResponse.Body.String(), `"update_available":true`)
+	require.NotContains(t, updatesResponse.Body.String(), `"sections"`)
+
+	acceptRequest := httptest.NewRequest(http.MethodPut, "/api/v1/auth/user-pmcs/subscriptions/"+fixture.checklist.String()+"/installed-releases/"+fixture.revisions[1].Input.ID.String(), nil)
+	acceptRequest.Header.Set("If-Match", shared.MakeSubscriptionETag(fixture.checklist, installed.Subscription.SyncVersion))
+	acceptResponse := httptest.NewRecorder()
+	gateway.ServeHTTP(acceptResponse, acceptRequest)
+	require.Equal(t, http.StatusOK, acceptResponse.Code)
+	require.Contains(t, acceptResponse.Body.String(), fixture.revisions[1].Input.ID.String())
+
+	accepted, err := repository.AcceptUpdate(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[1].Input.ID, shared.Precondition{Mode: shared.PreconditionMatch, ETag: `"stale retry"`})
+	require.NoError(t, err)
+	require.True(t, accepted.Idempotent)
+	require.Equal(t, fixture.revisions[1].Input.ID, *accepted.Subscription.InstalledRevisionID)
+
+	delta, err := pmcssync.NewRepository(persistence.NewStore(testDB, 3)).GetDelta(context.Background(), subscriberUID, beforeDiscoveryAccountVersion, 10, shared.DefaultConfig().MaxDeltaResponseBytes)
+	require.NoError(t, err)
+	require.Len(t, delta.Changes, 1)
+	require.Equal(t, fixture.revisions[1].Input.ID, *delta.Changes[0].Subscription.InstalledRevisionID)
+	require.NotNil(t, delta.Changes[0].Installed)
+	require.Equal(t, fixture.revisions[1].Input.ID, delta.Changes[0].Installed.Revision.ID)
+
+	_, err = repository.AcceptUpdate(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[0].Input.ID, shared.Precondition{Mode: shared.PreconditionMatch, ETag: shared.MakeSubscriptionETag(fixture.checklist, accepted.Subscription.SyncVersion)})
+	requireAPIIntegrationError(t, err, 409, "invalid_transition")
+	pinned, err := repository.GetInstalledRelease(context.Background(), subscriberUID, fixture.checklist, fixture.revisions[1].Input.ID)
+	require.NoError(t, err)
+	require.Equal(t, fixture.revisions[1].Input.ID, pinned.Revision.ID)
+}
+
+func TestSubscriptionUpdateDiscoveryUsesChecklistUUIDKeysetAndReportsRetiredSources(t *testing.T) {
+	firstFixture := newReleasedChecklistFixture(t, 1)
+	firstRelease, err := firstFixture.repository.Release(context.Background(), firstFixture.ownerUID, firstFixture.checklist, firstFixture.revisions[0].Input.ID, checklistPrecondition(firstFixture.checklist, firstFixture.aggregate.SyncVersion))
+	require.NoError(t, err)
+	secondFixture := newReleasedChecklistFixture(t, 1)
+	_, err = secondFixture.repository.Release(context.Background(), secondFixture.ownerUID, secondFixture.checklist, secondFixture.revisions[0].Input.ID, checklistPrecondition(secondFixture.checklist, secondFixture.aggregate.SyncVersion))
+	require.NoError(t, err)
+	subscriberUID := newUserPmcsTestUser(t)
+	repository := subscriptions.NewRepository(persistence.NewStore(testDB, 3), shared.DefaultConfig())
+	_, err = repository.Install(context.Background(), subscriberUID, firstFixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
+	require.NoError(t, err)
+	_, err = repository.Install(context.Background(), subscriberUID, secondFixture.checklist, shared.Precondition{Mode: shared.PreconditionCreate})
+	require.NoError(t, err)
+	_, err = firstFixture.repository.Retire(context.Background(), firstFixture.ownerUID, firstFixture.checklist, checklistPrecondition(firstFixture.checklist, firstRelease.Aggregate.SyncVersion))
+	require.NoError(t, err)
+
+	firstPage, err := repository.ListUpdates(context.Background(), subscriberUID, nil, 1)
+	require.NoError(t, err)
+	require.Len(t, firstPage.Items, 1)
+	require.True(t, firstPage.HasMore)
+	require.NotNil(t, firstPage.NextCursor)
+	firstCursor, err := shared.DecodeSubscriptionUpdateCursor(*firstPage.NextCursor)
+	require.NoError(t, err)
+	require.Equal(t, firstPage.Items[0].ChecklistID, firstCursor.Checklist)
+	if firstPage.Items[0].SourceStatus == "retired" {
+		require.Nil(t, firstPage.Items[0].CurrentReleaseRevisionID)
+		require.False(t, firstPage.Items[0].UpdateAvailable)
+	}
+
+	secondPage, err := repository.ListUpdates(context.Background(), subscriberUID, &firstCursor.Checklist, 1)
+	require.NoError(t, err)
+	require.Len(t, secondPage.Items, 1)
+	require.Greater(t, secondPage.Items[0].ChecklistID.String(), firstPage.Items[0].ChecklistID.String())
+	for _, item := range append(firstPage.Items, secondPage.Items...) {
+		if item.ChecklistID == firstFixture.checklist {
+			require.Equal(t, "retired", item.SourceStatus)
+			require.Nil(t, item.CurrentReleaseRevisionID)
+			require.False(t, item.UpdateAvailable)
+		}
+	}
 }
 
 var _ = community.Repository(nil)
