@@ -1,0 +1,298 @@
+package owned
+
+import (
+	"context"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"miltechserver/api/user_pmcs/shared"
+	"miltechserver/bootstrap"
+)
+
+type repositoryStub struct {
+	getResult         *shared.ChecklistAggregate
+	getError          error
+	mutationResult    *MutationResult
+	mutationError     error
+	getCalls          int
+	createCalls       int
+	putDraftCalls     int
+	deleteDraftCalls  int
+	receivedOwnerUID  string
+	receivedChecklist uuid.UUID
+	receivedRevision  uuid.UUID
+	receivedDraft     shared.PreparedRevision
+	receivedCondition shared.Precondition
+}
+
+func (stub *repositoryStub) Get(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+) (*shared.ChecklistAggregate, error) {
+	stub.getCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	return stub.getResult, stub.getError
+}
+
+func (stub *repositoryStub) Create(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	draft shared.PreparedRevision,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	stub.createCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedDraft = draft
+	stub.receivedCondition = precondition
+	return stub.mutationResult, stub.mutationError
+}
+
+func (stub *repositoryStub) PutDraft(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	draft shared.PreparedRevision,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	stub.putDraftCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedDraft = draft
+	stub.receivedCondition = precondition
+	return stub.mutationResult, stub.mutationError
+}
+
+func (stub *repositoryStub) DeleteDraft(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	revisionID uuid.UUID,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	stub.deleteDraftCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedRevision = revisionID
+	stub.receivedCondition = precondition
+	return stub.mutationResult, stub.mutationError
+}
+
+func TestGetOwnedRejectsMissingAuthenticationBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.Get(context.Background(), nil, uuid.NewString())
+
+	requireAPIError(t, err, 401, "authentication_required")
+	require.Zero(t, repository.getCalls)
+}
+
+func TestGetOwnedRejectsInvalidChecklistUUIDBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.Get(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		"not-a-uuid",
+	)
+
+	requireAPIError(t, err, 400, "invalid_request")
+	require.Zero(t, repository.getCalls)
+}
+
+func TestCreateRequiresIfNoneMatchStarBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	user := &bootstrap.User{UserID: "owner-1"}
+
+	_, _, err := service.Create(
+		context.Background(),
+		user,
+		uuid.NewString(),
+		validDraftInput(uuid.New()),
+		"",
+	)
+
+	requireAPIError(t, err, 428, "precondition_required")
+	require.Zero(t, repository.createCalls)
+}
+
+func TestCreateRejectsMalformedIfNoneMatchBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.Create(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		validDraftInput(uuid.New()),
+		`"anything"`,
+	)
+
+	requireAPIError(t, err, 400, "invalid_precondition")
+	require.Zero(t, repository.createCalls)
+}
+
+func TestCreateRejectsDraftRevisionNumberBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	input := validDraftInput(uuid.New())
+	number := int32(1)
+	input.RevisionNumber = &number
+
+	_, _, err := service.Create(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		input,
+		"*",
+	)
+
+	requireAPIError(t, err, 422, "validation_failed")
+	require.Zero(t, repository.createCalls)
+}
+
+func TestCreatePreparesDraftBeforeRepository(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	aggregate := shared.ChecklistAggregate{ID: checklistID, SyncVersion: 1}
+	repository := &repositoryStub{
+		mutationResult: &MutationResult{Aggregate: aggregate, Created: true},
+	}
+	service := NewService(repository, shared.DefaultConfig())
+
+	result, etag, err := service.Create(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		checklistID.String(),
+		validDraftInput(revisionID),
+		"*",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, aggregate, result.Aggregate)
+	require.Equal(t, shared.MakeChecklistETag(checklistID, 1), etag)
+	require.Equal(t, "owner-1", repository.receivedOwnerUID)
+	require.Equal(t, checklistID, repository.receivedChecklist)
+	require.Equal(t, revisionID, repository.receivedDraft.Input.ID)
+	require.Equal(t, "m998 hmmwv", repository.receivedDraft.Input.Models[0].NormalizedText)
+	require.Equal(t, shared.PreconditionCreate, repository.receivedCondition.Mode)
+}
+
+func TestPutDraftRequiresParentChecklistETagBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	revisionID := uuid.New()
+
+	_, _, err := service.PutDraft(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		revisionID.String(),
+		validDraftInput(revisionID),
+		"",
+	)
+
+	requireAPIError(t, err, 428, "precondition_required")
+	require.Zero(t, repository.putDraftCalls)
+}
+
+func TestPutDraftRejectsMalformedParentChecklistETag(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	revisionID := uuid.New()
+
+	_, _, err := service.PutDraft(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		revisionID.String(),
+		validDraftInput(revisionID),
+		"*",
+	)
+
+	requireAPIError(t, err, 400, "invalid_precondition")
+	require.Zero(t, repository.putDraftCalls)
+}
+
+func TestPutDraftRejectsBodyAndRouteRevisionMismatch(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.PutDraft(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		uuid.NewString(),
+		validDraftInput(uuid.New()),
+		`"current"`,
+	)
+
+	requireAPIError(t, err, 400, "invalid_request")
+	require.Zero(t, repository.putDraftCalls)
+}
+
+func TestPutDraftRejectsInvalidRevisionUUIDBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.PutDraft(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		"not-a-uuid",
+		validDraftInput(uuid.New()),
+		`"current"`,
+	)
+
+	requireAPIError(t, err, 400, "invalid_request")
+	require.Zero(t, repository.putDraftCalls)
+}
+
+func TestDeleteDraftRequiresParentChecklistETagBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+
+	_, _, err := service.DeleteDraft(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		uuid.NewString(),
+		"",
+	)
+
+	requireAPIError(t, err, 428, "precondition_required")
+	require.Zero(t, repository.deleteDraftCalls)
+}
+
+func validDraftInput(revisionID uuid.UUID) shared.RevisionInput {
+	return shared.RevisionInput{
+		ID:          revisionID,
+		Name:        "Vehicle PMCS",
+		Description: "Draft",
+		Models: []shared.ModelInput{
+			{DisplayText: " M998  HMMWV "},
+		},
+		Sections: []shared.SectionInput{},
+	}
+}
+
+func requireAPIError(
+	t *testing.T,
+	err error,
+	status int,
+	code string,
+) {
+	t.Helper()
+	var apiError *shared.APIError
+	require.ErrorAs(t, err, &apiError)
+	require.Equal(t, status, apiError.Status)
+	require.Equal(t, code, apiError.Code)
+}
