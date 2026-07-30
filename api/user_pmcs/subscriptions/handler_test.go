@@ -70,6 +70,7 @@ func TestSubscriptionPinnedHandlerUsesWeakIfNoneMatchSemantics(t *testing.T) {
 		{name: "repeated", headers: []string{`"other"`, `W/"pinned"`}, wantStatus: http.StatusNotModified},
 		{name: "non-match", headers: []string{`W/"other"`}, wantStatus: http.StatusOK},
 		{name: "mixed wildcard", headers: []string{"*", `"other"`}, wantStatus: http.StatusBadRequest},
+		{name: "malformed", headers: []string{"not-an-entity-tag"}, wantStatus: http.StatusBadRequest},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, path, nil)
@@ -81,6 +82,10 @@ func TestSubscriptionPinnedHandlerUsesWeakIfNoneMatchSemantics(t *testing.T) {
 			require.Equal(t, test.wantStatus, response.Code)
 			if test.wantStatus == http.StatusNotModified {
 				require.Empty(t, response.Body.Bytes())
+			}
+			if test.wantStatus == http.StatusBadRequest {
+				require.Empty(t, response.Header().Get("ETag"))
+				require.Empty(t, response.Header().Get("Cache-Control"))
 			}
 		})
 	}

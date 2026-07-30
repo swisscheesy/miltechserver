@@ -60,13 +60,13 @@ func (handler Handler) getInstalledRelease(context *gin.Context) {
 		writeSubscriptionError(context, err)
 		return
 	}
-	context.Header("ETag", etag)
-	context.Header("Cache-Control", immutableSubscriptionCacheControl)
 	matches, apiError := shared.IfNoneMatchMatches(context.Request.Header.Values("If-None-Match"), etag)
 	if apiError != nil {
 		shared.WriteAPIError(context, apiError)
 		return
 	}
+	context.Header("ETag", etag)
+	context.Header("Cache-Control", immutableSubscriptionCacheControl)
 	if matches {
 		context.Status(http.StatusNotModified)
 		return
