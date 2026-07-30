@@ -119,27 +119,65 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 	}
 
 	partialIndexes := []struct {
-		indexName string
-		state     string
+		indexName         string
+		state             string
+		expectedPredicate string
 	}{
-		{indexName: "user_pmcs_revisions_one_draft_idx", state: "draft"},
-		{indexName: "user_pmcs_revisions_one_published_idx", state: "published"},
+		{
+			indexName:         "user_pmcs_revisions_one_draft_idx",
+			state:             "draft",
+			expectedPredicate: "(state = 'draft'::text)",
+		},
+		{
+			indexName:         "user_pmcs_revisions_one_published_idx",
+			state:             "published",
+			expectedPredicate: "(state = 'published'::text)",
+		},
 	}
 	for _, expected := range partialIndexes {
 		t.Run("partial_unique_index/"+expected.state, func(t *testing.T) {
-			var indexDefinition string
+			var (
+				isUnique       bool
+				indexedColumns string
+				predicate      string
+			)
 			err := testDB.QueryRow(`
-				SELECT indexdef
-				FROM pg_indexes
-				WHERE schemaname = 'public'
-					AND tablename = 'user_pmcs_revisions'
-					AND indexname = $1`,
+				SELECT
+					index_definition.indisunique,
+					string_agg(
+						indexed_column.attname,
+						',' ORDER BY index_key.ordinality
+					),
+					pg_get_expr(
+						index_definition.indpred,
+						index_definition.indrelid
+					)
+				FROM pg_index AS index_definition
+				JOIN pg_class AS index_class
+					ON index_class.oid = index_definition.indexrelid
+				JOIN pg_class AS table_class
+					ON table_class.oid = index_definition.indrelid
+				JOIN pg_namespace AS table_schema
+					ON table_schema.oid = table_class.relnamespace
+				JOIN LATERAL unnest(index_definition.indkey)
+					WITH ORDINALITY AS index_key(attnum, ordinality)
+					ON index_key.ordinality <= index_definition.indnkeyatts
+				JOIN pg_attribute AS indexed_column
+					ON indexed_column.attrelid = table_class.oid
+					AND indexed_column.attnum = index_key.attnum
+				WHERE table_schema.nspname = 'public'
+					AND table_class.relname = 'user_pmcs_revisions'
+					AND index_class.relname = $1
+				GROUP BY
+					index_definition.indisunique,
+					index_definition.indpred,
+					index_definition.indrelid`,
 				expected.indexName,
-			).Scan(&indexDefinition)
+			).Scan(&isUnique, &indexedColumns, &predicate)
 			require.NoError(t, err)
-			require.Contains(t, indexDefinition, "CREATE UNIQUE INDEX")
-			require.Contains(t, indexDefinition, " WHERE ")
-			require.Contains(t, indexDefinition, "'"+expected.state+"'")
+			require.True(t, isUnique)
+			require.Equal(t, "checklist_id", indexedColumns)
+			require.Equal(t, expected.expectedPredicate, predicate)
 		})
 	}
 

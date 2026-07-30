@@ -5,17 +5,22 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/require"
 )
 
 var testDB *sql.DB
 
 func TestMain(m *testing.M) {
-	_ = loadEnv()
+	if err := loadEnv(); err != nil {
+		log.Fatalf("failed to load test environment: %v", err)
+	}
 
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -77,4 +82,41 @@ func loadEnv() error {
 		}
 		current = parent
 	}
+}
+
+func TestMainReportsLoadEnvError(t *testing.T) {
+	const helperEnvironmentVariable = "USER_PMCS_TEST_MAIN_LOAD_ENV_HELPER"
+	if os.Getenv(helperEnvironmentVariable) == "1" {
+		return
+	}
+
+	testDirectory, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	envPath := filepath.Join(testDirectory, ".env")
+	require.NoError(t, os.Mkdir(envPath, 0o700))
+
+	expectedLoadError := godotenv.Load(envPath)
+	require.Error(t, expectedLoadError)
+
+	executable, err := os.Executable()
+	require.NoError(t, err)
+
+	command := exec.Command(executable, "-test.run=^TestMainReportsLoadEnvError$")
+	command.Dir = testDirectory
+	for _, environmentVariable := range os.Environ() {
+		if strings.HasPrefix(environmentVariable, "TEST_DATABASE_URL=") ||
+			strings.HasPrefix(environmentVariable, helperEnvironmentVariable+"=") {
+			continue
+		}
+		command.Env = append(command.Env, environmentVariable)
+	}
+	command.Env = append(command.Env, helperEnvironmentVariable+"=1")
+
+	output, err := command.CombinedOutput()
+	require.Error(t, err)
+	require.Contains(
+		t,
+		string(output),
+		"failed to load test environment: "+expectedLoadError.Error(),
+	)
 }
