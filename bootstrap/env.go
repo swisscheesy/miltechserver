@@ -87,28 +87,9 @@ func NewEnv() *Env {
 	// Connection pool settings (defaults optimized for parallel query workloads)
 	env.DBMaxOpenConns = getEnvAsInt("DB_MAX_OPEN_CONNS", 50)
 	env.DBMaxIdleConns = getEnvAsInt("DB_MAX_IDLE_CONNS", 25)
-	env.UserPmcs = UserPmcsConfig{
-		MaxOwnedChecklists:     getEnvAsInt("USER_PMCS_MAX_OWNED_CHECKLISTS", 250),
-		MaxActiveSubscriptions: getEnvAsInt("USER_PMCS_MAX_ACTIVE_SUBSCRIPTIONS", 500),
-		MaxChecklistModels:     getEnvAsInt("USER_PMCS_MAX_CHECKLIST_MODELS", 100),
-		MaxSections:            getEnvAsInt("USER_PMCS_MAX_SECTIONS", 100),
-		MaxSectionModels:       getEnvAsInt("USER_PMCS_MAX_SECTION_MODELS_PER_SECTION", 100),
-		MaxSectionModelsTotal:  getEnvAsInt("USER_PMCS_MAX_SECTION_MODELS_TOTAL", 1000),
-		MaxItemsPerSection:     getEnvAsInt("USER_PMCS_MAX_ITEMS_PER_SECTION", 500),
-		MaxItemsTotal:          getEnvAsInt("USER_PMCS_MAX_ITEMS_TOTAL", 2000),
-		MaxNoticesPerItem:      getEnvAsInt("USER_PMCS_MAX_NOTICES_PER_ITEM", 100),
-		MaxNoticesTotal:        getEnvAsInt("USER_PMCS_MAX_NOTICES_TOTAL", 4000),
-		MaxStepsPerItem:        getEnvAsInt("USER_PMCS_MAX_STEPS_PER_ITEM", 250),
-		MaxStepsTotal:          getEnvAsInt("USER_PMCS_MAX_STEPS_TOTAL", 10000),
-		MaxMutationBodyBytes:   int64(getEnvAsInt("USER_PMCS_MAX_MUTATION_BODY_BYTES", 8*1024*1024)),
-		MaxDeltaResponseBytes:  getEnvAsInt("USER_PMCS_MAX_DELTA_RESPONSE_BYTES", 20*1024*1024),
-		DeltaDefaultLimit:      getEnvAsInt("USER_PMCS_DELTA_DEFAULT_LIMIT", 10),
-		DeltaMaxLimit:          getEnvAsInt("USER_PMCS_DELTA_MAX_LIMIT", 25),
-		UpdatesDefaultLimit:    getEnvAsInt("USER_PMCS_UPDATES_DEFAULT_LIMIT", 50),
-		UpdatesMaxLimit:        getEnvAsInt("USER_PMCS_UPDATES_MAX_LIMIT", 100),
-		CommunityDefaultLimit:  getEnvAsInt("USER_PMCS_COMMUNITY_DEFAULT_LIMIT", 20),
-		CommunityMaxLimit:      getEnvAsInt("USER_PMCS_COMMUNITY_MAX_LIMIT", 50),
-		TransactionMaxAttempts: getEnvAsInt("USER_PMCS_TRANSACTION_MAX_ATTEMPTS", 3),
+	env.UserPmcs, err = newUserPmcsConfigFromEnvironment()
+	if err != nil {
+		log.Fatal(err)
 	}
 	if err := env.UserPmcs.validate(); err != nil {
 		log.Fatal(err)
@@ -126,6 +107,58 @@ func NewEnv() *Env {
 	log.Printf("MOBILE_APP_VERSION: %s", env.MobileAppVersion)
 	return &env
 
+}
+
+func newUserPmcsConfigFromEnvironment() (UserPmcsConfig, error) {
+	config := UserPmcsConfig{}
+	values := []struct {
+		key          string
+		defaultValue int
+		assign       func(int)
+	}{
+		{"USER_PMCS_MAX_OWNED_CHECKLISTS", 250, func(value int) { config.MaxOwnedChecklists = value }},
+		{"USER_PMCS_MAX_ACTIVE_SUBSCRIPTIONS", 500, func(value int) { config.MaxActiveSubscriptions = value }},
+		{"USER_PMCS_MAX_CHECKLIST_MODELS", 100, func(value int) { config.MaxChecklistModels = value }},
+		{"USER_PMCS_MAX_SECTIONS", 100, func(value int) { config.MaxSections = value }},
+		{"USER_PMCS_MAX_SECTION_MODELS_PER_SECTION", 100, func(value int) { config.MaxSectionModels = value }},
+		{"USER_PMCS_MAX_SECTION_MODELS_TOTAL", 1000, func(value int) { config.MaxSectionModelsTotal = value }},
+		{"USER_PMCS_MAX_ITEMS_PER_SECTION", 500, func(value int) { config.MaxItemsPerSection = value }},
+		{"USER_PMCS_MAX_ITEMS_TOTAL", 2000, func(value int) { config.MaxItemsTotal = value }},
+		{"USER_PMCS_MAX_NOTICES_PER_ITEM", 100, func(value int) { config.MaxNoticesPerItem = value }},
+		{"USER_PMCS_MAX_NOTICES_TOTAL", 4000, func(value int) { config.MaxNoticesTotal = value }},
+		{"USER_PMCS_MAX_STEPS_PER_ITEM", 250, func(value int) { config.MaxStepsPerItem = value }},
+		{"USER_PMCS_MAX_STEPS_TOTAL", 10000, func(value int) { config.MaxStepsTotal = value }},
+		{"USER_PMCS_MAX_MUTATION_BODY_BYTES", 8 * 1024 * 1024, func(value int) { config.MaxMutationBodyBytes = int64(value) }},
+		{"USER_PMCS_MAX_DELTA_RESPONSE_BYTES", 20 * 1024 * 1024, func(value int) { config.MaxDeltaResponseBytes = value }},
+		{"USER_PMCS_DELTA_DEFAULT_LIMIT", 10, func(value int) { config.DeltaDefaultLimit = value }},
+		{"USER_PMCS_DELTA_MAX_LIMIT", 25, func(value int) { config.DeltaMaxLimit = value }},
+		{"USER_PMCS_UPDATES_DEFAULT_LIMIT", 50, func(value int) { config.UpdatesDefaultLimit = value }},
+		{"USER_PMCS_UPDATES_MAX_LIMIT", 100, func(value int) { config.UpdatesMaxLimit = value }},
+		{"USER_PMCS_COMMUNITY_DEFAULT_LIMIT", 20, func(value int) { config.CommunityDefaultLimit = value }},
+		{"USER_PMCS_COMMUNITY_MAX_LIMIT", 50, func(value int) { config.CommunityMaxLimit = value }},
+		{"USER_PMCS_TRANSACTION_MAX_ATTEMPTS", 3, func(value int) { config.TransactionMaxAttempts = value }},
+	}
+
+	for _, value := range values {
+		parsed, err := getUserPmcsEnvAsInt(value.key, value.defaultValue)
+		if err != nil {
+			return UserPmcsConfig{}, err
+		}
+		value.assign(parsed)
+	}
+	return config, nil
+}
+
+func getUserPmcsEnvAsInt(key string, defaultValue int) (int, error) {
+	value, found := os.LookupEnv(key)
+	if !found {
+		return defaultValue, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: %w", key, err)
+	}
+	return parsed, nil
 }
 
 func (config UserPmcsConfig) validate() error {

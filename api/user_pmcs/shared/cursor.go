@@ -26,8 +26,8 @@ type SubscriptionUpdateCursor struct {
 }
 
 func EncodeCommunityCursor(cursor CommunityCursor) (string, error) {
-	if cursor.Version != cursorVersion {
-		return "", fmt.Errorf("unsupported community cursor version %d", cursor.Version)
+	if err := validateCommunityCursor(cursor); err != nil {
+		return "", err
 	}
 	return encodeCursor(cursor)
 }
@@ -37,15 +37,15 @@ func DecodeCommunityCursor(value string) (CommunityCursor, error) {
 	if err := decodeCursor(value, &cursor); err != nil {
 		return CommunityCursor{}, err
 	}
-	if cursor.Version != cursorVersion {
-		return CommunityCursor{}, fmt.Errorf("unsupported community cursor version %d", cursor.Version)
+	if err := validateCommunityCursor(cursor); err != nil {
+		return CommunityCursor{}, err
 	}
 	return cursor, nil
 }
 
 func EncodeSubscriptionUpdateCursor(cursor SubscriptionUpdateCursor) (string, error) {
-	if cursor.Version != cursorVersion {
-		return "", fmt.Errorf("unsupported subscription update cursor version %d", cursor.Version)
+	if err := validateSubscriptionUpdateCursor(cursor); err != nil {
+		return "", err
 	}
 	return encodeCursor(cursor)
 }
@@ -55,10 +55,30 @@ func DecodeSubscriptionUpdateCursor(value string) (SubscriptionUpdateCursor, err
 	if err := decodeCursor(value, &cursor); err != nil {
 		return SubscriptionUpdateCursor{}, err
 	}
-	if cursor.Version != cursorVersion {
-		return SubscriptionUpdateCursor{}, fmt.Errorf("unsupported subscription update cursor version %d", cursor.Version)
+	if err := validateSubscriptionUpdateCursor(cursor); err != nil {
+		return SubscriptionUpdateCursor{}, err
 	}
 	return cursor, nil
+}
+
+func validateCommunityCursor(cursor CommunityCursor) error {
+	if cursor.Version != cursorVersion {
+		return fmt.Errorf("unsupported community cursor version %d", cursor.Version)
+	}
+	if cursor.UpdatedAt.IsZero() || cursor.Checklist == uuid.Nil {
+		return fmt.Errorf("community cursor requires updated_at and checklist_id anchors")
+	}
+	return nil
+}
+
+func validateSubscriptionUpdateCursor(cursor SubscriptionUpdateCursor) error {
+	if cursor.Version != cursorVersion {
+		return fmt.Errorf("unsupported subscription update cursor version %d", cursor.Version)
+	}
+	if cursor.Checklist == uuid.Nil {
+		return fmt.Errorf("subscription update cursor requires checklist_id anchor")
+	}
+	return nil
 }
 
 func encodeCursor(cursor any) (string, error) {

@@ -28,6 +28,8 @@ func TestCommunityCursorRoundTrip(t *testing.T) {
 func TestDecodeCommunityCursorRejectsMalformedValues(t *testing.T) {
 	unknownVersion := base64.RawURLEncoding.EncodeToString([]byte(`{"v":2,"updated_at":"2026-07-29T12:30:00Z","checklist_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}`))
 	trailingJSON := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"updated_at":"2026-07-29T12:30:00Z","checklist_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"} {}`))
+	missingAnchors := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1}`))
+	zeroAnchors := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"updated_at":"0001-01-01T00:00:00Z","checklist_id":"00000000-0000-0000-0000-000000000000"}`))
 
 	tests := []struct {
 		name   string
@@ -36,6 +38,8 @@ func TestDecodeCommunityCursorRejectsMalformedValues(t *testing.T) {
 		{name: "malformed base64", cursor: "%%%"},
 		{name: "unknown version", cursor: unknownVersion},
 		{name: "trailing JSON", cursor: trailingJSON},
+		{name: "missing anchors", cursor: missingAnchors},
+		{name: "zero anchors", cursor: zeroAnchors},
 	}
 
 	for _, test := range tests {
@@ -57,4 +61,21 @@ func TestSubscriptionUpdateCursorRoundTrip(t *testing.T) {
 	got, err := shared.DecodeSubscriptionUpdateCursor(encoded)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
+}
+
+func TestDecodeSubscriptionUpdateCursorRejectsMissingOrZeroChecklist(t *testing.T) {
+	tests := []struct {
+		name   string
+		cursor string
+	}{
+		{name: "missing checklist", cursor: base64.RawURLEncoding.EncodeToString([]byte(`{"v":1}`))},
+		{name: "zero checklist", cursor: base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"checklist_id":"00000000-0000-0000-0000-000000000000"}`))},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := shared.DecodeSubscriptionUpdateCursor(test.cursor)
+			require.Error(t, err)
+		})
+	}
 }

@@ -75,6 +75,31 @@ func TestParseCreatePrecondition(t *testing.T) {
 	}
 }
 
+func TestPreconditionErrorsAreTyped(t *testing.T) {
+	tests := []struct {
+		name       string
+		parse      func(string) (shared.Precondition, error)
+		header     string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "missing existing precondition requires a header", parse: shared.ParseExistingPrecondition, wantStatus: http.StatusPreconditionRequired, wantCode: "precondition_required"},
+		{name: "malformed existing precondition is invalid", parse: shared.ParseExistingPrecondition, header: "not-quoted", wantStatus: http.StatusBadRequest, wantCode: "invalid_precondition"},
+		{name: "missing create precondition requires a header", parse: shared.ParseCreatePrecondition, wantStatus: http.StatusPreconditionRequired, wantCode: "precondition_required"},
+		{name: "malformed create precondition is invalid", parse: shared.ParseCreatePrecondition, header: "\"current\"", wantStatus: http.StatusBadRequest, wantCode: "invalid_precondition"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := test.parse(test.header)
+			var apiError *shared.APIError
+			require.ErrorAs(t, err, &apiError)
+			require.Equal(t, test.wantStatus, apiError.Status)
+			require.Equal(t, test.wantCode, apiError.Code)
+		})
+	}
+}
+
 func TestDecodeStrictJSON(t *testing.T) {
 	type request struct {
 		Name string `json:"name"`

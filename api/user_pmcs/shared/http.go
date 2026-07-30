@@ -43,15 +43,22 @@ func MakeSubscriptionETag(checklistID uuid.UUID, version int64) string {
 
 func ParseExistingPrecondition(header string) (Precondition, error) {
 	etag := strings.TrimSpace(header)
+	if etag == "" {
+		return Precondition{}, NewPreconditionRequired("If-Match header is required", nil)
+	}
 	if !isStrongETag(etag) {
-		return Precondition{}, fmt.Errorf("If-Match must contain exactly one strong ETag")
+		return Precondition{}, NewInvalidPrecondition("If-Match must contain exactly one strong ETag", nil)
 	}
 	return Precondition{Mode: PreconditionMatch, ETag: etag}, nil
 }
 
 func ParseCreatePrecondition(header string) (Precondition, error) {
-	if strings.TrimSpace(header) != "*" {
-		return Precondition{}, fmt.Errorf("If-None-Match must be *")
+	value := strings.TrimSpace(header)
+	if value == "" {
+		return Precondition{}, NewPreconditionRequired("If-None-Match header is required", nil)
+	}
+	if value != "*" {
+		return Precondition{}, NewInvalidPrecondition("If-None-Match must be *", nil)
 	}
 	return Precondition{Mode: PreconditionCreate}, nil
 }
