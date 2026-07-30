@@ -29,14 +29,35 @@ func (repository *RepositoryImpl) Get(
 	ownerUID string,
 	checklistID uuid.UUID,
 ) (*shared.ChecklistAggregate, error) {
+	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("begin owned checklist snapshot: %w", err)
+	}
 	if err := requireInitializedAccount(
 		ctx,
-		repository.store.DB,
+		tx,
 		ownerUID,
 	); err != nil {
-		return nil, err
+		return nil, rollbackReadTransaction(tx, err)
 	}
-	return loadOwnedAggregate(ctx, repository.store.DB, ownerUID, checklistID)
+	aggregate, err := loadOwnedAggregate(ctx, tx, ownerUID, checklistID)
+	if err != nil {
+		return nil, rollbackReadTransaction(tx, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit owned checklist snapshot: %w", err)
+	}
+	return aggregate, nil
+}
+
+func rollbackReadTransaction(tx *sql.Tx, cause error) error {
+	if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
+		return errors.Join(cause, fmt.Errorf("rollback owned checklist snapshot: %w", err))
+	}
+	return cause
 }
 
 func (repository *RepositoryImpl) Create(
@@ -65,6 +86,13 @@ func (repository *RepositoryImpl) Create(
 			}
 			if precondition.Mode != shared.PreconditionCreate {
 				return nil, staleChecklistError()
+			}
+			if err := lockPreparedTreeUUIDs(
+				ctx,
+				tx,
+				draft.Input,
+			); err != nil {
+				return nil, err
 			}
 			if found {
 				return repository.resolveCreateRetry(
@@ -210,6 +238,13 @@ func (repository *RepositoryImpl) PutDraft(
 				checklist.syncVersion,
 			)) {
 				return nil, staleChecklistError()
+			}
+			if err := lockPreparedTreeUUIDs(
+				ctx,
+				tx,
+				draft.Input,
+			); err != nil {
+				return nil, err
 			}
 
 			currentDraftID, hasDraft, err := currentDraftID(

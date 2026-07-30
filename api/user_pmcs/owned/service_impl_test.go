@@ -2,6 +2,7 @@ package owned
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/google/uuid"
@@ -270,6 +271,33 @@ func TestDeleteDraftRequiresParentChecklistETagBeforeRepository(t *testing.T) {
 
 	requireAPIError(t, err, 428, "precondition_required")
 	require.Zero(t, repository.deleteDraftCalls)
+}
+
+func TestPreparedTreeAdvisoryKeysAreStableSortedAndDeduplicated(t *testing.T) {
+	revisionID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	firstNodeID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	secondNodeID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	input := shared.RevisionInput{
+		ID: revisionID,
+		Sections: []shared.SectionInput{
+			{
+				ID: secondNodeID,
+				Items: []shared.ItemInput{
+					{ID: firstNodeID},
+					{ID: secondNodeID},
+				},
+			},
+		},
+	}
+
+	keys := preparedTreeAdvisoryKeys(input)
+	reordered := input
+	reordered.Sections[0].Items[0], reordered.Sections[0].Items[1] =
+		reordered.Sections[0].Items[1], reordered.Sections[0].Items[0]
+
+	require.Len(t, keys, 3)
+	require.True(t, slices.IsSorted(keys))
+	require.Equal(t, keys, preparedTreeAdvisoryKeys(reordered))
 }
 
 func validDraftInput(revisionID uuid.UUID) shared.RevisionInput {

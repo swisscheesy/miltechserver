@@ -3,9 +3,12 @@ package owned
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -211,6 +214,87 @@ func ensurePreparedTreeIDsAvailable(
 		return shared.NewValidationFailed(
 			"revision tree UUID belongs to another resource",
 			nil,
+		)
+	}
+	return nil
+}
+
+func preparedTreeAdvisoryKeys(revision shared.RevisionInput) []int64 {
+	ids := []uuid.UUID{revision.ID}
+	for _, section := range revision.Sections {
+		ids = append(ids, section.ID)
+		for _, item := range section.Items {
+			ids = append(ids, item.ID)
+			for _, notice := range item.Notices {
+				ids = append(ids, notice.ID)
+			}
+			for _, step := range item.ProcedureSteps {
+				ids = append(ids, step.ID)
+			}
+		}
+	}
+	sort.Slice(ids, func(left, right int) bool {
+		return bytes.Compare(ids[left][:], ids[right][:]) < 0
+	})
+
+	keys := make([]int64, 0, len(ids))
+	var previousID uuid.UUID
+	for index, id := range ids {
+		if index > 0 && id == previousID {
+			continue
+		}
+		// A hash collision only causes conservative serialization; it cannot
+		// allow the same submitted UUID to be checked concurrently.
+		digest := sha256.Sum256(id[:])
+		keys = append(keys, int64(binary.BigEndian.Uint64(digest[:8])))
+		previousID = id
+	}
+	// Every writer acquires shared keys in the same order to avoid advisory
+	// lock deadlocks when submitted trees overlap by more than one UUID.
+	sort.Slice(keys, func(left, right int) bool {
+		return keys[left] < keys[right]
+	})
+
+	deduplicatedKeys := keys[:0]
+	for index, key := range keys {
+		if index == 0 || key != keys[index-1] {
+			deduplicatedKeys = append(deduplicatedKeys, key)
+		}
+	}
+	return deduplicatedKeys
+}
+
+func lockPreparedTreeUUIDs(
+	ctx context.Context,
+	tx *sql.Tx,
+	revision shared.RevisionInput,
+) error {
+	keys := preparedTreeAdvisoryKeys(revision)
+	if len(keys) == 0 {
+		return nil
+	}
+
+	var acquired int
+	if err := tx.QueryRowContext(
+		ctx,
+		`WITH RECURSIVE acquired(position, lock_result) AS (
+		     SELECT 1, pg_advisory_xact_lock(($1::bigint[])[1])
+		     UNION ALL
+		     SELECT position + 1,
+		            pg_advisory_xact_lock(($1::bigint[])[position + 1])
+		     FROM acquired
+		     WHERE position < cardinality($1::bigint[])
+		 )
+		 SELECT count(*) FROM acquired`,
+		pq.Array(keys),
+	).Scan(&acquired); err != nil {
+		return fmt.Errorf("lock submitted revision tree UUIDs: %w", err)
+	}
+	if acquired != len(keys) {
+		return fmt.Errorf(
+			"lock submitted revision tree UUIDs: acquired %d of %d locks",
+			acquired,
+			len(keys),
 		)
 	}
 	return nil
