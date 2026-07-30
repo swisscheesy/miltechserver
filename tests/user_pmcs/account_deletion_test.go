@@ -22,6 +22,8 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 	ctx := context.Background()
 	ownerUID := accountDeletionUser(t, "owner")
 	subscriberUID := accountDeletionUser(t, "subscriber")
+	secondSubscriberUID := accountDeletionUser(t, "subscriber-two")
+	tombstonedSubscriberUID := accountDeletionUser(t, "subscriber-deleted")
 	privateID := uuid.New()
 	privateRevisionID := uuid.New()
 	tombstoneID := uuid.New()
@@ -38,6 +40,18 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 		cleanupAccountDeletionFixtures(
 			t, ownerUID, subscriberUID, allChecklistIDs,
 		)
+	})
+	t.Cleanup(func() {
+		for _, uid := range []string{
+			secondSubscriberUID,
+			tombstonedSubscriberUID,
+		} {
+			_, _ = testDB.ExecContext(
+				context.Background(),
+				`DELETE FROM users WHERE uid = $1`,
+				uid,
+			)
+		}
 	})
 
 	insertAccountDeletionChecklist(
@@ -59,8 +73,13 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 		t, unpinnedID, unpinnedRevisionID, 1,
 	)
 	insertAccountDeletionChecklist(t, ownerUID, pinnedID, nil)
-	insertAccountDeletionRevision(
-		t, pinnedID, pinnedRevisionID, "superseded", &revisionOne,
+	pinnedTree := preparedTree(t, pinnedRevisionID)
+	insertAccountDeletionPreparedRevision(
+		t,
+		pinnedID,
+		pinnedTree,
+		"superseded",
+		revisionOne,
 	)
 	revisionTwo := int32(2)
 	insertAccountDeletionRevision(
@@ -72,6 +91,27 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 		     (revision_id, checklist_id, released_at)
 		 VALUES ($1, $2, now())`,
 		pinnedRevisionID,
+		pinnedID,
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_subscriptions
+		     (subscriber_uid, checklist_id, installed_revision_id,
+		      sync_version, account_change_version)
+		 VALUES ($1, $2, $3, 1, 1)`,
+		secondSubscriberUID,
+		pinnedID,
+		pinnedRevisionID,
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_subscriptions
+		     (subscriber_uid, checklist_id, installed_revision_id,
+		      sync_version, account_change_version, deleted_at)
+		 VALUES ($1, $2, NULL, 1, 1, now())`,
+		tombstonedSubscriberUID,
 		pinnedID,
 	)
 	require.NoError(t, err)
@@ -116,6 +156,12 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "active", before.SourceStatus)
 	require.Equal(t, "user-pmcs-test", before.CreatorDisplayName)
+	require.NotEmpty(t, before.Revision.Models)
+	require.Len(t, before.Revision.Sections, 1)
+	require.Len(t, before.Revision.Sections[0].Items, 1)
+	require.Len(t, before.Revision.Sections[0].Items[0].Notices, 1)
+	require.Len(t, before.Revision.Sections[0].Items[0].ProcedureSteps, 1)
+	beforeRevision := before.Revision
 
 	repository := user_general.NewRepository(
 		testDB,
@@ -213,7 +259,7 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 	require.Equal(t, "Deleted user", after.CreatorDisplayName)
 	require.NotEmpty(t, afterETag)
 	require.NotEqual(t, beforeETag, afterETag)
-	require.Equal(t, pinnedRevisionID, after.Revision.ID)
+	require.Equal(t, beforeRevision, after.Revision)
 
 	publicRepository := community.NewRepository(
 		persistence.NewStore(testDB, 3),
@@ -231,7 +277,442 @@ func TestAccountDeletionRetainsOnlyPinnedPublicContent(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestAccountDeletionWaitsForConcurrentUnsubscribeBeforePinPruning(
+	t *testing.T,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ownerUID := accountDeletionUser(t, "race-owner")
+	subscriberUID := accountDeletionUser(t, "race-subscriber")
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	t.Cleanup(func() {
+		cleanupAccountDeletionFixtures(
+			t,
+			ownerUID,
+			subscriberUID,
+			[]uuid.UUID{checklistID},
+		)
+	})
+	insertAccountDeletionChecklist(t, ownerUID, checklistID, nil)
+	revisionOne := int32(1)
+	insertAccountDeletionRevision(
+		t,
+		checklistID,
+		revisionID,
+		"published",
+		&revisionOne,
+	)
+	insertAccountDeletionSource(t, checklistID, revisionID, 1)
+	_, err := testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_subscriptions
+		     (subscriber_uid, checklist_id, installed_revision_id,
+		      sync_version, account_change_version)
+		 VALUES ($1, $2, $3, 1, 1)`,
+		subscriberUID,
+		checklistID,
+		revisionID,
+	)
+	require.NoError(t, err)
+
+	unsubscribeTransaction, err := testDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	unsubscribeCommitted := false
+	t.Cleanup(func() {
+		if !unsubscribeCommitted {
+			_ = unsubscribeTransaction.Rollback()
+		}
+	})
+	_, err = unsubscribeTransaction.ExecContext(
+		ctx,
+		`UPDATE user_pmcs_subscriptions
+		    SET installed_revision_id = NULL,
+		        sync_version = sync_version + 1,
+		        account_change_version = account_change_version + 1,
+		        updated_at = now(),
+		        deleted_at = now()
+		  WHERE subscriber_uid = $1
+		    AND checklist_id = $2`,
+		subscriberUID,
+		checklistID,
+	)
+	require.NoError(t, err)
+
+	accountRepository := user_general.NewRepository(
+		testDB,
+		persistence.NewAccountCleaner(),
+	)
+	deletionResult := make(chan accountDeletionOperationResult, 1)
+	go func() {
+		deletionResult <- accountDeletionOperationResult{
+			err: accountRepository.DeleteUser(ctx, ownerUID),
+		}
+	}()
+
+	waitedForUnsubscribe := waitForDatabaseActivity(
+		5*time.Second,
+		`lower(wait_event_type) = 'lock'
+		 AND query LIKE '%user_pmcs_subscriptions%'`,
+	)
+	require.NoError(t, unsubscribeTransaction.Commit())
+	unsubscribeCommitted = true
+	require.NoError(t, receiveAccountDeletionOperation(t, deletionResult))
+	require.True(
+		t,
+		waitedForUnsubscribe,
+		"account deletion did not wait for the unsubscribe row lock",
+	)
+
+	for _, table := range []string{
+		"user_pmcs_community_sources",
+		"user_pmcs_community_releases",
+		"user_pmcs_revisions",
+		"user_pmcs_checklists",
+	} {
+		require.Equal(t, 0, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM `+table+` WHERE `+
+				accountDeletionChecklistColumn(table)+` = $1`,
+			checklistID,
+		))
+	}
+	require.Equal(t, 1, accountDeletionCount(
+		t,
+		`SELECT count(*) FROM user_pmcs_subscriptions
+		  WHERE subscriber_uid = $1
+		    AND checklist_id = $2
+		    AND installed_revision_id IS NULL
+		    AND deleted_at IS NOT NULL`,
+		subscriberUID,
+		checklistID,
+	))
+}
+
+func TestAccountDeletionFirstThenFinalUnsubscribeRemovesRetainedContent(
+	t *testing.T,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ownerUID := accountDeletionUser(t, "deletion-first-owner")
+	subscriberUID := accountDeletionUser(t, "deletion-first-subscriber")
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	t.Cleanup(func() {
+		cleanupAccountDeletionFixtures(
+			t,
+			ownerUID,
+			subscriberUID,
+			[]uuid.UUID{checklistID},
+		)
+	})
+	insertAccountDeletionChecklist(t, ownerUID, checklistID, nil)
+	revisionOne := int32(1)
+	insertAccountDeletionRevision(
+		t,
+		checklistID,
+		revisionID,
+		"published",
+		&revisionOne,
+	)
+	insertAccountDeletionSource(t, checklistID, revisionID, 1)
+	_, err := testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_subscriptions
+		     (subscriber_uid, checklist_id, installed_revision_id,
+		      sync_version, account_change_version)
+		 VALUES ($1, $2, $3, 1, 1)`,
+		subscriberUID,
+		checklistID,
+		revisionID,
+	)
+	require.NoError(t, err)
+
+	gate, err := testDB.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	gateCommitted := false
+	t.Cleanup(func() {
+		if !gateCommitted {
+			_ = gate.Rollback()
+		}
+	})
+	var lockedVersion int64
+	require.NoError(t, gate.QueryRowContext(
+		ctx,
+		`SELECT current_version
+		   FROM user_pmcs_sync_state
+		  WHERE user_uid = $1
+		  FOR UPDATE`,
+		subscriberUID,
+	).Scan(&lockedVersion))
+
+	subscriptionRepository := subscriptions.NewRepository(
+		persistence.NewStore(testDB, 1),
+		shared.DefaultConfig(),
+	)
+	unsubscribeResult := make(chan accountDeletionOperationResult, 1)
+	go func() {
+		_, unsubscribeErr := subscriptionRepository.Unsubscribe(
+			ctx,
+			subscriberUID,
+			checklistID,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(checklistID, 1),
+			},
+		)
+		unsubscribeResult <- accountDeletionOperationResult{
+			err: unsubscribeErr,
+		}
+	}()
+	require.True(t, waitForDatabaseActivity(
+		5*time.Second,
+		`lower(wait_event_type) = 'lock'
+		 AND query LIKE '%user_pmcs_sync_state%'`,
+	))
+
+	accountRepository := user_general.NewRepository(
+		testDB,
+		persistence.NewAccountCleaner(),
+	)
+	require.NoError(t, accountRepository.DeleteUser(ctx, ownerUID))
+	require.NoError(t, gate.Commit())
+	gateCommitted = true
+	require.NoError(t, receiveAccountDeletionOperation(
+		t,
+		unsubscribeResult,
+	))
+
+	for _, table := range []string{
+		"user_pmcs_community_sources",
+		"user_pmcs_community_releases",
+		"user_pmcs_revisions",
+		"user_pmcs_checklists",
+	} {
+		require.Equal(t, 0, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM `+table+` WHERE `+
+				accountDeletionChecklistColumn(table)+` = $1`,
+			checklistID,
+		))
+	}
+	require.Equal(t, 1, accountDeletionCount(
+		t,
+		`SELECT count(*) FROM user_pmcs_subscriptions
+		  WHERE subscriber_uid = $1
+		    AND checklist_id = $2
+		    AND installed_revision_id IS NULL
+		    AND deleted_at IS NOT NULL`,
+		subscriberUID,
+		checklistID,
+	))
+}
+
+func TestUnsubscribeFinalPinCleanupPreservesIneligibleContent(t *testing.T) {
+	t.Run("active owned source", func(t *testing.T) {
+		ownerUID := accountDeletionUser(t, "active-owner")
+		subscriberUID := accountDeletionUser(t, "active-subscriber")
+		checklistID := uuid.New()
+		revisionID := uuid.New()
+		t.Cleanup(func() {
+			cleanupAccountDeletionFixtures(
+				t,
+				ownerUID,
+				subscriberUID,
+				[]uuid.UUID{checklistID},
+			)
+		})
+		insertAccountDeletionChecklist(t, ownerUID, checklistID, nil)
+		revisionOne := int32(1)
+		insertAccountDeletionRevision(
+			t,
+			checklistID,
+			revisionID,
+			"published",
+			&revisionOne,
+		)
+		insertAccountDeletionSource(t, checklistID, revisionID, 1)
+		_, err := testDB.ExecContext(
+			context.Background(),
+			`INSERT INTO user_pmcs_subscriptions
+			     (subscriber_uid, checklist_id, installed_revision_id,
+			      sync_version, account_change_version)
+			 VALUES ($1, $2, $3, 1, 1)`,
+			subscriberUID,
+			checklistID,
+			revisionID,
+		)
+		require.NoError(t, err)
+
+		repository := subscriptions.NewRepository(
+			persistence.NewStore(testDB, 1),
+			shared.DefaultConfig(),
+		)
+		_, err = repository.Unsubscribe(
+			context.Background(),
+			subscriberUID,
+			checklistID,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(checklistID, 1),
+			},
+		)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_checklists
+			  WHERE id = $1 AND owner_uid = $2 AND deleted_at IS NULL`,
+			checklistID,
+			ownerUID,
+		))
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_community_sources
+			  WHERE checklist_id = $1
+			    AND status = 'active'
+			    AND current_release_revision_id = $2`,
+			checklistID,
+			revisionID,
+		))
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_community_releases
+			  WHERE checklist_id = $1 AND revision_id = $2`,
+			checklistID,
+			revisionID,
+		))
+	})
+
+	t.Run("another active pin", func(t *testing.T) {
+		ownerUID := accountDeletionUser(t, "pinned-owner")
+		firstSubscriberUID := accountDeletionUser(t, "pinned-first")
+		secondSubscriberUID := accountDeletionUser(t, "pinned-second")
+		checklistID := uuid.New()
+		revisionID := uuid.New()
+		t.Cleanup(func() {
+			cleanupAccountDeletionFixtures(
+				t,
+				ownerUID,
+				firstSubscriberUID,
+				[]uuid.UUID{checklistID},
+			)
+			_, _ = testDB.ExecContext(
+				context.Background(),
+				`DELETE FROM users WHERE uid = $1`,
+				secondSubscriberUID,
+			)
+		})
+		insertAccountDeletionChecklist(t, ownerUID, checklistID, nil)
+		revisionOne := int32(1)
+		insertAccountDeletionRevision(
+			t,
+			checklistID,
+			revisionID,
+			"published",
+			&revisionOne,
+		)
+		insertAccountDeletionSource(t, checklistID, revisionID, 1)
+		for _, subscriberUID := range []string{
+			firstSubscriberUID,
+			secondSubscriberUID,
+		} {
+			_, err := testDB.ExecContext(
+				context.Background(),
+				`INSERT INTO user_pmcs_subscriptions
+				     (subscriber_uid, checklist_id, installed_revision_id,
+				      sync_version, account_change_version)
+				 VALUES ($1, $2, $3, 1, 1)`,
+				subscriberUID,
+				checklistID,
+				revisionID,
+			)
+			require.NoError(t, err)
+		}
+		accountRepository := user_general.NewRepository(
+			testDB,
+			persistence.NewAccountCleaner(),
+		)
+		require.NoError(t, accountRepository.DeleteUser(
+			context.Background(),
+			ownerUID,
+		))
+
+		repository := subscriptions.NewRepository(
+			persistence.NewStore(testDB, 1),
+			shared.DefaultConfig(),
+		)
+		_, err := repository.Unsubscribe(
+			context.Background(),
+			firstSubscriberUID,
+			checklistID,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(checklistID, 1),
+			},
+		)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_checklists
+			  WHERE id = $1 AND owner_uid IS NULL
+			    AND deleted_at IS NOT NULL`,
+			checklistID,
+		))
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_community_sources
+			  WHERE checklist_id = $1 AND status = 'retired'
+			    AND current_release_revision_id IS NULL`,
+			checklistID,
+		))
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_community_releases
+			  WHERE checklist_id = $1 AND revision_id = $2`,
+			checklistID,
+			revisionID,
+		))
+		require.Equal(t, 1, accountDeletionCount(
+			t,
+			`SELECT count(*) FROM user_pmcs_subscriptions
+			  WHERE subscriber_uid = $1
+			    AND checklist_id = $2
+			    AND installed_revision_id = $3
+			    AND deleted_at IS NULL`,
+			secondSubscriberUID,
+			checklistID,
+			revisionID,
+		))
+	})
+}
+
+func accountDeletionChecklistColumn(table string) string {
+	if table == "user_pmcs_checklists" {
+		return "id"
+	}
+	return "checklist_id"
+}
+
+func receiveAccountDeletionOperation(
+	t *testing.T,
+	result <-chan accountDeletionOperationResult,
+) error {
+	t.Helper()
+	select {
+	case operation := <-result:
+		return operation.err
+	case <-time.After(10 * time.Second):
+		t.Fatal("concurrent account deletion operation did not complete")
+		return nil
+	}
+}
+
 type accountDeletionFailingCleaner struct{ markerUID string }
+type accountDeletionOperationResult struct{ err error }
 
 func (cleaner accountDeletionFailingCleaner) CleanupAccount(
 	ctx context.Context,
@@ -309,7 +790,7 @@ func TestAccountDeletionRestrictiveFKRejectsRevisionBeforeRelease(t *testing.T) 
 
 func accountDeletionUser(t *testing.T, label string) string {
 	t.Helper()
-	uid := "acct-del-" + label + "-" + uuid.NewString()
+	uid := "ad-" + uuid.NewString()
 	_, err := testDB.ExecContext(
 		context.Background(),
 		`INSERT INTO users (uid, email, username, created_at, is_enabled)
@@ -373,6 +854,45 @@ func insertAccountDeletionRevision(
 		publishedAt,
 	)
 	require.NoError(t, err)
+}
+
+func insertAccountDeletionPreparedRevision(
+	t *testing.T,
+	checklistID uuid.UUID,
+	prepared shared.PreparedRevision,
+	state string,
+	revisionNumber int32,
+) {
+	t.Helper()
+	insertAccountDeletionRevision(
+		t,
+		checklistID,
+		prepared.Input.ID,
+		"draft",
+		nil,
+	)
+	tx, err := testDB.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	defer tx.Rollback()
+	require.NoError(t, persistence.ReplaceDraftTree(
+		context.Background(),
+		tx,
+		checklistID,
+		prepared,
+	))
+	_, err = tx.ExecContext(
+		context.Background(),
+		`UPDATE user_pmcs_revisions
+		    SET state = $1,
+		        revision_number = $2,
+		        published_at = now()
+		  WHERE id = $3`,
+		state,
+		revisionNumber,
+		prepared.Input.ID,
+	)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
 }
 
 func insertAccountDeletionSource(

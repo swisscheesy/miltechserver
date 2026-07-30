@@ -101,10 +101,22 @@ func (repository *RepositoryImpl) Unsubscribe(ctx context.Context, subscriberUID
 		if _, err := persistence.LockAccountVersion(ctx, tx, subscriberUID); err != nil {
 			return nil, err
 		}
-		subscription, found, err := lockSubscription(ctx, tx, subscriberUID, checklistID)
+		source, sourceFound, err := lockActiveSource(ctx, tx, checklistID)
 		if err != nil {
 			return nil, err
 		}
+		subscriptions, err := lockChecklistSubscriptions(
+			ctx,
+			tx,
+			checklistID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		subscription, found := findLockedSubscription(
+			subscriptions,
+			subscriberUID,
+		)
 		if !found {
 			return nil, shared.NewResourceNotFound("subscription not found", nil)
 		}
@@ -114,12 +126,36 @@ func (repository *RepositoryImpl) Unsubscribe(ctx context.Context, subscriberUID
 		if !precondition.Matches(shared.MakeSubscriptionETag(checklistID, subscription.subscription.SyncVersion)) {
 			return nil, staleSubscriptionError()
 		}
+		finalizeRetainedContent := sourceFound &&
+			source.ownerUID == nil &&
+			source.deletedAt != nil &&
+			source.status == "retired" &&
+			source.currentRevisionID == nil &&
+			!hasOtherActivePin(subscriptions, subscriberUID)
+		if finalizeRetainedContent {
+			if err := lockRetainedContentDependencies(
+				ctx,
+				tx,
+				checklistID,
+			); err != nil {
+				return nil, err
+			}
+		}
 		accountVersion, err := persistence.AdvanceAccountVersion(ctx, tx, subscriberUID)
 		if err != nil {
 			return nil, err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE user_pmcs_subscriptions SET installed_revision_id = NULL, deleted_at = now(), sync_version = sync_version + 1, account_change_version = $1, updated_at = now() WHERE subscriber_uid = $2 AND checklist_id = $3`, accountVersion, subscriberUID, checklistID); err != nil {
 			return nil, fmt.Errorf("unsubscribe: %w", err)
+		}
+		if finalizeRetainedContent {
+			if err := deleteFinalRetainedContent(
+				ctx,
+				tx,
+				checklistID,
+			); err != nil {
+				return nil, err
+			}
 		}
 		return loadMutation(ctx, tx, subscriberUID, checklistID, false, false)
 	})
@@ -295,6 +331,185 @@ func lockSubscription(ctx context.Context, tx *sql.Tx, subscriberUID string, che
 		return lockedSubscription{}, false, fmt.Errorf("lock subscription: %w", err)
 	}
 	return value, true, nil
+}
+
+type checklistSubscriptionLock struct {
+	subscriberUID string
+	lockedSubscription
+}
+
+func lockChecklistSubscriptions(
+	ctx context.Context,
+	tx *sql.Tx,
+	checklistID uuid.UUID,
+) ([]checklistSubscriptionLock, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT subscriber_uid, checklist_id, installed_revision_id,
+		        sync_version, account_change_version, created_at, updated_at,
+		        deleted_at
+		   FROM user_pmcs_subscriptions
+		  WHERE checklist_id = $1
+		  ORDER BY checklist_id, subscriber_uid
+		  FOR UPDATE`,
+		checklistID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("lock checklist subscriptions: %w", err)
+	}
+	defer rows.Close()
+
+	subscriptions := make([]checklistSubscriptionLock, 0)
+	for rows.Next() {
+		var value checklistSubscriptionLock
+		if err := rows.Scan(
+			&value.subscriberUID,
+			&value.subscription.ChecklistID,
+			&value.subscription.InstalledRevisionID,
+			&value.subscription.SyncVersion,
+			&value.subscription.AccountChangeVersion,
+			&value.subscription.CreatedAt,
+			&value.subscription.UpdatedAt,
+			&value.subscription.DeletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan checklist subscription lock: %w", err)
+		}
+		subscriptions = append(subscriptions, value)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate checklist subscription locks: %w", err)
+	}
+	return subscriptions, nil
+}
+
+func findLockedSubscription(
+	subscriptions []checklistSubscriptionLock,
+	subscriberUID string,
+) (lockedSubscription, bool) {
+	for _, subscription := range subscriptions {
+		if subscription.subscriberUID == subscriberUID {
+			return subscription.lockedSubscription, true
+		}
+	}
+	return lockedSubscription{}, false
+}
+
+func hasOtherActivePin(
+	subscriptions []checklistSubscriptionLock,
+	unsubscribingUID string,
+) bool {
+	for _, subscription := range subscriptions {
+		if subscription.subscriberUID != unsubscribingUID &&
+			subscription.subscription.DeletedAt == nil &&
+			subscription.subscription.InstalledRevisionID != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func lockRetainedContentDependencies(
+	ctx context.Context,
+	tx *sql.Tx,
+	checklistID uuid.UUID,
+) error {
+	for _, query := range []string{
+		`SELECT id
+		   FROM user_pmcs_revisions
+		  WHERE checklist_id = $1
+		  ORDER BY checklist_id, id
+		  FOR UPDATE`,
+		`SELECT revision_id
+		   FROM user_pmcs_community_releases
+		  WHERE checklist_id = $1
+		  ORDER BY checklist_id, revision_id
+		  FOR UPDATE`,
+	} {
+		rows, err := tx.QueryContext(ctx, query, checklistID)
+		if err != nil {
+			return fmt.Errorf("lock retained content dependencies: %w", err)
+		}
+		for rows.Next() {
+			var ignored uuid.UUID
+			if err := rows.Scan(&ignored); err != nil {
+				_ = rows.Close()
+				return fmt.Errorf(
+					"scan retained content dependency lock: %w",
+					err,
+				)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf(
+				"iterate retained content dependency locks: %w",
+				err,
+			)
+		}
+		if err := rows.Close(); err != nil {
+			return fmt.Errorf(
+				"close retained content dependency locks: %w",
+				err,
+			)
+		}
+	}
+	return nil
+}
+
+func deleteFinalRetainedContent(
+	ctx context.Context,
+	tx *sql.Tx,
+	checklistID uuid.UUID,
+) error {
+	result, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM user_pmcs_community_sources AS source
+		  USING user_pmcs_checklists AS checklist
+		  WHERE source.checklist_id = $1
+		    AND checklist.id = source.checklist_id
+		    AND checklist.owner_uid IS NULL
+		    AND checklist.deleted_at IS NOT NULL
+		    AND source.status = 'retired'
+		    AND source.current_release_revision_id IS NULL`,
+		checklistID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete final retained source: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("count deleted retained sources: %w", err)
+	}
+	if rowsAffected == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM user_pmcs_community_releases
+		  WHERE checklist_id = $1`,
+		checklistID,
+	); err != nil {
+		return fmt.Errorf("delete final retained releases: %w", err)
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM user_pmcs_revisions
+		  WHERE checklist_id = $1`,
+		checklistID,
+	); err != nil {
+		return fmt.Errorf("delete final retained revisions: %w", err)
+	}
+	if _, err := tx.ExecContext(
+		ctx,
+		`DELETE FROM user_pmcs_checklists
+		  WHERE id = $1
+		    AND owner_uid IS NULL
+		    AND deleted_at IS NOT NULL`,
+		checklistID,
+	); err != nil {
+		return fmt.Errorf("delete final retained checklist: %w", err)
+	}
+	return nil
 }
 
 func loadMutation(ctx context.Context, queryer persistence.Queryer, subscriberUID string, checklistID uuid.UUID, created, idempotent bool) (*MutationResult, error) {

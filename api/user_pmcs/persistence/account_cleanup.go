@@ -4,12 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sort"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 )
 
 type accountCleaner struct{}
+
+type lockedAccountSubscription struct {
+	checklistID       uuid.UUID
+	subscriberUID     string
+	installedRevision uuid.NullUUID
+	deletedAt         sql.NullTime
+}
 
 func NewAccountCleaner() *accountCleaner {
 	return &accountCleaner{}
@@ -66,18 +74,16 @@ func (cleaner *accountCleaner) CleanupAccount(
 		}
 	}
 
-	if _, err := lockUUIDRows(
+	lockedSubscriptions, err := lockAccountSubscriptions(
 		ctx,
 		tx,
-		`SELECT checklist_id
-		   FROM user_pmcs_subscriptions
-		  WHERE subscriber_uid = $1
-		  ORDER BY checklist_id
-		  FOR UPDATE`,
 		uid,
-	); err != nil {
+		checklistValues,
+	)
+	if err != nil {
 		return fmt.Errorf("lock account subscriptions: %w", err)
 	}
+	activePins := activeAccountPins(lockedSubscriptions, uid)
 
 	if len(checklistValues) > 0 {
 		if _, err := lockUUIDRows(
@@ -121,7 +127,12 @@ func (cleaner *accountCleaner) CleanupAccount(
 			}
 			continue
 		}
-		if err := cleanReleasedChecklist(ctx, tx, checklistID); err != nil {
+		if err := cleanReleasedChecklist(
+			ctx,
+			tx,
+			checklistID,
+			activePins[checklistID],
+		); err != nil {
 			return err
 		}
 	}
@@ -140,6 +151,7 @@ func cleanReleasedChecklist(
 	ctx context.Context,
 	tx *sql.Tx,
 	checklistID uuid.UUID,
+	pinnedRevisions map[uuid.UUID]struct{},
 ) error {
 	if _, err := tx.ExecContext(
 		ctx,
@@ -154,19 +166,7 @@ func cleanReleasedChecklist(
 		return fmt.Errorf("retire community source %s: %w", checklistID, err)
 	}
 
-	var activePins int
-	if err := tx.QueryRowContext(
-		ctx,
-		`SELECT count(*)
-		   FROM user_pmcs_subscriptions
-		  WHERE checklist_id = $1
-		    AND deleted_at IS NULL`,
-		checklistID,
-	).Scan(&activePins); err != nil {
-		return fmt.Errorf("count active pins for %s: %w", checklistID, err)
-	}
-
-	if activePins == 0 {
+	if len(pinnedRevisions) == 0 {
 		if _, err := tx.ExecContext(
 			ctx,
 			`DELETE FROM user_pmcs_community_sources
@@ -186,18 +186,16 @@ func cleanReleasedChecklist(
 		return deletePrivateChecklist(ctx, tx, checklistID)
 	}
 
+	pinnedValues := sortedUUIDStrings(pinnedRevisions)
 	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM user_pmcs_community_releases AS release
 		  WHERE release.checklist_id = $1
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM user_pmcs_subscriptions AS subscription
-		         WHERE subscription.checklist_id = release.checklist_id
-		           AND subscription.installed_revision_id = release.revision_id
-		           AND subscription.deleted_at IS NULL
+		    AND NOT (
+		        release.revision_id = ANY($2::uuid[])
 		    )`,
 		checklistID,
+		pq.Array(pinnedValues),
 	); err != nil {
 		return fmt.Errorf("delete unpinned releases %s: %w", checklistID, err)
 	}
@@ -205,14 +203,11 @@ func cleanReleasedChecklist(
 		ctx,
 		`DELETE FROM user_pmcs_revisions AS revision
 		  WHERE revision.checklist_id = $1
-		    AND NOT EXISTS (
-		        SELECT 1
-		          FROM user_pmcs_subscriptions AS subscription
-		         WHERE subscription.checklist_id = revision.checklist_id
-		           AND subscription.installed_revision_id = revision.id
-		           AND subscription.deleted_at IS NULL
+		    AND NOT (
+		        revision.id = ANY($2::uuid[])
 		    )`,
 		checklistID,
+		pq.Array(pinnedValues),
 	); err != nil {
 		return fmt.Errorf("delete unpinned revisions %s: %w", checklistID, err)
 	}
@@ -228,6 +223,77 @@ func cleanReleasedChecklist(
 		return fmt.Errorf("anonymize retained checklist %s: %w", checklistID, err)
 	}
 	return nil
+}
+
+func lockAccountSubscriptions(
+	ctx context.Context,
+	tx *sql.Tx,
+	uid string,
+	ownedChecklistIDs []string,
+) ([]lockedAccountSubscription, error) {
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT checklist_id, subscriber_uid, installed_revision_id, deleted_at
+		   FROM user_pmcs_subscriptions
+		  WHERE subscriber_uid = $1
+		     OR checklist_id = ANY($2::uuid[])
+		  ORDER BY checklist_id, subscriber_uid
+		  FOR UPDATE`,
+		uid,
+		pq.Array(ownedChecklistIDs),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	subscriptions := make([]lockedAccountSubscription, 0)
+	for rows.Next() {
+		var subscription lockedAccountSubscription
+		if err := rows.Scan(
+			&subscription.checklistID,
+			&subscription.subscriberUID,
+			&subscription.installedRevision,
+			&subscription.deletedAt,
+		); err != nil {
+			return nil, err
+		}
+		subscriptions = append(subscriptions, subscription)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return subscriptions, nil
+}
+
+func activeAccountPins(
+	subscriptions []lockedAccountSubscription,
+	deletingUID string,
+) map[uuid.UUID]map[uuid.UUID]struct{} {
+	pins := make(map[uuid.UUID]map[uuid.UUID]struct{})
+	for _, subscription := range subscriptions {
+		if subscription.subscriberUID == deletingUID ||
+			subscription.deletedAt.Valid ||
+			!subscription.installedRevision.Valid {
+			continue
+		}
+		checklistPins := pins[subscription.checklistID]
+		if checklistPins == nil {
+			checklistPins = make(map[uuid.UUID]struct{})
+			pins[subscription.checklistID] = checklistPins
+		}
+		checklistPins[subscription.installedRevision.UUID] = struct{}{}
+	}
+	return pins
+}
+
+func sortedUUIDStrings(values map[uuid.UUID]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value.String())
+	}
+	sort.Strings(result)
+	return result
 }
 
 func deletePrivateChecklist(
