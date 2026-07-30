@@ -21,12 +21,25 @@ type serviceStub struct {
 	getResult      *shared.ChecklistAggregate
 	getETag        string
 	getError       error
+	revisionResult *shared.Revision
+	revisionETag   string
+	revisionError  error
 	mutationResult *MutationResult
 	mutationETag   string
 	mutationError  error
 	createCalls    int
 	putDraftCalls  int
 	deleteCalls    int
+	publishCalls   int
+}
+
+func (stub *serviceStub) GetRevision(
+	_ context.Context,
+	_ *bootstrap.User,
+	_ string,
+	_ string,
+) (*shared.Revision, string, error) {
+	return stub.revisionResult, stub.revisionETag, stub.revisionError
 }
 
 func (stub *serviceStub) Get(
@@ -68,6 +81,18 @@ func (stub *serviceStub) DeleteDraft(
 	_ string,
 ) (*MutationResult, string, error) {
 	stub.deleteCalls++
+	return stub.mutationResult, stub.mutationETag, stub.mutationError
+}
+
+func (stub *serviceStub) Publish(
+	_ context.Context,
+	_ *bootstrap.User,
+	_ string,
+	_ string,
+	_ shared.RevisionInput,
+	_ string,
+) (*MutationResult, string, error) {
+	stub.publishCalls++
 	return stub.mutationResult, stub.mutationETag, stub.mutationError
 }
 
@@ -305,6 +330,63 @@ func TestDeleteDraftWritesTypedTransitionError(t *testing.T) {
 
 	require.Equal(t, http.StatusConflict, response.Code)
 	requireErrorCode(t, response.Body.Bytes(), "invalid_transition")
+}
+
+func TestPublishReturnsCurrentAggregateAndOwnedHeaders(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	aggregate := shared.ChecklistAggregate{ID: checklistID, SyncVersion: 2}
+	etag := shared.MakeChecklistETag(checklistID, 2)
+	stub := &serviceStub{
+		mutationResult: &MutationResult{Aggregate: aggregate},
+		mutationETag:   etag,
+	}
+	router := newHandlerTestRouter(stub, true, shared.DefaultConfig())
+	request := jsonRequest(
+		http.MethodPut,
+		"/api/v1/auth/user-pmcs/checklists/"+checklistID.String()+
+			"/publications/"+revisionID.String(),
+		completePublicationInput(revisionID, 1),
+	)
+	request.Header.Set("If-Match", `"current"`)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, etag, response.Header().Get("ETag"))
+	require.Equal(t, ownedCacheControl, response.Header().Get("Cache-Control"))
+	require.Equal(t, 1, stub.publishCalls)
+}
+
+func TestHistoricalMatchingIfNoneMatchReturnsBodylessImmutable304(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	etag := `"immutable-history"`
+	stub := &serviceStub{
+		revisionResult: &shared.Revision{ID: revisionID, State: "superseded"},
+		revisionETag:   etag,
+	}
+	router := newHandlerTestRouter(stub, true, shared.DefaultConfig())
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/auth/user-pmcs/checklists/"+checklistID.String()+
+			"/revisions/"+revisionID.String(),
+		nil,
+	)
+	request.Header.Set("If-None-Match", etag)
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusNotModified, response.Code)
+	require.Empty(t, response.Body.Bytes())
+	require.Equal(t, etag, response.Header().Get("ETag"))
+	require.Equal(
+		t,
+		"private, max-age=31536000, immutable",
+		response.Header().Get("Cache-Control"),
+	)
 }
 
 func newHandlerTestRouter(

@@ -23,4 +23,12 @@ func RegisterRoutes(
 		"/checklists/:checklist_id/drafts/:revision_id",
 		handler.deleteDraft,
 	)
+	group.PUT(
+		"/checklists/:checklist_id/publications/:revision_id",
+		handler.publish,
+	)
+	group.GET(
+		"/checklists/:checklist_id/revisions/:revision_id",
+		handler.getRevision,
+	)
 }

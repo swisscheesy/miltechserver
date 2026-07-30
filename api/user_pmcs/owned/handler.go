@@ -12,6 +12,7 @@ import (
 )
 
 const ownedCacheControl = "private, no-cache"
+const immutableOwnedCacheControl = "private, max-age=31536000, immutable"
 
 type Handler struct {
 	service Service
@@ -140,6 +141,72 @@ func (handler Handler) deleteDraft(context *gin.Context) {
 	writeSuccess(context, http.StatusOK, result.Aggregate)
 }
 
+func (handler Handler) publish(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	var revision shared.RevisionInput
+	if apiError := shared.DecodeStrictJSON(
+		context,
+		&revision,
+		handler.config.MaxMutationBodyBytes,
+	); apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	result, etag, err := handler.service.Publish(
+		context.Request.Context(),
+		user,
+		context.Param("checklist_id"),
+		context.Param("revision_id"),
+		revision,
+		context.GetHeader("If-Match"),
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+
+	setOwnedHeaders(context, etag)
+	writeSuccess(context, http.StatusOK, result.Aggregate)
+}
+
+func (handler Handler) getRevision(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	var conditionalETag string
+	if header := context.GetHeader("If-None-Match"); header != "" {
+		precondition, err := shared.ParseExistingPrecondition(header)
+		if err != nil {
+			writeServiceError(context, err)
+			return
+		}
+		conditionalETag = precondition.ETag
+	}
+	revision, etag, err := handler.service.GetRevision(
+		context.Request.Context(),
+		user,
+		context.Param("checklist_id"),
+		context.Param("revision_id"),
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+
+	setImmutableOwnedHeaders(context, etag)
+	if conditionalETag == etag {
+		context.Status(http.StatusNotModified)
+		return
+	}
+	writeSuccess(context, http.StatusOK, revision)
+}
+
 func userFromContext(context *gin.Context) (*bootstrap.User, *shared.APIError) {
 	value, exists := context.Get("user")
 	if !exists {
@@ -175,6 +242,11 @@ func writeServiceError(context *gin.Context, err error) {
 func setOwnedHeaders(context *gin.Context, etag string) {
 	context.Header("ETag", etag)
 	context.Header("Cache-Control", ownedCacheControl)
+}
+
+func setImmutableOwnedHeaders(context *gin.Context, etag string) {
+	context.Header("ETag", etag)
+	context.Header("Cache-Control", immutableOwnedCacheControl)
 }
 
 func writeSuccess(context *gin.Context, status int, data any) {

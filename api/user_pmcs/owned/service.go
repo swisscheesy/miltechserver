@@ -35,4 +35,18 @@ type Service interface {
 		revisionID string,
 		ifMatch string,
 	) (*MutationResult, string, error)
+	Publish(
+		ctx context.Context,
+		user *bootstrap.User,
+		checklistID string,
+		revisionID string,
+		revision shared.RevisionInput,
+		ifMatch string,
+	) (*MutationResult, string, error)
+	GetRevision(
+		ctx context.Context,
+		user *bootstrap.User,
+		checklistID string,
+		revisionID string,
+	) (*shared.Revision, string, error)
 }

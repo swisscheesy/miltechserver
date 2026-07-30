@@ -15,17 +15,34 @@ import (
 type repositoryStub struct {
 	getResult         *shared.ChecklistAggregate
 	getError          error
+	getRevisionResult *shared.Revision
+	getRevisionError  error
 	mutationResult    *MutationResult
 	mutationError     error
 	getCalls          int
+	getRevisionCalls  int
 	createCalls       int
 	putDraftCalls     int
 	deleteDraftCalls  int
+	publishCalls      int
 	receivedOwnerUID  string
 	receivedChecklist uuid.UUID
 	receivedRevision  uuid.UUID
 	receivedDraft     shared.PreparedRevision
 	receivedCondition shared.Precondition
+}
+
+func (stub *repositoryStub) GetRevision(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	revisionID uuid.UUID,
+) (*shared.Revision, error) {
+	stub.getRevisionCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedRevision = revisionID
+	return stub.getRevisionResult, stub.getRevisionError
 }
 
 func (stub *repositoryStub) Get(
@@ -80,6 +97,22 @@ func (stub *repositoryStub) DeleteDraft(
 	stub.receivedOwnerUID = ownerUID
 	stub.receivedChecklist = checklistID
 	stub.receivedRevision = revisionID
+	stub.receivedCondition = precondition
+	return stub.mutationResult, stub.mutationError
+}
+
+func (stub *repositoryStub) Publish(
+	_ context.Context,
+	ownerUID string,
+	checklistID uuid.UUID,
+	revision shared.PreparedRevision,
+	precondition shared.Precondition,
+) (*MutationResult, error) {
+	stub.publishCalls++
+	stub.receivedOwnerUID = ownerUID
+	stub.receivedChecklist = checklistID
+	stub.receivedRevision = revision.Input.ID
+	stub.receivedDraft = revision
 	stub.receivedCondition = precondition
 	return stub.mutationResult, stub.mutationError
 }
@@ -273,6 +306,103 @@ func TestDeleteDraftRequiresParentChecklistETagBeforeRepository(t *testing.T) {
 	require.Zero(t, repository.deleteDraftCalls)
 }
 
+func TestPublishRequiresPositiveRevisionNumberBeforeRepository(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	revisionID := uuid.New()
+	input := completePublicationInput(revisionID, 0)
+
+	_, _, err := service.Publish(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		revisionID.String(),
+		input,
+		`"current"`,
+	)
+
+	requireAPIError(t, err, 422, "validation_failed")
+	require.Zero(t, repository.publishCalls)
+}
+
+func TestPublishRejectsBodyAndRouteRevisionMismatch(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, shared.DefaultConfig())
+	input := completePublicationInput(uuid.New(), 1)
+
+	_, _, err := service.Publish(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		uuid.NewString(),
+		uuid.NewString(),
+		input,
+		`"current"`,
+	)
+
+	requireAPIError(t, err, 400, "invalid_request")
+	require.Zero(t, repository.publishCalls)
+}
+
+func TestPublishPreparesCompleteRevisionBeforeRepository(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	aggregate := shared.ChecklistAggregate{ID: checklistID, SyncVersion: 2}
+	repository := &repositoryStub{
+		mutationResult: &MutationResult{Aggregate: aggregate},
+	}
+	service := NewService(repository, shared.DefaultConfig())
+	input := completePublicationInput(revisionID, 1)
+
+	result, etag, err := service.Publish(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		checklistID.String(),
+		revisionID.String(),
+		input,
+		`"current"`,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, aggregate, result.Aggregate)
+	require.Equal(t, shared.MakeChecklistETag(checklistID, 2), etag)
+	require.Equal(t, int32(1), *repository.receivedDraft.Input.RevisionNumber)
+	require.Equal(t, "m998 hmmwv", repository.receivedDraft.Input.Models[0].NormalizedText)
+	require.Equal(t, shared.PreconditionMatch, repository.receivedCondition.Mode)
+}
+
+func TestHistoricalGetReturnsImmutableETag(t *testing.T) {
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	number := int32(1)
+	repository := &repositoryStub{
+		getRevisionResult: &shared.Revision{
+			ID:             revisionID,
+			RevisionNumber: &number,
+			Name:           "Vehicle PMCS",
+			Description:    "Immutable",
+			State:          "superseded",
+			Models: []shared.ModelValue{
+				{DisplayText: "M998", NormalizedText: "m998"},
+			},
+			Sections: []shared.Section{},
+		},
+	}
+	service := NewService(repository, shared.DefaultConfig())
+
+	revision, etag, err := service.GetRevision(
+		context.Background(),
+		&bootstrap.User{UserID: "owner-1"},
+		checklistID.String(),
+		revisionID.String(),
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, revisionID, revision.ID)
+	require.NotEmpty(t, etag)
+	require.Equal(t, checklistID, repository.receivedChecklist)
+	require.Equal(t, revisionID, repository.receivedRevision)
+}
+
 func TestPreparedTreeAdvisoryKeysAreStableSortedAndDeduplicated(t *testing.T) {
 	revisionID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
 	firstNodeID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -338,6 +468,37 @@ func validDraftInput(revisionID uuid.UUID) shared.RevisionInput {
 		},
 		Sections: []shared.SectionInput{},
 	}
+}
+
+func completePublicationInput(
+	revisionID uuid.UUID,
+	revisionNumber int32,
+) shared.RevisionInput {
+	input := validDraftInput(revisionID)
+	input.RevisionNumber = &revisionNumber
+	input.Sections = []shared.SectionInput{
+		{
+			ID:       uuid.New(),
+			Position: 1,
+			Title:    "Before operation",
+			Items: []shared.ItemInput{
+				{
+					ID:                        uuid.New(),
+					Position:                  1,
+					Interval:                  "Before",
+					ItemToBeCheckedOrServiced: "Engine compartment",
+					ProcedureSteps: []shared.ProcedureStepInput{
+						{
+							ID:       uuid.New(),
+							Position: 1,
+							StepText: "Inspect",
+						},
+					},
+				},
+			},
+		},
+	}
+	return input
 }
 
 func requireAPIError(

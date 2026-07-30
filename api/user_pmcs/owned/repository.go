@@ -45,6 +45,19 @@ type Repository interface {
 		revisionID uuid.UUID,
 		precondition shared.Precondition,
 	) (*MutationResult, error)
+	Publish(
+		ctx context.Context,
+		ownerUID string,
+		checklistID uuid.UUID,
+		revision shared.PreparedRevision,
+		precondition shared.Precondition,
+	) (*MutationResult, error)
+	GetRevision(
+		ctx context.Context,
+		ownerUID string,
+		checklistID uuid.UUID,
+		revisionID uuid.UUID,
+	) (*shared.Revision, error)
 }
 
 type MutationResult struct {
