@@ -270,15 +270,28 @@ func (repository *RepositoryImpl) AcceptUpdate(ctx context.Context, subscriberUI
 		if err != nil {
 			return nil, err
 		}
-		if !found || source.deletedAt != nil || source.status != "active" || source.currentRevisionID == nil {
-			return nil, shared.NewInvalidTransition("community checklist is not available for update", nil)
-		}
-		subscription, found, err := lockSubscription(ctx, tx, subscriberUID, checklistID)
+		subscription, subscriptionFound, err := lockSubscription(
+			ctx,
+			tx,
+			subscriberUID,
+			checklistID,
+		)
 		if err != nil {
 			return nil, err
 		}
-		if !found || subscription.subscription.DeletedAt != nil || subscription.subscription.InstalledRevisionID == nil {
+		if !subscriptionFound ||
+			subscription.subscription.DeletedAt != nil ||
+			subscription.subscription.InstalledRevisionID == nil {
 			return nil, shared.NewResourceNotFound("subscription not found", nil)
+		}
+		if !found ||
+			source.deletedAt != nil ||
+			source.status != "active" ||
+			source.currentRevisionID == nil {
+			return nil, shared.NewInvalidTransition(
+				"community checklist is not available for update",
+				nil,
+			)
 		}
 		if *source.currentRevisionID != revisionID {
 			return nil, shared.NewInvalidTransition("subscription update must target the current community release", nil)

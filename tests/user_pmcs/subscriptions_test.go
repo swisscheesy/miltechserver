@@ -65,6 +65,141 @@ func TestSubscriptionInstallRejectsOwnerAndRetiredSource(t *testing.T) {
 	requireAPIIntegrationError(t, err, 409, "invalid_transition")
 }
 
+func TestSubscriptionAcceptUpdateHidesMissingOrDeletedSubscriptionBeforeSourceState(
+	t *testing.T,
+) {
+	ctx := context.Background()
+	repository := subscriptions.NewRepository(
+		persistence.NewStore(testDB, 3),
+		shared.DefaultConfig(),
+	)
+
+	t.Run("unknown source and missing subscription", func(t *testing.T) {
+		subscriberUID := newUserPmcsTestUser(t)
+		checklistID := uuid.New()
+		_, err := repository.AcceptUpdate(
+			ctx,
+			subscriberUID,
+			checklistID,
+			uuid.New(),
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: `"unknown"`,
+			},
+		)
+		requireAPIIntegrationError(t, err, 404, "resource_not_found")
+	})
+
+	t.Run("retired source and deleted subscription", func(t *testing.T) {
+		fixture := newReleasedChecklistFixture(t, 1)
+		released, err := fixture.repository.Release(
+			ctx,
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		subscriberUID := newUserPmcsTestUser(t)
+		installed, err := repository.Install(
+			ctx,
+			subscriberUID,
+			fixture.checklist,
+			shared.Precondition{Mode: shared.PreconditionCreate},
+		)
+		require.NoError(t, err)
+		unsubscribed, err := repository.Unsubscribe(
+			ctx,
+			subscriberUID,
+			fixture.checklist,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(
+					fixture.checklist,
+					installed.Subscription.SyncVersion,
+				),
+			},
+		)
+		require.NoError(t, err)
+		_, err = fixture.repository.Retire(
+			ctx,
+			fixture.ownerUID,
+			fixture.checklist,
+			checklistPrecondition(
+				fixture.checklist,
+				released.Aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+
+		_, err = repository.AcceptUpdate(
+			ctx,
+			subscriberUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(
+					fixture.checklist,
+					unsubscribed.Subscription.SyncVersion,
+				),
+			},
+		)
+		requireAPIIntegrationError(t, err, 404, "resource_not_found")
+	})
+
+	t.Run("retired source with active subscription stays a transition error", func(t *testing.T) {
+		fixture := newReleasedChecklistFixture(t, 1)
+		released, err := fixture.repository.Release(
+			ctx,
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		subscriberUID := newUserPmcsTestUser(t)
+		installed, err := repository.Install(
+			ctx,
+			subscriberUID,
+			fixture.checklist,
+			shared.Precondition{Mode: shared.PreconditionCreate},
+		)
+		require.NoError(t, err)
+		_, err = fixture.repository.Retire(
+			ctx,
+			fixture.ownerUID,
+			fixture.checklist,
+			checklistPrecondition(
+				fixture.checklist,
+				released.Aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+
+		_, err = repository.AcceptUpdate(
+			ctx,
+			subscriberUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeSubscriptionETag(
+					fixture.checklist,
+					installed.Subscription.SyncVersion,
+				),
+			},
+		)
+		requireAPIIntegrationError(t, err, 409, "invalid_transition")
+	})
+}
+
 func TestSubscriptionInstallPinsCurrentReleaseAndRetriesIdempotently(t *testing.T) {
 	fixture := newReleasedChecklistFixture(t, 2)
 	first, err := fixture.repository.Release(context.Background(), fixture.ownerUID, fixture.checklist, fixture.revisions[0].Input.ID, checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion))
