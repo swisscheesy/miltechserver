@@ -1046,7 +1046,8 @@
 
 ### Hardening Task 16: Mobile contract, migration rehearsal, and final matrix
 
-- Status: review fix round 1 complete; scoped re-review pending.
+- Status: review fix round 1 and scoped re-review complete at
+  `3aed37c24cf1036e76eb84a5f338781449de7c9c`.
 - Base commit: `ffe7b8295dfc7633335adceb209f0da460314217`.
 - Effective pre-Task-16 HEAD after the reviewed Task 15 planner correction:
   `62ce505b4766bc159fc30798fc19e238ed29136e`.
@@ -1213,8 +1214,23 @@
   `docs(user-pmcs): correct synchronization contract evidence`; its exact hash
   must be appended by the subsequent whole-branch closeout because a commit
   cannot contain its own hash.
-- Next gate: the original Task 16 reviewer must perform a scoped re-review of
-  all four findings before whole-branch closeout.
+- Historical next gate after the documentation correction: the original Task
+  16 reviewer was dispatched to re-review all four findings before whole-branch
+  closeout.
+- Completed scoped re-review: `/root/hardening_task16_review` returned PASS at
+  reviewed HEAD `3aed37c24cf1036e76eb84a5f338781449de7c9c`;
+  all 3 Important and 1 Minor findings were addressed, with 0 new findings.
+- Re-review verification:
+  - subscription behavior/race group: 16 tests PASS;
+  - focused HTTP/privacy/update group: 33 tests PASS;
+  - 500-subscription update discovery retained `query_count=1`;
+  - subscription EXPLAIN gate: PASS.
+- Historical caveat at that review point: the supplemental full package still
+  exposed the public-browse alternate-valid-index assertion described above.
+  It was later corrected by
+  `4a6a2621c8a660f37e8332954bad4a3501073923`
+  `test(user-pmcs): stabilize performance plan gates` without weakening the
+  relation-scoped no-sequential-scan requirement.
 
 ### Whole-branch Task 5 reservation resolution
 
@@ -1319,9 +1335,9 @@
   one forward migration after separate database-name verification and was
   never rolled back. No production connection occurred.
 - Reservation reviewer: `/root/owned_task5_review`; PASS with 0 Critical,
-  0 Important, and 2 deferred Minor findings. The Minors were explicit helper
-  deduplication and omission of exact reservation relation/bloat values from
-  tracked evidence.
+  0 Important, and 2 deferred Minor findings at review time. Explicit helper
+  deduplication remains open; the tracked relation/bloat evidence omission was
+  closed by recording the exact values below.
 - Exact maximum-size reservation relation evidence:
   - table bytes: `0 -> 2,146,304`;
   - index bytes: `3,219,456 -> 3,219,456`;
@@ -1344,7 +1360,7 @@
 - Aggregate whole-branch scoped reviewer result at
   `c4764c9f17905facabebda08789e1f5c195e61c5`: PROCEED with 0 Critical and
   0 Important findings; all four original Important findings were addressed.
-- Five non-blocking Minors were carried into closeout:
+- Four non-blocking Minors remain open after closeout:
   1. `NewRepository` permits a nil `AccountCleaner` and would panic.
   2. The restrictive-FK test does not isolate the release-to-revision
      constraint.
@@ -1352,8 +1368,6 @@
      error.
   4. The reservation helper sorts but does not explicitly deduplicate IDs;
      mandatory upstream duplicate validation mitigates this.
-  5. Tracked evidence omitted exact reservation relation/bloat values; this
-     ledger records the reviewed values above.
 
 #### Fresh final verification matrix
 
@@ -1408,5 +1422,5 @@
 - Next handoff: the mobile repository may consume
   `docs/client/2026-07-29-user-pmcs-server-api-contract.md`. Server rollout
   verification is complete subject to the explicitly reported stale route
-  assertion, shared-test-database parallel interference, and five carried
+  assertion, shared-test-database parallel interference, and four carried
   non-blocking Minors above.
