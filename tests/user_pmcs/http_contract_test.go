@@ -146,6 +146,46 @@ func TestHTTPContractUnknownResourcesUseSafeStable404s(t *testing.T) {
 	require.Equal(t, http.StatusOK, updates.Code)
 }
 
+func TestHTTPContractSubscriptionReadsRequireInitializedAccount(t *testing.T) {
+	router := newUserPmcsContractRouter(shared.DefaultConfig())
+	uninitializedUID := "uninitialized-" + uuid.NewString()
+	checklistID := uuid.NewString()
+	revisionID := uuid.NewString()
+
+	cases := []userPmcsRouteContract{
+		{
+			name:   "update discovery",
+			method: http.MethodGet,
+			path:   "/auth/user-pmcs/subscriptions/updates",
+		},
+		{
+			name:   "pinned release",
+			method: http.MethodGet,
+			path: "/auth/user-pmcs/subscriptions/" + checklistID +
+				"/installed-releases/" + revisionID,
+		},
+	}
+	for _, testCase := range cases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			response := performContractRequest(
+				router,
+				testCase.method,
+				testCase.path,
+				uninitializedUID,
+				nil,
+				nil,
+			)
+			requireStableAPIError(
+				t,
+				response,
+				http.StatusConflict,
+				"account_not_initialized",
+			)
+		})
+	}
+}
+
 func TestAuthorizationSafe404EnvelopesAreIndistinguishable(t *testing.T) {
 	ctx := context.Background()
 	config := shared.DefaultConfig()

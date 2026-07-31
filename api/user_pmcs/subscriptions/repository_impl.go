@@ -22,6 +22,28 @@ func NewRepository(store persistence.Store, config shared.Config) Repository {
 	return &RepositoryImpl{store: store, config: config}
 }
 
+func requireInitializedSubscriber(
+	ctx context.Context,
+	queryer persistence.Queryer,
+	subscriberUID string,
+) error {
+	var exists bool
+	if err := queryer.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE uid = $1)`,
+		subscriberUID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("verify subscriber account: %w", err)
+	}
+	if !exists {
+		return shared.NewAccountNotInitialized(
+			"account is not initialized",
+			nil,
+		)
+	}
+	return nil
+}
+
 type lockedSource struct {
 	status            string
 	currentRevisionID *uuid.UUID
@@ -185,6 +207,13 @@ func (repository *RepositoryImpl) GetInstalledRelease(ctx context.Context, subsc
 	defer func() {
 		shared.RecordDBDuration(ctx, time.Since(startedAt))
 	}()
+	if err := requireInitializedSubscriber(
+		ctx,
+		repository.store.DB,
+		subscriberUID,
+	); err != nil {
+		return nil, err
+	}
 	return loadInstalledRelease(ctx, repository.store.DB, subscriberUID, checklistID, revisionID)
 }
 
@@ -195,29 +224,50 @@ func (repository *RepositoryImpl) ListUpdates(ctx context.Context, subscriberUID
 	}()
 
 	arguments := []any{subscriberUID}
-	query := `SELECT subscription.checklist_id,
-	                 COALESCE(source.status, 'retired'),
-	                 subscription.installed_revision_id,
-	                 installed.revision_number,
-	                 source.current_release_revision_id,
-	                 current_release.revision_number
-	          FROM user_pmcs_subscriptions AS subscription
-	          JOIN user_pmcs_revisions AS installed
-	            ON installed.checklist_id = subscription.checklist_id
-	           AND installed.id = subscription.installed_revision_id
-	          LEFT JOIN user_pmcs_community_sources AS source
-	            ON source.checklist_id = subscription.checklist_id
-	          LEFT JOIN user_pmcs_revisions AS current_release
-	            ON current_release.checklist_id = source.checklist_id
-	           AND current_release.id = source.current_release_revision_id
-	          WHERE subscription.subscriber_uid = $1
-	            AND subscription.deleted_at IS NULL`
+	query := `WITH account AS MATERIALIZED (
+	              SELECT EXISTS (
+	                  SELECT 1
+	                  FROM users
+	                  WHERE uid = $1
+	              ) AS initialized
+	          )
+	          SELECT account.initialized,
+	                 updates.checklist_id,
+	                 updates.source_status,
+	                 updates.installed_revision_id,
+	                 updates.installed_revision_number,
+	                 updates.current_release_revision_id,
+	                 updates.current_release_revision_number
+	          FROM account
+	          LEFT JOIN LATERAL (
+	              SELECT subscription.checklist_id,
+	                     COALESCE(source.status, 'retired') AS source_status,
+	                     subscription.installed_revision_id,
+	                     installed.revision_number AS installed_revision_number,
+	                     source.current_release_revision_id,
+	                     current_release.revision_number AS current_release_revision_number
+	              FROM user_pmcs_subscriptions AS subscription
+	              JOIN user_pmcs_revisions AS installed
+	                ON installed.checklist_id = subscription.checklist_id
+	               AND installed.id = subscription.installed_revision_id
+	              LEFT JOIN user_pmcs_community_sources AS source
+	                ON source.checklist_id = subscription.checklist_id
+	              LEFT JOIN user_pmcs_revisions AS current_release
+	                ON current_release.checklist_id = source.checklist_id
+	               AND current_release.id = source.current_release_revision_id
+	              WHERE account.initialized
+	                AND subscription.subscriber_uid = $1
+	                AND subscription.deleted_at IS NULL`
 	if after != nil {
 		arguments = append(arguments, *after)
 		query += fmt.Sprintf(" AND subscription.checklist_id > $%d", len(arguments))
 	}
 	arguments = append(arguments, limit+1)
-	query += fmt.Sprintf(" ORDER BY subscription.checklist_id LIMIT $%d", len(arguments))
+	query += fmt.Sprintf(`
+	              ORDER BY subscription.checklist_id
+	              LIMIT $%d
+	          ) AS updates ON TRUE
+	          ORDER BY updates.checklist_id`, len(arguments))
 
 	rows, err := repository.store.DB.QueryContext(ctx, query, arguments...)
 	if err != nil {
@@ -227,12 +277,46 @@ func (repository *RepositoryImpl) ListUpdates(ctx context.Context, subscriberUID
 	items := make([]shared.SubscriptionUpdate, 0, limit+1)
 	for rows.Next() {
 		var (
-			item          shared.SubscriptionUpdate
-			currentID     uuid.NullUUID
-			currentNumber sql.NullInt32
+			accountInitialized bool
+			checklistID        uuid.NullUUID
+			sourceStatus       sql.NullString
+			installedID        uuid.NullUUID
+			installedNumber    sql.NullInt32
+			currentID          uuid.NullUUID
+			currentNumber      sql.NullInt32
 		)
-		if err := rows.Scan(&item.ChecklistID, &item.SourceStatus, &item.InstalledRevisionID, &item.InstalledRevisionNumber, &currentID, &currentNumber); err != nil {
+		if err := rows.Scan(
+			&accountInitialized,
+			&checklistID,
+			&sourceStatus,
+			&installedID,
+			&installedNumber,
+			&currentID,
+			&currentNumber,
+		); err != nil {
 			return nil, fmt.Errorf("scan subscription update: %w", err)
+		}
+		if !accountInitialized {
+			return nil, shared.NewAccountNotInitialized(
+				"account is not initialized",
+				nil,
+			)
+		}
+		if !checklistID.Valid {
+			continue
+		}
+		if !sourceStatus.Valid ||
+			!installedID.Valid ||
+			!installedNumber.Valid {
+			return nil, fmt.Errorf(
+				"scan subscription update: required joined data is null",
+			)
+		}
+		item := shared.SubscriptionUpdate{
+			ChecklistID:             checklistID.UUID,
+			SourceStatus:            sourceStatus.String,
+			InstalledRevisionID:     installedID.UUID,
+			InstalledRevisionNumber: installedNumber.Int32,
 		}
 		if currentID.Valid && currentNumber.Valid {
 			currentRevisionID := currentID.UUID
