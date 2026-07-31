@@ -954,8 +954,32 @@ func assertPostgresTextFieldByteBoundaries(t *testing.T, ownerUID string) {
 		return err
 	}
 	require.NoError(t, insert(8_192, 65_536))
-	require.Error(t, insert(8_193, 1))
-	require.Error(t, insert(1, 65_537))
+	requirePostgresConstraintError(
+		t,
+		insert(8_193, 1),
+		"23514",
+		"user_pmcs_revisions_text_bytes_check",
+	)
+	requirePostgresConstraintError(
+		t,
+		insert(1, 65_537),
+		"23514",
+		"user_pmcs_revisions_text_bytes_check",
+	)
+}
+
+func requirePostgresConstraintError(
+	t *testing.T,
+	err error,
+	sqlState pq.ErrorCode,
+	constraint string,
+) {
+	t.Helper()
+	require.Error(t, err)
+	var postgresError *pq.Error
+	require.ErrorAs(t, err, &postgresError)
+	require.Equal(t, sqlState, postgresError.Code)
+	require.Equal(t, constraint, postgresError.Constraint)
 }
 
 type peakLiveSampler struct {
@@ -1544,6 +1568,13 @@ func seedPerformanceSubscriptions(
 			pq.Array(userUIDs),
 		)
 		require.NoError(t, cleanupErr)
+		// The fixture deliberately updates global planner statistics. Refresh
+		// them after cleanup so later tests do not plan against removed rows.
+		_, cleanupErr = testDB.ExecContext(
+			cleanupCtx,
+			`ANALYZE user_pmcs_subscriptions`,
+		)
+		require.NoError(t, cleanupErr)
 	})
 	return fixture
 }
@@ -1823,6 +1854,7 @@ func captureUserPmcsQueryPlans(
 					relation: "user_pmcs_community_releases",
 					approvedIndexes: []string{
 						"user_pmcs_community_releases_pkey",
+						"user_pmcs_community_releases_checklist_revision_key",
 					},
 				},
 				{
