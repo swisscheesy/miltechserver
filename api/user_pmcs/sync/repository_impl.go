@@ -19,6 +19,7 @@ import (
 
 type RepositoryImpl struct {
 	store persistence.Store
+	now   func() time.Time
 }
 
 type deltaRoot struct {
@@ -28,7 +29,7 @@ type deltaRoot struct {
 }
 
 func NewRepository(store persistence.Store) Repository {
-	return &RepositoryImpl{store: store}
+	return &RepositoryImpl{store: store, now: time.Now}
 }
 
 func (repository *RepositoryImpl) GetDelta(
@@ -38,43 +39,23 @@ func (repository *RepositoryImpl) GetDelta(
 	limit int,
 	byteLimit int,
 ) (*AccountDelta, error) {
-	startedAt := time.Now()
-	defer func() {
-		shared.RecordDBDuration(ctx, time.Since(startedAt))
-	}()
-
-	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelRepeatableRead,
-		ReadOnly:  true,
-	})
+	accountVersion, changes, rootTruncated, err := repository.loadDeltaSnapshot(
+		ctx,
+		userUID,
+		after,
+		limit,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("begin account delta snapshot: %w", err)
-	}
-
-	accountVersion, err := readAccountVersion(ctx, tx, userUID)
-	if err != nil {
-		return nil, rollbackDelta(tx, err)
-	}
-	roots, err := readDeltaRoots(ctx, tx, userUID, after, limit+1)
-	if err != nil {
-		return nil, rollbackDelta(tx, err)
-	}
-
-	pageRoots := roots[:min(limit, len(roots))]
-	changes, err := loadAccountChanges(ctx, tx, userUID, pageRoots)
-	if err != nil {
-		return nil, rollbackDelta(tx, err)
-	}
-	rootTruncated := len(roots) > limit
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit account delta snapshot: %w", err)
+		return nil, err
 	}
 	included, byteTruncated, err := fitCompleteChanges(
+		ctx,
 		changes,
 		after,
 		accountVersion,
 		rootTruncated,
 		byteLimit,
+		repository.currentTime,
 	)
 	if err != nil {
 		return nil, err
@@ -90,6 +71,62 @@ func (repository *RepositoryImpl) GetDelta(
 		HasMore:        rootTruncated || byteTruncated,
 		Changes:        included,
 	}, nil
+}
+
+func (repository *RepositoryImpl) loadDeltaSnapshot(
+	ctx context.Context,
+	userUID string,
+	after int64,
+	limit int,
+) (int64, []AccountChange, bool, error) {
+	startedAt := repository.currentTime()
+	defer func() {
+		shared.RecordDBDuration(
+			ctx,
+			repository.currentTime().Sub(startedAt),
+		)
+	}()
+
+	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelRepeatableRead,
+		ReadOnly:  true,
+	})
+	if err != nil {
+		return 0, nil, false, fmt.Errorf(
+			"begin account delta snapshot: %w",
+			err,
+		)
+	}
+
+	accountVersion, err := readAccountVersion(ctx, tx, userUID)
+	if err != nil {
+		return 0, nil, false, rollbackDelta(tx, err)
+	}
+	roots, err := readDeltaRoots(ctx, tx, userUID, after, limit+1)
+	if err != nil {
+		return 0, nil, false, rollbackDelta(tx, err)
+	}
+
+	pageRoots := roots[:min(limit, len(roots))]
+	changes, err := loadAccountChanges(ctx, tx, userUID, pageRoots)
+	if err != nil {
+		return 0, nil, false, rollbackDelta(tx, err)
+	}
+	rootTruncated := len(roots) > limit
+	if err := tx.Commit(); err != nil {
+		return 0, nil, false, fmt.Errorf(
+			"commit account delta snapshot: %w",
+			err,
+		)
+	}
+	return accountVersion, changes, rootTruncated, nil
+}
+
+func (repository *RepositoryImpl) currentTime() time.Time {
+	if repository.now == nil {
+		return time.Now()
+	}
+	return repository.now()
 }
 
 func readAccountVersion(
@@ -465,11 +502,13 @@ func attachChecklistTrees(
 }
 
 func fitCompleteChanges(
+	ctx context.Context,
 	changes []AccountChange,
 	after int64,
 	accountVersion int64,
 	rootTruncated bool,
 	byteLimit int,
+	now func() time.Time,
 ) ([]AccountChange, bool, error) {
 	for index := range changes {
 		prefix := changes[:index+1]
@@ -481,7 +520,9 @@ func fitCompleteChanges(
 			HasMore:        hasMore,
 			Changes:        prefix,
 		}
+		startedAt := now()
 		encoded, err := json.Marshal(accountDeltaEnvelope(candidate))
+		shared.RecordEncodeDuration(ctx, now().Sub(startedAt))
 		if err != nil {
 			return nil, false, fmt.Errorf("encode account delta response: %w", err)
 		}

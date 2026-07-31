@@ -135,6 +135,24 @@ func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.
 		"/api/v1/user-pmcs/community",
 	)
 
+	const authoredPathSegment = "authored-dynamic-path-secret"
+	invalidPathRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community/"+authoredPathSegment,
+		nil,
+	)
+	invalidPathRequest.RemoteAddr = "192.0.2.51:1000"
+	invalidPathRecorder := httptest.NewRecorder()
+	router.ServeHTTP(invalidPathRecorder, invalidPathRequest)
+	require.Equal(t, http.StatusBadRequest, invalidPathRecorder.Code)
+	require.NotContains(t, output.String(), authoredPathSegment)
+	require.NotContains(t, accessOutput.String(), authoredPathSegment)
+	require.Contains(
+		t,
+		accessOutput.String(),
+		"/api/v1/user-pmcs/community/:checklist_id",
+	)
+
 	unrelatedRequest := httptest.NewRequest(
 		http.MethodGet,
 		"/unrelated-access-log-test?filter=useful-structural-query",

@@ -34,9 +34,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const userPmcsAccessPathKey = "user_pmcs_access_path"
+
 func NewEngine() *gin.Engine {
 	router := gin.New()
 	router.Use(gin.LoggerWithFormatter(formatAccessLog))
+	router.Use(recordUserPmcsAccessPath())
 	router.Use(gin.Recovery())
 	return router
 }
@@ -44,7 +47,12 @@ func NewEngine() *gin.Engine {
 func formatAccessLog(params gin.LogFormatterParams) string {
 	path := params.Path
 	if isUserPmcsAccessPath(params.Request.URL.Path) {
-		path = params.Request.URL.Path
+		path = userPmcsAccessFamily(params.Request.URL.Path)
+		if value, exists := params.Keys[userPmcsAccessPathKey]; exists {
+			if routePath, ok := value.(string); ok && routePath != "" {
+				path = routePath
+			}
+		}
 	}
 
 	return fmt.Sprintf(
@@ -59,6 +67,22 @@ func formatAccessLog(params gin.LogFormatterParams) string {
 	)
 }
 
+func recordUserPmcsAccessPath() gin.HandlerFunc {
+	return func(context *gin.Context) {
+		context.Next()
+
+		requestPath := context.Request.URL.Path
+		if !isUserPmcsAccessPath(requestPath) {
+			return
+		}
+		routePath := context.FullPath()
+		if routePath == "" {
+			routePath = userPmcsAccessFamily(requestPath)
+		}
+		context.Set(userPmcsAccessPathKey, routePath)
+	}
+}
+
 func isUserPmcsAccessPath(path string) bool {
 	for _, prefix := range []string{
 		"/api/v1/user-pmcs",
@@ -69,6 +93,14 @@ func isUserPmcsAccessPath(path string) bool {
 		}
 	}
 	return false
+}
+
+func userPmcsAccessFamily(path string) string {
+	if path == "/api/v1/auth/user-pmcs" ||
+		strings.HasPrefix(path, "/api/v1/auth/user-pmcs/") {
+		return "/api/v1/auth/user-pmcs/*"
+	}
+	return "/api/v1/user-pmcs/*"
 }
 
 func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {

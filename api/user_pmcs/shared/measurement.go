@@ -57,6 +57,14 @@ func RecordDBDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
+func RecordEncodeDuration(ctx context.Context, duration time.Duration) {
+	if measurements := requestMeasurements(ctx); measurements != nil {
+		measurements.mu.Lock()
+		measurements.encodeDuration += duration
+		measurements.mu.Unlock()
+	}
+}
+
 func RecordRetry(ctx context.Context) {
 	if measurements := requestMeasurements(ctx); measurements != nil {
 		measurements.mu.Lock()
@@ -91,11 +99,10 @@ func WriteJSON(context *gin.Context, status int, value any) {
 	)
 	startedAt := time.Now()
 	context.JSON(status, value)
-	if measurements := requestMeasurements(requestContext(context)); measurements != nil {
-		measurements.mu.Lock()
-		measurements.encodeDuration += time.Since(startedAt)
-		measurements.mu.Unlock()
-	}
+	RecordEncodeDuration(
+		requestContext(context),
+		time.Since(startedAt),
+	)
 }
 
 func requestContext(ginContext *gin.Context) context.Context {
