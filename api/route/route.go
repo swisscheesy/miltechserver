@@ -2,6 +2,10 @@ package route
 
 import (
 	"database/sql"
+	"fmt"
+	"net/http"
+	"strings"
+
 	"miltechserver/api/analytics"
 	"miltechserver/api/docs_equipment"
 	"miltechserver/api/eic"
@@ -24,13 +28,48 @@ import (
 	"miltechserver/api/user_suggestions"
 	"miltechserver/api/user_vehicles"
 	"miltechserver/bootstrap"
-	"net/http"
-	"strings"
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
 )
+
+func NewEngine() *gin.Engine {
+	router := gin.New()
+	router.Use(gin.LoggerWithFormatter(formatAccessLog))
+	router.Use(gin.Recovery())
+	return router
+}
+
+func formatAccessLog(params gin.LogFormatterParams) string {
+	path := params.Path
+	if isUserPmcsAccessPath(params.Request.URL.Path) {
+		path = params.Request.URL.Path
+	}
+
+	return fmt.Sprintf(
+		"[GIN] %v | %3d | %13v | %15s | %-7s %#v\n%s",
+		params.TimeStamp.Format("2006/01/02 - 15:04:05"),
+		params.StatusCode,
+		params.Latency,
+		params.ClientIP,
+		params.Method,
+		path,
+		params.ErrorMessage,
+	)
+}
+
+func isUserPmcsAccessPath(path string) bool {
+	for _, prefix := range []string{
+		"/api/v1/user-pmcs",
+		"/api/v1/auth/user-pmcs",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
 
 func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
 	v1Route := router.Group("/api/v1")

@@ -72,6 +72,12 @@ func TestSetupRegistersUserPmcsRoutesOnApprovedGroups(t *testing.T) {
 
 func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	var accessOutput bytes.Buffer
+	originalDefaultWriter := gin.DefaultWriter
+	gin.DefaultWriter = &accessOutput
+	t.Cleanup(func() {
+		gin.DefaultWriter = originalDefaultWriter
+	})
 	originalErrorWriter := gin.DefaultErrorWriter
 	gin.DefaultErrorWriter = io.Discard
 	t.Cleanup(func() {
@@ -91,8 +97,10 @@ func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.
 	env := &bootstrap.Env{
 		UserPmcs: bootstrap.UserPmcsConfig(config),
 	}
-	router := gin.New()
-	router.Use(gin.Recovery())
+	router := NewEngine()
+	router.GET("/unrelated-access-log-test", func(context *gin.Context) {
+		context.Status(http.StatusNoContent)
+	})
 	Setup(nil, router, nil, env, nil)
 
 	const authoredQuery = "authored-community-model-secret"
@@ -115,6 +123,27 @@ func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.
 
 	require.Equal(t, http.StatusTooManyRequests, secondRecorder.Code)
 	require.NotContains(t, output.String(), authoredQuery)
+	require.NotContains(t, accessOutput.String(), authoredQuery)
+	require.Contains(
+		t,
+		accessOutput.String(),
+		"GET",
+	)
+	require.Contains(
+		t,
+		accessOutput.String(),
+		"/api/v1/user-pmcs/community",
+	)
+
+	unrelatedRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/unrelated-access-log-test?filter=useful-structural-query",
+		nil,
+	)
+	unrelatedRecorder := httptest.NewRecorder()
+	router.ServeHTTP(unrelatedRecorder, unrelatedRequest)
+	require.Equal(t, http.StatusNoContent, unrelatedRecorder.Code)
+	require.Contains(t, accessOutput.String(), "useful-structural-query")
 }
 
 func requireRouteRegistered(t *testing.T, router *gin.Engine, method string, path string) {

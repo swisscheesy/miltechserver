@@ -25,6 +25,73 @@ type TreeCounts struct {
 	ProcedureSteps  int
 }
 
+func (counts TreeCounts) NodeCount() int {
+	return 1 +
+		counts.ChecklistModels +
+		counts.Sections +
+		counts.SectionModels +
+		counts.Items +
+		counts.Notices +
+		counts.ProcedureSteps
+}
+
+func TreeNodeCount(value any) int {
+	switch tree := value.(type) {
+	case Revision:
+		return revisionNodeCount(tree)
+	case *Revision:
+		if tree == nil {
+			return 0
+		}
+		return revisionNodeCount(*tree)
+	case ChecklistAggregate:
+		return aggregateNodeCount(tree)
+	case *ChecklistAggregate:
+		if tree == nil {
+			return 0
+		}
+		return aggregateNodeCount(*tree)
+	case InstalledChecklistRelease:
+		return revisionNodeCount(tree.Revision)
+	case *InstalledChecklistRelease:
+		if tree == nil {
+			return 0
+		}
+		return revisionNodeCount(tree.Revision)
+	case PublicChecklistRelease:
+		return revisionNodeCount(tree.Revision)
+	case *PublicChecklistRelease:
+		if tree == nil {
+			return 0
+		}
+		return revisionNodeCount(tree.Revision)
+	default:
+		return 0
+	}
+}
+
+func aggregateNodeCount(aggregate ChecklistAggregate) int {
+	count := 0
+	if aggregate.Draft != nil {
+		count += revisionNodeCount(*aggregate.Draft)
+	}
+	if aggregate.Publication != nil {
+		count += revisionNodeCount(*aggregate.Publication)
+	}
+	return count
+}
+
+func revisionNodeCount(revision Revision) int {
+	count := 1 + len(revision.Models) + len(revision.Sections)
+	for _, section := range revision.Sections {
+		count += len(section.Models) + len(section.Items)
+		for _, item := range section.Items {
+			count += len(item.Notices) + len(item.ProcedureSteps)
+		}
+	}
+	return count
+}
+
 type PreparedRevision struct {
 	Input  RevisionInput
 	Hash   [32]byte

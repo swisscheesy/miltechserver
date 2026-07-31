@@ -124,5 +124,21 @@ func setSubscriptionHeaders(context *gin.Context, etag string) {
 	context.Header("Cache-Control", subscriptionCacheControl)
 }
 func writeSubscriptionSuccess(context *gin.Context, status int, data any) {
-	context.JSON(status, response.StandardResponse{Status: status, Data: data})
+	shared.RecordNodeCount(
+		context.Request.Context(),
+		subscriptionTreeNodeCount(data),
+	)
+	shared.WriteJSON(
+		context,
+		status,
+		response.StandardResponse{Status: status, Data: data},
+	)
+}
+
+func subscriptionTreeNodeCount(data any) int {
+	result, ok := data.(*MutationResult)
+	if ok && result != nil {
+		return shared.TreeNodeCount(result.Installed)
+	}
+	return shared.TreeNodeCount(data)
 }

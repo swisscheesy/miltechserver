@@ -181,10 +181,19 @@ func (repository *RepositoryImpl) Unsubscribe(ctx context.Context, subscriberUID
 }
 
 func (repository *RepositoryImpl) GetInstalledRelease(ctx context.Context, subscriberUID string, checklistID, revisionID uuid.UUID) (*shared.InstalledChecklistRelease, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
 	return loadInstalledRelease(ctx, repository.store.DB, subscriberUID, checklistID, revisionID)
 }
 
 func (repository *RepositoryImpl) ListUpdates(ctx context.Context, subscriberUID string, after *uuid.UUID, limit int) (*shared.SubscriptionUpdatePage, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	arguments := []any{subscriberUID}
 	query := `SELECT subscription.checklist_id,
 	                 COALESCE(source.status, 'retired'),

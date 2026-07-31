@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -32,6 +33,11 @@ func (repository *RepositoryImpl) Get(
 	ownerUID string,
 	checklistID uuid.UUID,
 ) (*shared.ChecklistAggregate, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,
@@ -62,6 +68,11 @@ func (repository *RepositoryImpl) GetRevision(
 	checklistID uuid.UUID,
 	revisionID uuid.UUID,
 ) (*HistoricalRevisionResult, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,

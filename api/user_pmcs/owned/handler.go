@@ -271,9 +271,31 @@ func setImmutableOwnedHeaders(context *gin.Context, etag string) {
 }
 
 func writeSuccess(context *gin.Context, status int, data any) {
-	context.JSON(status, response.StandardResponse{
+	shared.RecordNodeCount(
+		context.Request.Context(),
+		ownedTreeNodeCount(data),
+	)
+	shared.WriteJSON(context, status, response.StandardResponse{
 		Status:  status,
 		Message: "",
 		Data:    data,
 	})
+}
+
+func ownedTreeNodeCount(data any) int {
+	if revision, ok := data.(*HistoricalRevision); ok && revision != nil {
+		return historicalRevisionNodeCount(*revision)
+	}
+	return shared.TreeNodeCount(data)
+}
+
+func historicalRevisionNodeCount(revision HistoricalRevision) int {
+	count := 1 + len(revision.Models) + len(revision.Sections)
+	for _, section := range revision.Sections {
+		count += len(section.Models) + len(section.Items)
+		for _, item := range section.Items {
+			count += len(item.Notices) + len(item.ProcedureSteps)
+		}
+	}
+	return count
 }

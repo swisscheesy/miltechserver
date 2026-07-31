@@ -223,7 +223,6 @@ func isCommunityRelease(context *gin.Context) bool {
 }
 
 func writeRateLimitExceeded(context *gin.Context) {
-	context.Set(observationCodeKey, "rate_limited")
 	context.Abort()
 	shared.WriteAPIError(
 		context,

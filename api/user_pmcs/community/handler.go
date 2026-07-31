@@ -144,7 +144,11 @@ func setPublicHeaders(context *gin.Context) {
 }
 
 func writeSuccess(context *gin.Context, status int, data any) {
-	context.JSON(status, response.StandardResponse{
+	shared.RecordNodeCount(
+		context.Request.Context(),
+		shared.TreeNodeCount(data),
+	)
+	shared.WriteJSON(context, status, response.StandardResponse{
 		Status:  status,
 		Message: "",
 		Data:    data,

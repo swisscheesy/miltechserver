@@ -38,6 +38,11 @@ func (repository *RepositoryImpl) GetDelta(
 	limit int,
 	byteLimit int,
 ) (*AccountDelta, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,

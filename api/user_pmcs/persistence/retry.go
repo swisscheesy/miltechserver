@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/lib/pq"
+
+	"miltechserver/api/user_pmcs/shared"
 )
 
 type TxFunc[T any] func(*sql.Tx) (T, error)
@@ -34,7 +36,9 @@ func WithWriteTx[T any](
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		startedAt := time.Now()
 		result, err := runWriteAttempt(ctx, database, fn)
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
 		if err == nil {
 			return result, nil
 		}
@@ -42,6 +46,7 @@ func WithWriteTx[T any](
 		if !IsRetryable(err) || attempt == maxAttempts {
 			return zero, err
 		}
+		shared.RecordRetry(ctx)
 		if err := waitForRetry(ctx, retryJitter()); err != nil {
 			return zero, err
 		}

@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -277,6 +278,11 @@ func (repository *RepositoryImpl) Browse(
 	ctx context.Context,
 	filter shared.CommunityBrowseFilter,
 ) (*shared.CommunityPage, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	query, arguments := communityBrowseQuery(filter)
 	rows, err := repository.store.DB.QueryContext(ctx, query, arguments...)
 	if err != nil {
@@ -451,6 +457,11 @@ func (repository *RepositoryImpl) GetCurrentRelease(
 	ctx context.Context,
 	checklistID uuid.UUID,
 ) (*shared.PublicChecklistRelease, error) {
+	startedAt := time.Now()
+	defer func() {
+		shared.RecordDBDuration(ctx, time.Since(startedAt))
+	}()
+
 	var (
 		release     shared.PublicChecklistRelease
 		revisionID  uuid.UUID

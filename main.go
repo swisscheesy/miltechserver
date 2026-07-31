@@ -33,7 +33,7 @@ func SetupEngine() *gin.Engine {
 	app := bootstrap.App(ctx, env)
 	db := app.Db
 
-	server := gin.Default()
+	server := route.NewEngine()
 
 	route.Setup(db, server, app.FireAuth, env, app.BlobClient)
 

@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-)
 
-const observationCodeKey = "user_pmcs_observation_code"
+	"miltechserver/api/user_pmcs/shared"
+)
 
 type Observation struct {
 	Operation      string
@@ -69,6 +69,10 @@ func observeRequests(
 	}
 	return func(context *gin.Context) {
 		startedAt := now()
+		requestContext, measurements := shared.WithRequestMeasurements(
+			context.Request.Context(),
+		)
+		context.Request = context.Request.WithContext(requestContext)
 		context.Next()
 
 		requestBytes := context.Request.ContentLength
@@ -79,15 +83,18 @@ func observeRequests(
 		if responseBytes < 0 {
 			responseBytes = 0
 		}
-		code, _ := context.Get(observationCodeKey)
-		codeValue, _ := code.(string)
+		measurement := measurements.Snapshot()
 		observer.Observe(Observation{
-			Operation:     context.Request.Method + " " + context.FullPath(),
-			Status:        context.Writer.Status(),
-			Code:          codeValue,
-			Duration:      now().Sub(startedAt),
-			RequestBytes:  requestBytes,
-			ResponseBytes: responseBytes,
+			Operation:      context.Request.Method + " " + context.FullPath(),
+			Status:         context.Writer.Status(),
+			Code:           measurement.Code,
+			Duration:       now().Sub(startedAt),
+			DBDuration:     measurement.DBDuration,
+			EncodeDuration: measurement.EncodeDuration,
+			RetryCount:     measurement.RetryCount,
+			NodeCount:      measurement.NodeCount,
+			RequestBytes:   requestBytes,
+			ResponseBytes:  responseBytes,
 		})
 	}
 }

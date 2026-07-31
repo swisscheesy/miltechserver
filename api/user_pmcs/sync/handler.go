@@ -34,7 +34,23 @@ func (handler Handler) getDelta(context *gin.Context) {
 		return
 	}
 
-	context.JSON(http.StatusOK, accountDeltaEnvelope(delta))
+	shared.RecordNodeCount(
+		context.Request.Context(),
+		accountDeltaNodeCount(delta),
+	)
+	shared.WriteJSON(context, http.StatusOK, accountDeltaEnvelope(delta))
+}
+
+func accountDeltaNodeCount(delta *AccountDelta) int {
+	if delta == nil {
+		return 0
+	}
+	count := 0
+	for _, change := range delta.Changes {
+		count += shared.TreeNodeCount(change.Checklist)
+		count += shared.TreeNodeCount(change.Installed)
+	}
+	return count
 }
 
 func authenticatedUser(

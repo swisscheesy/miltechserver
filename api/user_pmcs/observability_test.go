@@ -2,17 +2,28 @@ package user_pmcs
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
+	"miltechserver/api/user_pmcs/persistence"
+	"miltechserver/api/user_pmcs/shared"
 	"miltechserver/bootstrap"
 )
 
@@ -107,4 +118,176 @@ func TestObservationMiddlewareDoesNotLogBodiesAuthClaimsOrEmail(t *testing.T) {
 	require.NotContains(t, encoded, "authored response secret")
 	require.NotContains(t, encoded, email)
 	require.NotContains(t, encoded, token)
+}
+
+func TestObservationMiddlewareCapturesAPIErrorCodeAndEncodingDuration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	observer := &capturingObserver{}
+	router := gin.New()
+	router.Use(observeRequests(observer, time.Now))
+	router.POST("/validation", func(context *gin.Context) {
+		shared.WriteAPIError(
+			context,
+			shared.NewValidationFailed(
+				"authored response secret",
+				map[string]any{"field": "authored field secret"},
+			),
+		)
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/validation", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	observation := observer.single(t)
+	require.Equal(t, "validation_failed", observation.Code)
+	require.Equal(t, http.StatusUnprocessableEntity, observation.Status)
+	require.Positive(t, observation.EncodeDuration)
+	require.Zero(t, observation.DBDuration)
+	require.Zero(t, observation.RetryCount)
+	require.Zero(t, observation.NodeCount)
+}
+
+func TestObservationMiddlewareCapturesRetryingMutationMeasurements(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	database := openObservationDatabase(t)
+	observer := &capturingObserver{}
+	router := gin.New()
+	router.Use(observeRequests(observer, time.Now))
+	router.PUT("/mutation", func(context *gin.Context) {
+		attempts := 0
+		_, err := persistence.WithWriteTx(
+			context.Request.Context(),
+			database,
+			2,
+			func(_ *sql.Tx) (struct{}, error) {
+				attempts++
+				if attempts == 1 {
+					return struct{}{}, &pq.Error{
+						Code: pq.ErrorCode("40P01"),
+					}
+				}
+				return struct{}{}, nil
+			},
+		)
+		require.NoError(t, err)
+		shared.WriteJSON(context, http.StatusOK, gin.H{"status": "saved"})
+	})
+
+	request := httptest.NewRequest(http.MethodPut, "/mutation", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	observation := observer.single(t)
+	require.Positive(t, observation.DBDuration)
+	require.Positive(t, observation.EncodeDuration)
+	require.Equal(t, 1, observation.RetryCount)
+}
+
+func TestObservationMiddlewareCapturesFullTreeResponseNodeCount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	observer := &capturingObserver{}
+	router := gin.New()
+	router.Use(observeRequests(observer, time.Now))
+	router.GET("/full-tree", func(context *gin.Context) {
+		shared.WriteJSON(context, http.StatusOK, shared.ChecklistAggregate{
+			Draft: &shared.Revision{
+				ID:     uuid.New(),
+				Models: []shared.ModelValue{{DisplayText: "M1"}},
+				Sections: []shared.Section{{
+					ID:     uuid.New(),
+					Models: []shared.ModelValue{{DisplayText: "section M1"}},
+					Items: []shared.Item{{
+						ID:             uuid.New(),
+						Notices:        []shared.NoticeInput{{ID: uuid.New()}},
+						ProcedureSteps: []shared.ProcedureStepInput{{ID: uuid.New()}},
+					}},
+				}},
+			},
+		})
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/full-tree", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	observation := observer.single(t)
+	require.Equal(t, 7, observation.NodeCount)
+	require.Positive(t, observation.EncodeDuration)
+}
+
+type capturingObserver struct {
+	observations []Observation
+}
+
+func (observer *capturingObserver) Observe(observation Observation) {
+	observer.observations = append(observer.observations, observation)
+}
+
+func (observer *capturingObserver) single(t *testing.T) Observation {
+	t.Helper()
+	require.Len(t, observer.observations, 1)
+	return observer.observations[0]
+}
+
+type observationDriver struct{}
+
+type observationConnection struct{}
+
+type observationTransaction struct{}
+
+func (observationDriver) Open(string) (driver.Conn, error) {
+	return observationConnection{}, nil
+}
+
+func (observationConnection) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (observationConnection) Close() error {
+	return nil
+}
+
+func (observationConnection) Begin() (driver.Tx, error) {
+	return observationTransaction{}, nil
+}
+
+func (observationConnection) BeginTx(
+	context.Context,
+	driver.TxOptions,
+) (driver.Tx, error) {
+	return observationTransaction{}, nil
+}
+
+func (observationTransaction) Commit() error {
+	return nil
+}
+
+func (observationTransaction) Rollback() error {
+	return nil
+}
+
+var observationDriverCounter atomic.Uint64
+var observationDriverRegistrationMu sync.Mutex
+
+func openObservationDatabase(t *testing.T) *sql.DB {
+	t.Helper()
+
+	observationDriverRegistrationMu.Lock()
+	driverName := fmt.Sprintf(
+		"user-pmcs-observation-%d",
+		observationDriverCounter.Add(1),
+	)
+	sql.Register(driverName, observationDriver{})
+	observationDriverRegistrationMu.Unlock()
+
+	database, err := sql.Open(driverName, "")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, database.Close())
+	})
+	return database
 }

@@ -188,7 +188,8 @@ func WriteAPIError(context *gin.Context, apiError *APIError) {
 	if apiError == nil {
 		apiError = NewInternalError("unexpected server failure", nil)
 	}
-	context.JSON(apiError.Status, apiErrorResponse{
+	RecordErrorCode(requestContext(context), apiError.Code)
+	WriteJSON(context, apiError.Status, apiErrorResponse{
 		Status:  apiError.Status,
 		Message: apiError.Message,
 		Data:    nil,
