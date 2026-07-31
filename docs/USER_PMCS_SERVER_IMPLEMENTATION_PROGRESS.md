@@ -1215,3 +1215,84 @@
   cannot contain its own hash.
 - Next gate: the original Task 16 reviewer must perform a scoped re-review of
   all four findings before whole-branch closeout.
+
+### Whole-branch Task 5 reservation resolution
+
+- Status: implementation and focused verification complete; fresh independent
+  review pending.
+- Authorization: the user approved the migration 010 transaction-scoped
+  content UUID reservation protocol in the controlling reservation-fix brief.
+- Implementer: `/root/owned_task5_impl`.
+- Actual implementation base: clean
+  `4a6a2621c8a660f37e8332954bad4a3501073923`.
+- RED evidence:
+  - The unchanged SSI implementation failed the independent 20-user scenario
+    in all five consecutive runs with PostgreSQL `40001`.
+  - The schema integrity test failed because the reservation table and primary
+    key did not exist.
+  - The unchanged all-SSI mixed collision test passed 20/20, separating the
+    collision-safety requirement from the failed availability requirement.
+- Migration 010 creates only
+  `user_pmcs_content_uuid_reservations(id UUID PRIMARY KEY)`.
+- Test database migration:
+  - verified `current_database() = miltech_ng_test` before every migration
+    operation;
+  - completed forward/rollback/forward;
+  - final table present with zero rows.
+- Development database migration:
+  - verified `current_database() = miltech_ng`;
+  - applied the forward migration exactly once;
+  - did not run a development rollback;
+  - final table present with zero rows.
+- No production migration or production database connection occurred.
+- Jet was regenerated from migrated `miltech_ng`. The generated reservation
+  model and table files were not hand-edited.
+- Protocol:
+  - Create, PutDraft, and Publish gather revision/section/item/notice/step UUIDs;
+  - one `INSERT ... SELECT ... ORDER BY` statement acquires the globally ordered
+    reservation set inside the write transaction;
+  - reservations remain held through validation and aggregate writes;
+  - successful mutations explicitly delete reservations before commit;
+  - rollback, callback failure, context cancellation, and backend termination
+    clean up transactionally.
+- Focused verification:
+  - protocol/lifecycle/collision tests: 14/14 passed;
+  - repeated reverse-order, same-table, cross-table, and mixed-size collisions:
+    80/80 passed;
+  - current Create/PutDraft/Publish/immutable-publication group: 36/36 passed;
+  - API tests: 296/296 passed;
+  - API race tests: 296/296 passed;
+  - focused real-database race tests: 14/14 passed;
+  - vet: passed with no output;
+  - full-repository compile-only command: passed after the sandbox-denied
+    database connection was retried with the required approval.
+- Performance evidence:
+  - independent 20-user repeated scenario: 20/20 passed with no `40001`,
+    zero measured lock waits, 620 expected queries, zero retained reservations,
+    and p50/p95 transaction latency `434.083ms/458.703ms`;
+  - maximum-size reservation churn: acquisition p50/p95
+    `79.718ms/109.812ms`, cleanup `44.798ms/58.631ms`, transaction
+    `145.034ms/192.938ms`, WAL delta `9,922,656` bytes, and zero retained rows;
+  - disjoint maximum-size writes: p50/p95 `2.090s/2.216s`, zero failures,
+    zero measured lock waits, 252 queries, and zero retained rows.
+- PostgreSQL 14.18 does not expose `pg_stat_force_next_flush`, and
+  `pgstattuple` is unavailable. Dead-tuple observations therefore use the
+  server's approximate relation statistics.
+- Full-package truth: `go test ./tests/user_pmcs` was not green. It reported
+  263 passing tests and three failure events in physical-plan assertions. The
+  reproducible approved-index assertion observed a valid index scan through
+  `user_pmcs_subscriptions_pkey` instead of the strict delta-index expectation.
+  A subscription discovery assertion observed a sequential scan only in the
+  full-suite state and passed in isolation. These failures were neither skipped
+  nor relabeled as reservation successes.
+- Commits:
+  - `2455f3d9bd762270ff5349eac5fb2dc861baeec7`
+    `feat(user-pmcs): add content UUID reservations`;
+  - `337c99500bb1cf902a38f6365ab2ce06e1f89b86`
+    `fix(user-pmcs): reserve content UUID writes`;
+  - `2213de8356cc3efdb8ada44e8e06fcda1986abe8`
+    `chore(user-pmcs): regenerate reservation models`.
+- Pre-ledger HEAD:
+  `2213de8356cc3efdb8ada44e8e06fcda1986abe8`.
+- Next gate: fresh independent review of the complete reservation change and
+  recorded evidence.
