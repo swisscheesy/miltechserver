@@ -3,6 +3,9 @@ package user_pmcs_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -11,12 +14,75 @@ import (
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
+	"miltechserver/api/user_pmcs/community"
+	"miltechserver/api/user_pmcs/owned"
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
+	userpmcssync "miltechserver/api/user_pmcs/sync"
 )
 
 func TestConcurrencyDatabaseSafetyGate(t *testing.T) {
 	requireUserPmcsTestDatabase(t, testDB)
+}
+
+func TestConcurrencyBarrierIdentifiesOnlyExpectedFixtureWorkers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	userUID := newUserPmcsTestUser(t)
+	blocker, waiter := dedicatedConnections(t, ctx)
+	observer, err := testDB.Conn(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, observer.Close())
+	})
+
+	blockerPID := backendPID(t, ctx, blocker)
+	waiterPID := backendPID(t, ctx, waiter)
+	observerPID := backendPID(t, ctx, observer)
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_sync_state (user_uid, current_version)
+		 VALUES ($1, 0)`,
+		userUID,
+	)
+	require.NoError(t, err)
+	lockTx, err := blocker.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = lockTx.ExecContext(
+		ctx,
+		`SELECT current_version
+		 FROM user_pmcs_sync_state
+		 WHERE user_uid = $1
+		 FOR UPDATE`,
+		userUID,
+	)
+	require.NoError(t, err)
+
+	waitResult := make(chan error, 1)
+	go func() {
+		_, waitErr := waiter.ExecContext(
+			ctx,
+			`SELECT current_version
+			 FROM user_pmcs_sync_state
+			 WHERE user_uid = $1
+			 FOR UPDATE`,
+			userUID,
+		)
+		waitResult <- waitErr
+	}()
+
+	require.Eventually(t, func() bool {
+		blocked, queryErr := queryBlockedWorkerPIDs(
+			ctx,
+			observer,
+			blockerPID,
+			[]int{waiterPID, observerPID},
+		)
+		return queryErr == nil && slices.Equal([]int{waiterPID}, blocked)
+	}, 5*time.Second, 20*time.Millisecond)
+	require.NoError(t, lockTx.Rollback())
+	require.NoError(t, <-waitResult)
 }
 
 func TestConcurrencySimultaneousSavesWithOneETagMutateExactlyOnce(
@@ -43,10 +109,17 @@ func TestConcurrencySimultaneousSavesWithOneETagMutateExactlyOnce(
 	require.NoError(t, err)
 	_, err = lockTx.ExecContext(
 		ctx,
-		`SELECT id FROM user_pmcs_checklists WHERE id = $1 FOR UPDATE`,
-		checklistID,
+		`SELECT current_version
+		 FROM user_pmcs_sync_state
+		 WHERE user_uid = $1
+		 FOR UPDATE`,
+		ownerUID,
 	)
 	require.NoError(t, err)
+	blockerPID := backendPID(t, ctx, blocker)
+	workerOne := newDedicatedRepositoryWorker(t, ctx, "same-etag-one")
+	workerTwo := newDedicatedRepositoryWorker(t, ctx, "same-etag-two")
+	workersByIndex := []dedicatedRepositoryWorker{workerOne, workerTwo}
 
 	drafts := []shared.PreparedRevision{
 		preparedTree(t, uuid.New()),
@@ -55,13 +128,13 @@ func TestConcurrencySimultaneousSavesWithOneETagMutateExactlyOnce(
 	start := make(chan struct{})
 	results := make(chan error, len(drafts))
 	var workers sync.WaitGroup
-	for _, draft := range drafts {
-		draft := draft
+	for index, draft := range drafts {
+		index, draft := index, draft
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
 			<-start
-			_, putErr := repository.PutDraft(
+			_, putErr := workersByIndex[index].owned().PutDraft(
 				ctx,
 				ownerUID,
 				checklistID,
@@ -75,7 +148,15 @@ func TestConcurrencySimultaneousSavesWithOneETagMutateExactlyOnce(
 		}()
 	}
 	close(start)
-	waitForBlockedUserPmcsQuery(t, ctx, observer)
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{workerOne.pid, workerTwo.pid},
+		[]int{workerOne.pid, workerTwo.pid},
+		"user_pmcs_sync_state",
+	)
 	require.NoError(t, lockTx.Rollback())
 	waitForWorkers(t, &workers, 10*time.Second)
 	close(results)
@@ -110,16 +191,39 @@ func TestConcurrencySameNextPublicationHasNoDuplicateOrSkip(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	blocker, observer := dedicatedConnections(t, ctx)
+	lockTx, err := blocker.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = lockTx.ExecContext(
+		ctx,
+		`SELECT current_version
+		 FROM user_pmcs_sync_state
+		 WHERE user_uid = $1
+		 FOR UPDATE`,
+		ownerUID,
+	)
+	require.NoError(t, err)
+	blockerPID := backendPID(t, ctx, blocker)
+	workerOne := newDedicatedRepositoryWorker(t, ctx, "publication-one")
+	workerTwo := newDedicatedRepositoryWorker(t, ctx, "publication-two")
+	workerRepositories := []owned.Repository{
+		workerOne.owned(),
+		workerTwo.owned(),
+	}
 	publications := []shared.PreparedRevision{
 		preparePublication(t, preparedTree(t, uuid.New()).Input, 2),
 		preparePublication(t, preparedTree(t, uuid.New()).Input, 2),
 	}
-	results := runConcurrentOwnedMutations(
-		t,
-		ctx,
-		publications,
-		func(publication shared.PreparedRevision) error {
-			_, publishErr := repository.Publish(
+	results := make(chan error, len(publications))
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for index, publication := range publications {
+		index, publication := index, publication
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			_, publishErr := workerRepositories[index].Publish(
 				ctx,
 				ownerUID,
 				checklistID,
@@ -129,9 +233,22 @@ func TestConcurrencySameNextPublicationHasNoDuplicateOrSkip(t *testing.T) {
 					first.Aggregate.SyncVersion,
 				),
 			)
-			return publishErr
-		},
+			results <- publishErr
+		}()
+	}
+	close(start)
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{workerOne.pid, workerTwo.pid},
+		[]int{workerOne.pid, workerTwo.pid},
+		"user_pmcs_sync_state",
 	)
+	require.NoError(t, lockTx.Rollback())
+	waitForWorkers(t, &workers, 10*time.Second)
+	close(results)
 	requireOneSuccessAndOneStale(t, results)
 
 	var numbers []int32
@@ -184,16 +301,39 @@ func TestConcurrencyHigherReleaseWinsAndLowerReleaseCannotRollback(
 	)
 	require.NoError(t, err)
 
+	blocker, observer := dedicatedConnections(t, ctx)
+	lockTx, err := blocker.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = lockTx.ExecContext(
+		ctx,
+		`SELECT current_version
+		 FROM user_pmcs_sync_state
+		 WHERE user_uid = $1
+		 FOR UPDATE`,
+		fixture.ownerUID,
+	)
+	require.NoError(t, err)
+	blockerPID := backendPID(t, ctx, blocker)
+	workerOne := newDedicatedRepositoryWorker(t, ctx, "release-higher")
+	workerTwo := newDedicatedRepositoryWorker(t, ctx, "release-lower")
+	workerRepositories := []community.Repository{
+		workerOne.community(),
+		workerTwo.community(),
+	}
 	releases := []shared.PreparedRevision{
 		fixture.revisions[2],
 		fixture.revisions[0],
 	}
-	results := runConcurrentOwnedMutations(
-		t,
-		ctx,
-		releases,
-		func(revision shared.PreparedRevision) error {
-			_, releaseErr := fixture.repository.Release(
+	results := make(chan error, len(releases))
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for index, revision := range releases {
+		index, revision := index, revision
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			_, releaseErr := workerRepositories[index].Release(
 				ctx,
 				fixture.ownerUID,
 				fixture.checklist,
@@ -203,9 +343,22 @@ func TestConcurrencyHigherReleaseWinsAndLowerReleaseCannotRollback(
 					second.Aggregate.SyncVersion,
 				),
 			)
-			return releaseErr
-		},
+			results <- releaseErr
+		}()
+	}
+	close(start)
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{workerOne.pid, workerTwo.pid},
+		[]int{workerOne.pid, workerTwo.pid},
+		"user_pmcs_sync_state",
 	)
+	require.NoError(t, lockTx.Rollback())
+	waitForWorkers(t, &workers, 10*time.Second)
+	close(results)
 
 	var successes, rejected int
 	for result := range results {
@@ -244,12 +397,26 @@ func TestConcurrencyFirstMutationsCreateOneOrderedSyncState(t *testing.T) {
 	defer cancel()
 
 	ownerUID := newUserPmcsTestUser(t)
-	repository := newOwnedRepository()
 	drafts := []shared.PreparedRevision{
 		preparedTree(t, uuid.New()),
 		preparedTree(t, uuid.New()),
 	}
 	checklistIDs := []uuid.UUID{uuid.New(), uuid.New()}
+	blocker, observer := dedicatedConnections(t, ctx)
+	lockTx, err := blocker.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = lockTx.ExecContext(
+		ctx,
+		`LOCK TABLE users IN ACCESS EXCLUSIVE MODE`,
+	)
+	require.NoError(t, err)
+	blockerPID := backendPID(t, ctx, blocker)
+	workerOne := newDedicatedRepositoryWorker(t, ctx, "first-mutation-one")
+	workerTwo := newDedicatedRepositoryWorker(t, ctx, "first-mutation-two")
+	workerRepositories := []owned.Repository{
+		workerOne.owned(),
+		workerTwo.owned(),
+	}
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	var workers sync.WaitGroup
@@ -259,7 +426,7 @@ func TestConcurrencyFirstMutationsCreateOneOrderedSyncState(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			_, createErr := repository.Create(
+			_, createErr := workerRepositories[index].Create(
 				ctx,
 				ownerUID,
 				checklistIDs[index],
@@ -270,6 +437,16 @@ func TestConcurrencyFirstMutationsCreateOneOrderedSyncState(t *testing.T) {
 		}()
 	}
 	close(start)
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{workerOne.pid, workerTwo.pid},
+		[]int{workerOne.pid, workerTwo.pid},
+		"users",
+	)
+	require.NoError(t, lockTx.Rollback())
 	waitForWorkers(t, &workers, 10*time.Second)
 	close(results)
 	for result := range results {
@@ -334,6 +511,13 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 		blockedUID,
 	)
 	require.NoError(t, err)
+	blockerPID := backendPID(t, ctx, blocker)
+	blockedWorker := newDedicatedRepositoryWorker(t, ctx, "blocked-user")
+	independentWorker := newDedicatedRepositoryWorker(
+		t,
+		ctx,
+		"independent-user",
+	)
 
 	type outcome struct {
 		uid string
@@ -345,6 +529,10 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 		blockedUID:     preparedTree(t, uuid.New()),
 		independentUID: preparedTree(t, uuid.New()),
 	}
+	workerByUID := map[string]dedicatedRepositoryWorker{
+		blockedUID:     blockedWorker,
+		independentUID: independentWorker,
+	}
 	var workers sync.WaitGroup
 	for _, uid := range []string{blockedUID, independentUID} {
 		uid := uid
@@ -352,7 +540,7 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 		go func() {
 			defer workers.Done()
 			<-start
-			_, createErr := newOwnedRepository().Create(
+			_, createErr := workerByUID[uid].owned().Create(
 				ctx,
 				uid,
 				uuid.New(),
@@ -363,7 +551,15 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 		}()
 	}
 	close(start)
-	waitForBlockedUserPmcsQuery(t, ctx, observer)
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{blockedWorker.pid, independentWorker.pid},
+		[]int{blockedWorker.pid},
+		"user_pmcs_sync_state",
+	)
 
 	select {
 	case result := <-results:
@@ -420,7 +616,7 @@ func TestConcurrencyDeadlockClassificationAndBoundedRetryExhaustion(
 }
 
 func TestConcurrencyLaterMutationAppearsOnNextDeltaPageOnly(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	ownerUID := newUserPmcsTestUser(t)
@@ -436,31 +632,74 @@ func TestConcurrencyLaterMutationAppearsOnNextDeltaPageOnly(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	deltaRepository := newAccountDeltaRepository()
-	firstPage, err := deltaRepository.GetDelta(
+	blocker, observer := dedicatedConnections(t, ctx)
+	lockTx, err := blocker.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	_, err = lockTx.ExecContext(
 		ctx,
-		ownerUID,
-		0,
-		1,
-		shared.DefaultConfig().MaxDeltaResponseBytes,
+		`LOCK TABLE user_pmcs_subscriptions IN ACCESS EXCLUSIVE MODE`,
 	)
 	require.NoError(t, err)
-	require.Len(t, firstPage.Changes, 1)
-	require.Equal(t, int64(2), firstPage.AccountVersion)
-	require.Equal(t, int64(1), firstPage.ThroughCursor)
-	require.True(t, firstPage.HasMore)
+	blockerPID := backendPID(t, ctx, blocker)
+	snapshotWorker := newDedicatedRepositoryWorker(t, ctx, "delta-snapshot")
+	mutationWorker := newDedicatedRepositoryWorker(t, ctx, "delta-mutation")
+
+	type deltaOutcome struct {
+		page *userpmcssync.AccountDelta
+		err  error
+	}
+	deltaResults := make(chan deltaOutcome, 1)
+	go func() {
+		page, deltaErr := snapshotWorker.delta().GetDelta(
+			ctx,
+			ownerUID,
+			0,
+			25,
+			shared.DefaultConfig().MaxDeltaResponseBytes,
+		)
+		deltaResults <- deltaOutcome{page: page, err: deltaErr}
+	}()
+	waitForExactBlockedWorkers(
+		t,
+		ctx,
+		observer,
+		blockerPID,
+		[]int{snapshotWorker.pid, mutationWorker.pid},
+		[]int{snapshotWorker.pid},
+		"user_pmcs_account_delta_roots",
+	)
 
 	laterChecklistID := uuid.New()
-	_, err = repository.Create(
-		ctx,
-		ownerUID,
-		laterChecklistID,
-		preparedTree(t, uuid.New()),
-		shared.Precondition{Mode: shared.PreconditionCreate},
-	)
-	require.NoError(t, err)
+	mutationResults := make(chan error, 1)
+	go func() {
+		_, mutationErr := mutationWorker.owned().Create(
+			ctx,
+			ownerUID,
+			laterChecklistID,
+			preparedTree(t, uuid.New()),
+			shared.Precondition{Mode: shared.PreconditionCreate},
+		)
+		mutationResults <- mutationErr
+	}()
+	select {
+	case mutationErr := <-mutationResults:
+		require.NoError(t, mutationErr)
+	case <-ctx.Done():
+		t.Fatalf("later mutation did not commit while snapshot waited: %v", ctx.Err())
+	}
+	require.NoError(t, lockTx.Rollback())
+	firstOutcome := <-deltaResults
+	require.NoError(t, firstOutcome.err)
+	firstPage := firstOutcome.page
+	require.Len(t, firstPage.Changes, 2)
+	require.Equal(t, int64(2), firstPage.AccountVersion)
+	require.Equal(t, int64(2), firstPage.ThroughCursor)
+	require.False(t, firstPage.HasMore)
+	for _, change := range firstPage.Changes {
+		require.NotEqual(t, laterChecklistID, change.Checklist.ID)
+	}
 
-	nextPage, err := deltaRepository.GetDelta(
+	nextPage, err := snapshotWorker.delta().GetDelta(
 		ctx,
 		ownerUID,
 		firstPage.ThroughCursor,
@@ -469,11 +708,10 @@ func TestConcurrencyLaterMutationAppearsOnNextDeltaPageOnly(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, int64(3), nextPage.AccountVersion)
-	require.Len(t, nextPage.Changes, 2)
-	require.Equal(t, int64(2), nextPage.Changes[0].AccountChangeVersion)
-	require.Equal(t, int64(3), nextPage.Changes[1].AccountChangeVersion)
-	require.NotNil(t, nextPage.Changes[1].Checklist)
-	require.Equal(t, laterChecklistID, nextPage.Changes[1].Checklist.ID)
+	require.Len(t, nextPage.Changes, 1)
+	require.Equal(t, int64(3), nextPage.Changes[0].AccountChangeVersion)
+	require.NotNil(t, nextPage.Changes[0].Checklist)
+	require.Equal(t, laterChecklistID, nextPage.Changes[0].Checklist.ID)
 }
 
 func dedicatedConnections(
@@ -495,24 +733,170 @@ func dedicatedConnections(
 	return first, second
 }
 
-func waitForBlockedUserPmcsQuery(
+func backendPID(
+	t *testing.T,
+	ctx context.Context,
+	connection *sql.Conn,
+) int {
+	t.Helper()
+	var pid int
+	require.NoError(
+		t,
+		connection.QueryRowContext(ctx, `SELECT pg_backend_pid()`).Scan(&pid),
+	)
+	return pid
+}
+
+func queryBlockedWorkerPIDs(
+	ctx context.Context,
+	observer *sql.Conn,
+	blockerPID int,
+	candidatePIDs []int,
+	queryToken ...string,
+) ([]int, error) {
+	token := ""
+	if len(queryToken) > 0 {
+		token = queryToken[0]
+	}
+	rows, err := observer.QueryContext(
+		ctx,
+		`WITH RECURSIVE blocked_chain(pid) AS (
+		     SELECT $2::integer
+		     UNION
+		     SELECT activity.pid
+		     FROM pg_stat_activity AS activity
+		     JOIN blocked_chain AS blocker
+		       ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+		 )
+		 SELECT activity.pid
+		 FROM pg_stat_activity AS activity
+		 JOIN blocked_chain ON blocked_chain.pid = activity.pid
+		 WHERE activity.pid = ANY($1)
+		   AND activity.wait_event_type = 'Lock'
+		   AND ($3 = '' OR activity.query LIKE '%' || $3 || '%')
+		 ORDER BY activity.pid`,
+		pq.Array(candidatePIDs),
+		blockerPID,
+		token,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var blocked []int
+	for rows.Next() {
+		var pid int
+		if err := rows.Scan(&pid); err != nil {
+			return nil, err
+		}
+		blocked = append(blocked, pid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return blocked, rows.Close()
+}
+
+func waitForExactBlockedWorkers(
 	t *testing.T,
 	ctx context.Context,
 	observer *sql.Conn,
-) {
+	blockerPID int,
+	candidatePIDs []int,
+	expectedPIDs []int,
+	queryToken string,
+) time.Duration {
 	t.Helper()
+	expected := append([]int(nil), expectedPIDs...)
+	slices.Sort(expected)
+	started := time.Now()
 	require.Eventually(t, func() bool {
-		var blocked int
-		err := observer.QueryRowContext(
+		blocked, err := queryBlockedWorkerPIDs(
 			ctx,
-			`SELECT count(*)
-			 FROM pg_stat_activity
-			 WHERE pid <> pg_backend_pid()
-			   AND wait_event_type = 'Lock'
-			   AND query LIKE '%user_pmcs_%'`,
-		).Scan(&blocked)
-		return err == nil && blocked > 0
+			observer,
+			blockerPID,
+			candidatePIDs,
+			queryToken,
+		)
+		return err == nil && slices.Equal(expected, blocked)
 	}, 5*time.Second, 20*time.Millisecond)
+	return time.Since(started)
+}
+
+type dedicatedRepositoryWorker struct {
+	database        *sql.DB
+	pid             int
+	applicationName string
+}
+
+func newDedicatedRepositoryWorker(
+	t *testing.T,
+	ctx context.Context,
+	label string,
+) dedicatedRepositoryWorker {
+	t.Helper()
+	dsn := disableSSLWhenUnspecified(os.Getenv("TEST_DATABASE_URL"))
+	connector, err := pq.NewConnector(dsn)
+	require.NoError(t, err)
+	database := sql.OpenDB(connector)
+	database.SetMaxOpenConns(1)
+	database.SetMaxIdleConns(1)
+
+	connection, err := database.Conn(ctx)
+	require.NoError(t, err)
+	applicationName := fmt.Sprintf(
+		"upmcs-%s-%s",
+		label,
+		uuid.NewString()[:8],
+	)
+	var (
+		configuredName string
+		pid            int
+	)
+	require.NoError(
+		t,
+		connection.QueryRowContext(
+			ctx,
+			`SELECT set_config('application_name', $1, false),
+			        pg_backend_pid()`,
+			applicationName,
+		).Scan(&configuredName, &pid),
+	)
+	require.Equal(t, applicationName, configuredName)
+	require.NoError(t, connection.Close())
+	requireUserPmcsTestDatabase(t, database)
+
+	t.Cleanup(func() {
+		require.NoError(t, database.Close())
+	})
+	return dedicatedRepositoryWorker{
+		database:        database,
+		pid:             pid,
+		applicationName: applicationName,
+	}
+}
+
+func (worker dedicatedRepositoryWorker) owned() owned.Repository {
+	config := shared.DefaultConfig()
+	return owned.NewRepository(
+		persistence.NewStore(worker.database, config.TransactionMaxAttempts),
+		config,
+	)
+}
+
+func (worker dedicatedRepositoryWorker) community() community.Repository {
+	config := shared.DefaultConfig()
+	return community.NewRepository(
+		persistence.NewStore(worker.database, config.TransactionMaxAttempts),
+		config,
+	)
+}
+
+func (worker dedicatedRepositoryWorker) delta() userpmcssync.Repository {
+	config := shared.DefaultConfig()
+	return userpmcssync.NewRepository(
+		persistence.NewStore(worker.database, config.TransactionMaxAttempts),
+	)
 }
 
 func waitForWorkers(

@@ -17,9 +17,11 @@ func newUserPmcsTestUser(t *testing.T) string {
 	t.Helper()
 	requireUserPmcsTestDatabase(t, testDB)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	userUID := "user-pmcs-" + uuid.NewString()
 	_, err := testDB.ExecContext(
-		context.Background(),
+		ctx,
 		`INSERT INTO users (uid, email, username, created_at, is_enabled)
 		 VALUES ($1, $2, $3, $4, TRUE)`,
 		userUID,
@@ -30,14 +32,19 @@ func newUserPmcsTestUser(t *testing.T) string {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		_, cleanupError := testDB.ExecContext(
+		cleanupCtx, cleanupCancel := context.WithTimeout(
 			context.Background(),
+			10*time.Second,
+		)
+		defer cleanupCancel()
+		_, cleanupError := testDB.ExecContext(
+			cleanupCtx,
 			`DELETE FROM user_pmcs_checklists WHERE owner_uid = $1`,
 			userUID,
 		)
 		require.NoError(t, cleanupError)
 		_, cleanupError = testDB.ExecContext(
-			context.Background(),
+			cleanupCtx,
 			`DELETE FROM users WHERE uid = $1`,
 			userUID,
 		)
@@ -79,14 +86,16 @@ func insertChecklistAndRevision(
 		publishedAt = time.Now().UTC()
 	}
 
-	tx, err := testDB.BeginTx(context.Background(), nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	tx, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_ = tx.Rollback()
 	})
 
 	_, err = tx.ExecContext(
-		context.Background(),
+		ctx,
 		`INSERT INTO user_pmcs_checklists
 		     (id, owner_uid, sync_version, account_change_version)
 		 VALUES ($1, $2, 1, 1)`,
@@ -95,7 +104,7 @@ func insertChecklistAndRevision(
 	)
 	require.NoError(t, err)
 	_, err = tx.ExecContext(
-		context.Background(),
+		ctx,
 		`INSERT INTO user_pmcs_revisions
 		     (id, checklist_id, state, revision_number, name, description,
 		      content_hash, published_at)

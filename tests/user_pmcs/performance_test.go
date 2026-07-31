@@ -31,15 +31,23 @@ import (
 )
 
 type performanceEvidence struct {
-	scenario          string
-	latencies         []time.Duration
-	dbDuration        time.Duration
-	lockWait          time.Duration
-	encodeDuration    time.Duration
-	peakAllocated     uint64
-	uncompressedBytes int
-	gzipBytes         int
-	queryCount        int
+	scenario           string
+	latencies          []time.Duration
+	dbDuration         time.Duration
+	lockWait           time.Duration
+	encodeDuration     time.Duration
+	peakLiveBytes      uint64
+	uncompressedBytes  int
+	gzipBytes          int
+	queryCount         int
+	latencyMeasured    bool
+	dbMeasured         bool
+	lockWaitMeasured   bool
+	lockWaitWasZero    bool
+	encodeMeasured     bool
+	peakLiveMeasured   bool
+	bytesMeasured      bool
+	queryCountMeasured bool
 }
 
 type performanceSubscriptionFixture struct {
@@ -52,10 +60,19 @@ type performanceSubscriptionFixture struct {
 	normalizedName string
 }
 
+func TestPerformanceEvidenceRejectsUnmeasuredFields(t *testing.T) {
+	err := validatePerformanceEvidence(performanceEvidence{
+		scenario: "incomplete",
+	})
+	require.ErrorContains(t, err, "unmeasured")
+}
+
 func TestPerformanceScenarios(t *testing.T) {
 	requireUserPmcsTestDatabase(t, testDB)
 	config := shared.DefaultConfig()
-	performanceDB, queryCounter := newQueryCountingDatabase(t)
+	performanceDB, queryCounter, performanceApplicationName :=
+		newQueryCountingDatabase(t)
+	capturedProductionQueries := make(map[string]observedQuery)
 
 	t.Run("maximum tree and body field boundaries", func(t *testing.T) {
 		input := maximumDeterministicTree(
@@ -150,8 +167,12 @@ func TestPerformanceScenarios(t *testing.T) {
 		)
 		maximumDraft, err := shared.PrepareDraft(maximumInput, config)
 		require.NoError(t, err)
-		before := readMemoryStats()
 		queryCounter.reset()
+		draftPeakSampler := startPeakLiveSampler()
+		draftLockSampler := startLockWaitSampler(
+			ctx,
+			performanceApplicationName,
+		)
 		draftStarted := time.Now()
 		replaced, err := repository.PutDraft(
 			ctx,
@@ -168,7 +189,6 @@ func TestPerformanceScenarios(t *testing.T) {
 		require.NoError(t, err)
 		require.Positive(t, draftQueryCount)
 		require.LessOrEqual(t, draftQueryCount, 200)
-		after := readMemoryStats()
 
 		encodeStarted := time.Now()
 		encodedDraft, err := json.Marshal(replaced.Aggregate)
@@ -194,15 +214,38 @@ func TestPerformanceScenarios(t *testing.T) {
 			"scenario=maximum_draft_replacement allocations_per_encode=%.0f",
 			allocations,
 		)
+		draftGzipBytes := compressedSize(t, encodedDraft)
+		draftPeakLiveBytes := draftPeakSampler.finish()
+		draftLockWait := finishLockWaitSampler(t, draftLockSampler)
+		for _, query := range queryCounter.snapshot() {
+			if strings.Contains(query.query, "FROM user_pmcs_revisions") {
+				capturedProductionQueries["batched revision loader"] = query
+			}
+			if strings.Contains(
+				query.query,
+				"FROM user_pmcs_subscriptions",
+			) && strings.Contains(query.query, "FOR UPDATE") {
+				capturedProductionQueries["active pin lookup"] = query
+			}
+		}
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:          "maximum_draft_replacement",
-			latencies:         []time.Duration{draftDuration},
-			dbDuration:        draftDuration,
-			encodeDuration:    encodeDuration,
-			peakAllocated:     after.TotalAlloc - before.TotalAlloc,
-			uncompressedBytes: len(encodedDraft),
-			gzipBytes:         compressedSize(t, encodedDraft),
-			queryCount:        draftQueryCount,
+			scenario:           "maximum_draft_replacement",
+			latencies:          []time.Duration{draftDuration},
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           draftLockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      draftPeakLiveBytes,
+			uncompressedBytes:  len(encodedDraft),
+			gzipBytes:          draftGzipBytes,
+			queryCount:         draftQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    draftLockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 
 		number := int32(1)
@@ -213,8 +256,12 @@ func TestPerformanceScenarios(t *testing.T) {
 			config,
 		)
 		require.NoError(t, err)
-		before = readMemoryStats()
 		queryCounter.reset()
+		publishPeakSampler := startPeakLiveSampler()
+		publishLockSampler := startLockWaitSampler(
+			ctx,
+			performanceApplicationName,
+		)
 		publishStarted := time.Now()
 		published, err := repository.Publish(
 			ctx,
@@ -231,7 +278,6 @@ func TestPerformanceScenarios(t *testing.T) {
 		require.NoError(t, err)
 		require.Positive(t, publishQueryCount)
 		require.LessOrEqual(t, publishQueryCount, 100)
-		after = readMemoryStats()
 		encodeStarted = time.Now()
 		encodedPublication, err := json.Marshal(published.Aggregate)
 		require.NoError(t, err)
@@ -241,15 +287,35 @@ func TestPerformanceScenarios(t *testing.T) {
 			len(encodedPublication),
 			config.MaxDeltaResponseBytes,
 		)
+		publishGzipBytes := compressedSize(t, encodedPublication)
+		publishPeakLiveBytes := publishPeakSampler.finish()
+		publishLockWait := finishLockWaitSampler(t, publishLockSampler)
+		for _, query := range queryCounter.snapshot() {
+			if strings.Contains(
+				query.query,
+				"FROM user_pmcs_subscriptions",
+			) && strings.Contains(query.query, "FOR UPDATE") {
+				capturedProductionQueries["active pin lookup"] = query
+			}
+		}
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:          "maximum_publication",
-			latencies:         []time.Duration{publishDuration},
-			dbDuration:        publishDuration,
-			encodeDuration:    encodeDuration,
-			peakAllocated:     after.TotalAlloc - before.TotalAlloc,
-			uncompressedBytes: len(encodedPublication),
-			gzipBytes:         compressedSize(t, encodedPublication),
-			queryCount:        publishQueryCount,
+			scenario:           "maximum_publication",
+			latencies:          []time.Duration{publishDuration},
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           publishLockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      publishPeakLiveBytes,
+			uncompressedBytes:  len(encodedPublication),
+			gzipBytes:          publishGzipBytes,
+			queryCount:         publishQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    publishLockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
@@ -315,6 +381,8 @@ func TestPerformanceScenarios(t *testing.T) {
 			revisionIDs = append(revisionIDs, revisionID)
 		}
 		queryCounter.reset()
+		peakSampler := startPeakLiveSampler()
+		lockSampler := startLockWaitSampler(ctx, performanceApplicationName)
 		started := time.Now()
 		delta, err := userpmcssync.NewRepository(
 			persistence.NewStore(performanceDB, 3),
@@ -353,14 +421,33 @@ func TestPerformanceScenarios(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, loaded, 25)
 		require.Equal(t, 7, queryer.queryCount)
+		gzipBytes := compressedSize(t, payload)
+		peakLiveBytes := peakSampler.finish()
+		lockWait := finishLockWaitSampler(t, lockSampler)
+		capturedProductionQueries["merged account delta"] =
+			requireObservedQuery(
+				t,
+				queryCounter.snapshot(),
+				"user_pmcs_account_delta_roots",
+			)
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:          "25_root_embedded_delta",
-			latencies:         []time.Duration{dbDuration},
-			dbDuration:        dbDuration,
-			encodeDuration:    encodeDuration,
-			uncompressedBytes: len(payload),
-			gzipBytes:         compressedSize(t, payload),
-			queryCount:        deltaQueryCount,
+			scenario:           "25_root_embedded_delta",
+			latencies:          []time.Duration{dbDuration},
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           lockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      peakLiveBytes,
+			uncompressedBytes:  len(payload),
+			gzipBytes:          gzipBytes,
+			queryCount:         deltaQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    lockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
@@ -377,9 +464,13 @@ func TestPerformanceScenarios(t *testing.T) {
 			users[index] = newUserPmcsTestUser(t)
 			drafts[index] = preparedTree(t, uuid.New())
 		}
+		type concurrentOutcome struct {
+			duration time.Duration
+			result   *owned.MutationResult
+			err      error
+		}
 		start := make(chan struct{})
-		durations := make(chan time.Duration, userCount)
-		errorsChannel := make(chan error, userCount)
+		outcomes := make(chan concurrentOutcome, userCount)
 		repository := owned.NewRepository(
 			persistence.NewStore(
 				performanceDB,
@@ -388,6 +479,8 @@ func TestPerformanceScenarios(t *testing.T) {
 			config,
 		)
 		queryCounter.reset()
+		peakSampler := startPeakLiveSampler()
+		lockSampler := startLockWaitSampler(ctx, performanceApplicationName)
 		var workers sync.WaitGroup
 		for index := range users {
 			index := index
@@ -396,7 +489,7 @@ func TestPerformanceScenarios(t *testing.T) {
 				defer workers.Done()
 				<-start
 				started := time.Now()
-				_, err := repository.Create(
+				result, err := repository.Create(
 					ctx,
 					users[index],
 					uuid.New(),
@@ -405,28 +498,52 @@ func TestPerformanceScenarios(t *testing.T) {
 						Mode: shared.PreconditionCreate,
 					},
 				)
-				durations <- time.Since(started)
-				errorsChannel <- err
+				outcomes <- concurrentOutcome{
+					duration: time.Since(started),
+					result:   result,
+					err:      err,
+				}
 			}()
 		}
 		close(start)
 		waitForWorkers(t, &workers, 25*time.Second)
-		close(durations)
-		close(errorsChannel)
-		for err := range errorsChannel {
-			require.NoError(t, err)
-		}
+		close(outcomes)
 		samples := make([]time.Duration, 0, userCount)
-		for duration := range durations {
-			samples = append(samples, duration)
+		aggregates := make([]shared.ChecklistAggregate, 0, userCount)
+		for outcome := range outcomes {
+			require.NoError(t, outcome.err)
+			samples = append(samples, outcome.duration)
+			require.NotNil(t, outcome.result)
+			aggregates = append(aggregates, outcome.result.Aggregate)
 		}
 		require.Len(t, samples, userCount)
 		concurrentQueryCount := queryCounter.value()
 		require.Equal(t, userCount*30, concurrentQueryCount)
+		encodeStarted := time.Now()
+		payload, err := json.Marshal(aggregates)
+		require.NoError(t, err)
+		encodeDuration := time.Since(encodeStarted)
+		gzipBytes := compressedSize(t, payload)
+		peakLiveBytes := peakSampler.finish()
+		lockWait := finishLockWaitSampler(t, lockSampler)
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:   "20_concurrent_independent_users",
-			latencies:  samples,
-			queryCount: concurrentQueryCount,
+			scenario:           "20_concurrent_independent_users",
+			latencies:          samples,
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           lockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      peakLiveBytes,
+			uncompressedBytes:  len(payload),
+			gzipBytes:          gzipBytes,
+			queryCount:         concurrentQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    lockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
@@ -442,6 +559,8 @@ func TestPerformanceScenarios(t *testing.T) {
 			config,
 		)
 		queryCounter.reset()
+		peakSampler := startPeakLiveSampler()
+		lockSampler := startLockWaitSampler(ctx, performanceApplicationName)
 		unfilteredStarted := time.Now()
 		unfiltered, err := repository.Browse(
 			ctx,
@@ -463,20 +582,43 @@ func TestPerformanceScenarios(t *testing.T) {
 		require.Len(t, filtered.Items, 1)
 		browseQueryCount := queryCounter.value()
 		require.Equal(t, 4, browseQueryCount)
-		payload, err := json.Marshal(
-			[]any{unfiltered, filtered},
-		)
+		encodeStarted := time.Now()
+		payload, err := json.Marshal([]any{unfiltered, filtered})
 		require.NoError(t, err)
+		encodeDuration := time.Since(encodeStarted)
+		gzipBytes := compressedSize(t, payload)
+		peakLiveBytes := peakSampler.finish()
+		lockWait := finishLockWaitSampler(t, lockSampler)
+		queries := queryCounter.snapshot()
+		capturedProductionQueries["active recent browse"] =
+			requireObservedQuery(
+				t,
+				queries,
+				"WHERE source.status = 'active'",
+			)
+		capturedProductionQueries["exact model browse"] =
+			requireObservedQuery(t, queries, "EXISTS")
 		logPerformanceEvidence(t, performanceEvidence{
 			scenario: "community_browse_filtered_unfiltered",
 			latencies: []time.Duration{
 				unfilteredDuration,
 				filteredDuration,
 			},
-			dbDuration:        unfilteredDuration + filteredDuration,
-			uncompressedBytes: len(payload),
-			gzipBytes:         compressedSize(t, payload),
-			queryCount:        browseQueryCount,
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           lockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      peakLiveBytes,
+			uncompressedBytes:  len(payload),
+			gzipBytes:          gzipBytes,
+			queryCount:         browseQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    lockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
@@ -491,6 +633,8 @@ func TestPerformanceScenarios(t *testing.T) {
 			config,
 		)
 		queryCounter.reset()
+		peakSampler := startPeakLiveSampler()
+		lockSampler := startLockWaitSampler(ctx, performanceApplicationName)
 		started := time.Now()
 		page, err := repository.ListUpdates(
 			ctx,
@@ -508,16 +652,39 @@ func TestPerformanceScenarios(t *testing.T) {
 		for _, item := range page.Items {
 			require.True(t, item.UpdateAvailable)
 		}
+		encodeStarted := time.Now()
 		payload, err := json.Marshal(page)
 		require.NoError(t, err)
+		encodeDuration := time.Since(encodeStarted)
 		require.NotContains(t, string(payload), `"sections"`)
+		gzipBytes := compressedSize(t, payload)
+		peakLiveBytes := peakSampler.finish()
+		lockWait := finishLockWaitSampler(t, lockSampler)
+		capturedProductionQueries["subscription updates"] =
+			requireObservedQuery(
+				t,
+				queryCounter.snapshot(),
+				"FROM user_pmcs_subscriptions AS subscription",
+				"installed.revision_number",
+			)
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:          "500_subscription_update_discovery",
-			latencies:         []time.Duration{duration},
-			dbDuration:        duration,
-			uncompressedBytes: len(payload),
-			gzipBytes:         compressedSize(t, payload),
-			queryCount:        updateQueryCount,
+			scenario:           "500_subscription_update_discovery",
+			latencies:          []time.Duration{duration},
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           lockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      peakLiveBytes,
+			uncompressedBytes:  len(payload),
+			gzipBytes:          gzipBytes,
+			queryCount:         updateQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    lockWait == 0,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
@@ -528,7 +695,6 @@ func TestPerformanceScenarios(t *testing.T) {
 		)
 		defer cancel()
 		ownerUID := newUserPmcsTestUser(t)
-		checklistID := uuid.New()
 		repository := owned.NewRepository(
 			persistence.NewStore(
 				performanceDB,
@@ -536,81 +702,176 @@ func TestPerformanceScenarios(t *testing.T) {
 			),
 			config,
 		)
-		initial := preparedTree(t, uuid.New())
-		created, err := repository.Create(
-			ctx,
-			ownerUID,
-			checklistID,
-			initial,
-			shared.Precondition{Mode: shared.PreconditionCreate},
-		)
-		require.NoError(t, err)
-		currentVersion := created.Aggregate.SyncVersion
-		samples := make([]time.Duration, 0, 50)
-		queryCounter.reset()
-		for number := int32(1); number <= 50; number++ {
-			input := preparedTree(t, uuid.New()).Input
-			publication := preparePublication(t, input, number)
-			if number == 26 {
-				interruptedContext, interrupt := context.WithCancel(ctx)
-				interrupt()
-				_, interruptErr := repository.Publish(
-					interruptedContext,
-					ownerUID,
-					checklistID,
-					publication,
-					checklistPrecondition(
-						checklistID,
-						currentVersion,
-					),
-				)
-				require.ErrorIs(
-					t,
-					interruptErr,
-					context.Canceled,
-				)
-			}
-			started := time.Now()
-			result, publishErr := repository.Publish(
+		expectedChecklistIDs := make(map[uuid.UUID]struct{}, 50)
+		for index := 0; index < 50; index++ {
+			checklistID := uuid.New()
+			draft := preparedTree(t, uuid.New())
+			created, err := repository.Create(
 				ctx,
 				ownerUID,
 				checklistID,
-				publication,
+				draft,
+				shared.Precondition{Mode: shared.PreconditionCreate},
+			)
+			require.NoError(t, err)
+			_, err = repository.Publish(
+				ctx,
+				ownerUID,
+				checklistID,
+				preparePublication(t, draft.Input, 1),
 				checklistPrecondition(
 					checklistID,
-					currentVersion,
+					created.Aggregate.SyncVersion,
 				),
 			)
-			samples = append(samples, time.Since(started))
-			require.NoError(t, publishErr)
-			currentVersion = result.Aggregate.SyncVersion
+			require.NoError(t, err)
+			expectedChecklistIDs[checklistID] = struct{}{}
 		}
-		var publications int
-		require.NoError(
-			t,
-			testDB.QueryRowContext(
-				ctx,
-				`SELECT count(*)
-				 FROM user_pmcs_revisions
-				 WHERE checklist_id = $1
-				   AND revision_number IS NOT NULL`,
-				checklistID,
-			).Scan(&publications),
+
+		queryCounter.reset()
+		peakSampler := startPeakLiveSampler()
+		deltaRepository := userpmcssync.NewRepository(
+			persistence.NewStore(performanceDB, 3),
 		)
-		require.Equal(t, 50, publications)
-		require.Equal(t, int64(51), accountVersion(t, ownerUID))
-		historyQueryCount := queryCounter.value()
-		require.Positive(t, historyQueryCount)
-		require.LessOrEqual(t, historyQueryCount, 2_500)
+		samples := make([]time.Duration, 0, 3)
+		firstStarted := time.Now()
+		firstPage, err := deltaRepository.GetDelta(
+			ctx,
+			ownerUID,
+			0,
+			25,
+			config.MaxDeltaResponseBytes,
+		)
+		samples = append(samples, time.Since(firstStarted))
+		require.NoError(t, err)
+		require.True(t, firstPage.HasMore)
+		require.Len(t, firstPage.Changes, 25)
+		durableCursor := firstPage.ThroughCursor
+		require.Positive(t, durableCursor)
+
+		blocker, observer := dedicatedConnections(t, ctx)
+		lockTx, err := blocker.BeginTx(ctx, nil)
+		require.NoError(t, err)
+		_, err = lockTx.ExecContext(
+			ctx,
+			`LOCK TABLE user_pmcs_subscriptions IN ACCESS EXCLUSIVE MODE`,
+		)
+		require.NoError(t, err)
+		blockerPID := backendPID(t, ctx, blocker)
+		interruptedContext, interrupt := context.WithCancel(ctx)
+		interruptedResults := make(chan error, 1)
+		interruptedStarted := time.Now()
+		go func() {
+			_, interruptErr := deltaRepository.GetDelta(
+				interruptedContext,
+				ownerUID,
+				durableCursor,
+				25,
+				config.MaxDeltaResponseBytes,
+			)
+			interruptedResults <- interruptErr
+		}()
+		lockWait := waitForApplicationLockWait(
+			t,
+			ctx,
+			observer,
+			blockerPID,
+			performanceApplicationName,
+			"user_pmcs_account_delta_roots",
+			1,
+		)
+		interrupt()
+		interruptErr := <-interruptedResults
+		samples = append(samples, time.Since(interruptedStarted))
+		require.Error(t, interruptErr)
+		require.ErrorIs(t, interruptedContext.Err(), context.Canceled)
+		require.ErrorContains(
+			t,
+			interruptErr,
+			"canceling statement due to user request",
+		)
+		require.NoError(t, lockTx.Rollback())
+
+		resumeStarted := time.Now()
+		secondPage, err := deltaRepository.GetDelta(
+			ctx,
+			ownerUID,
+			durableCursor,
+			25,
+			config.MaxDeltaResponseBytes,
+		)
+		samples = append(samples, time.Since(resumeStarted))
+		require.NoError(t, err)
+		require.False(t, secondPage.HasMore)
+		require.Len(t, secondPage.Changes, 25)
+		require.Equal(t, int64(100), secondPage.AccountVersion)
+
+		seen := make(map[uuid.UUID]int, 50)
+		pages := []*userpmcssync.AccountDelta{firstPage, secondPage}
+		var (
+			encodeDuration    time.Duration
+			uncompressedBytes int
+			gzipBytes         int
+		)
+		for _, page := range pages {
+			encodeStarted := time.Now()
+			payload, marshalErr := json.Marshal(page)
+			encodeDuration += time.Since(encodeStarted)
+			require.NoError(t, marshalErr)
+			require.LessOrEqual(
+				t,
+				len(payload),
+				config.MaxDeltaResponseBytes,
+			)
+			uncompressedBytes += len(payload)
+			gzipBytes += compressedSize(t, payload)
+			for _, change := range page.Changes {
+				require.NotNil(t, change.Checklist)
+				require.NotNil(t, change.Checklist.Publication)
+				require.NotEmpty(
+					t,
+					change.Checklist.Publication.Sections,
+				)
+				seen[change.Checklist.ID]++
+			}
+		}
+		require.Len(t, seen, 50)
+		for checklistID := range expectedChecklistIDs {
+			require.Equal(t, 1, seen[checklistID])
+		}
+		syncQueryCount := queryCounter.value()
+		require.Positive(t, syncQueryCount)
+		require.LessOrEqual(t, syncQueryCount, 30)
+		peakLiveBytes := peakSampler.finish()
 		logPerformanceEvidence(t, performanceEvidence{
-			scenario:   "50_publication_first_sync_resume",
-			latencies:  samples,
-			queryCount: historyQueryCount,
+			scenario:           "50_publication_first_sync_resume",
+			latencies:          samples,
+			dbDuration:         queryCounter.databaseDuration(),
+			lockWait:           lockWait,
+			encodeDuration:     encodeDuration,
+			peakLiveBytes:      peakLiveBytes,
+			uncompressedBytes:  uncompressedBytes,
+			gzipBytes:          gzipBytes,
+			queryCount:         syncQueryCount,
+			latencyMeasured:    true,
+			dbMeasured:         true,
+			lockWaitMeasured:   true,
+			lockWaitWasZero:    false,
+			encodeMeasured:     true,
+			peakLiveMeasured:   true,
+			bytesMeasured:      true,
+			queryCountMeasured: true,
 		})
 	})
 
 	t.Run("approved index plans", func(t *testing.T) {
-		captureUserPmcsQueryPlans(t, fixture)
+		captureUserPmcsQueryPlans(
+			t,
+			fixture,
+			capturedProductionQueries,
+			performanceDB,
+			queryCounter,
+		)
 	})
 }
 
@@ -697,10 +958,219 @@ func assertPostgresTextFieldByteBoundaries(t *testing.T, ownerUID string) {
 	require.Error(t, insert(1, 65_537))
 }
 
-func readMemoryStats() runtime.MemStats {
-	var stats runtime.MemStats
-	runtime.ReadMemStats(&stats)
-	return stats
+type peakLiveSampler struct {
+	stop chan struct{}
+	done chan uint64
+}
+
+func startPeakLiveSampler() *peakLiveSampler {
+	runtime.GC()
+	var baseline runtime.MemStats
+	runtime.ReadMemStats(&baseline)
+	sampler := &peakLiveSampler{
+		stop: make(chan struct{}),
+		done: make(chan uint64, 1),
+	}
+	go func() {
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		peak := baseline.HeapAlloc
+		sample := func() {
+			var current runtime.MemStats
+			runtime.ReadMemStats(&current)
+			if current.HeapAlloc > peak {
+				peak = current.HeapAlloc
+			}
+		}
+		for {
+			select {
+			case <-ticker.C:
+				sample()
+			case <-sampler.stop:
+				sample()
+				sampler.done <- peak - baseline.HeapAlloc
+				return
+			}
+		}
+	}()
+	return sampler
+}
+
+func (sampler *peakLiveSampler) finish() uint64 {
+	close(sampler.stop)
+	return <-sampler.done
+}
+
+type lockWaitSample struct {
+	duration time.Duration
+	err      error
+}
+
+type lockWaitSampler struct {
+	stop chan struct{}
+	done chan lockWaitSample
+}
+
+func startLockWaitSampler(
+	ctx context.Context,
+	applicationName string,
+) *lockWaitSampler {
+	sampler := &lockWaitSampler{
+		stop: make(chan struct{}),
+		done: make(chan lockWaitSample, 1),
+	}
+	go func() {
+		ticker := time.NewTicker(2 * time.Millisecond)
+		defer ticker.Stop()
+		lastSample := time.Now()
+		wasWaiting := false
+		var total time.Duration
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				if wasWaiting {
+					total += now.Sub(lastSample)
+				}
+				lastSample = now
+				err := testDB.QueryRowContext(
+					ctx,
+					`SELECT EXISTS (
+					     SELECT 1
+					     FROM pg_stat_activity
+					     WHERE application_name = $1
+					       AND wait_event_type = 'Lock'
+					 )`,
+					applicationName,
+				).Scan(&wasWaiting)
+				if err != nil {
+					sampler.done <- lockWaitSample{
+						duration: total,
+						err:      err,
+					}
+					return
+				}
+			case <-sampler.stop:
+				now := time.Now()
+				if wasWaiting {
+					total += now.Sub(lastSample)
+				}
+				sampler.done <- lockWaitSample{duration: total}
+				return
+			case <-ctx.Done():
+				sampler.done <- lockWaitSample{
+					duration: total,
+					err:      ctx.Err(),
+				}
+				return
+			}
+		}
+	}()
+	return sampler
+}
+
+func finishLockWaitSampler(
+	t *testing.T,
+	sampler *lockWaitSampler,
+) time.Duration {
+	t.Helper()
+	close(sampler.stop)
+	result := <-sampler.done
+	require.NoError(t, result.err)
+	return result.duration
+}
+
+func waitForApplicationLockWait(
+	t *testing.T,
+	ctx context.Context,
+	observer *sql.Conn,
+	blockerPID int,
+	applicationName string,
+	queryToken string,
+	expectedWaiters int,
+) time.Duration {
+	t.Helper()
+	var measured time.Duration
+	require.Eventually(t, func() bool {
+		rows, err := observer.QueryContext(
+			ctx,
+			`WITH RECURSIVE blocked_chain(pid) AS (
+			     SELECT $1::integer
+			     UNION
+			     SELECT activity.pid
+			     FROM pg_stat_activity AS activity
+			     JOIN blocked_chain AS blocker
+			       ON blocker.pid = ANY(pg_blocking_pids(activity.pid))
+			 )
+			 SELECT activity.pid,
+			        EXTRACT(
+			            EPOCH FROM clock_timestamp() - MIN(waiting.waitstart)
+			        )
+			 FROM pg_stat_activity AS activity
+			 JOIN blocked_chain ON blocked_chain.pid = activity.pid
+			 JOIN pg_locks AS waiting
+			   ON waiting.pid = activity.pid
+			  AND NOT waiting.granted
+			 WHERE activity.application_name = $2
+			   AND activity.wait_event_type = 'Lock'
+			   AND activity.query LIKE '%' || $3 || '%'
+			 GROUP BY activity.pid
+			 ORDER BY activity.pid`,
+			blockerPID,
+			applicationName,
+			queryToken,
+		)
+		if err != nil {
+			return false
+		}
+		defer rows.Close()
+		waiters := 0
+		var longestSeconds float64
+		for rows.Next() {
+			var (
+				pid     int
+				seconds float64
+			)
+			if err := rows.Scan(&pid, &seconds); err != nil {
+				return false
+			}
+			waiters++
+			longestSeconds = max(longestSeconds, seconds)
+		}
+		if rows.Err() != nil || waiters != expectedWaiters {
+			return false
+		}
+		measured = time.Duration(longestSeconds * float64(time.Second))
+		return measured > 0
+	}, 5*time.Second, 2*time.Millisecond)
+	return measured
+}
+
+func requireObservedQuery(
+	t *testing.T,
+	queries []observedQuery,
+	requiredTokens ...string,
+) observedQuery {
+	t.Helper()
+	for _, query := range queries {
+		matches := true
+		for _, token := range requiredTokens {
+			if !strings.Contains(query.query, token) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return query
+		}
+	}
+	require.Failf(
+		t,
+		"production query was not captured",
+		"required tokens: %v",
+		requiredTokens,
+	)
+	return observedQuery{}
 }
 
 func compressedSize(t *testing.T, payload []byte) int {
@@ -715,6 +1185,7 @@ func compressedSize(t *testing.T, payload []byte) int {
 
 func logPerformanceEvidence(t *testing.T, evidence performanceEvidence) {
 	t.Helper()
+	require.NoError(t, validatePerformanceEvidence(evidence))
 	samples := append([]time.Duration(nil), evidence.latencies...)
 	sort.Slice(samples, func(left, right int) bool {
 		return samples[left] < samples[right]
@@ -726,19 +1197,64 @@ func logPerformanceEvidence(t *testing.T, evidence performanceEvidence) {
 	}
 	t.Logf(
 		"scenario=%s p50=%s p95=%s db=%s lock_wait=%s encode=%s "+
-			"peak_allocated_bytes=%d uncompressed_bytes=%d gzip_bytes=%d "+
-			"query_count=%d",
+			"peak_live_bytes=%d uncompressed_bytes=%d gzip_bytes=%d "+
+			"query_count=%d validity=latency:%t,db:%t,lock_wait:%t,"+
+			"lock_wait_semantic_zero:%t,encode:%t,peak_live:%t,"+
+			"bytes:%t,query_count:%t",
 		evidence.scenario,
 		p50,
 		p95,
 		evidence.dbDuration,
 		evidence.lockWait,
 		evidence.encodeDuration,
-		evidence.peakAllocated,
+		evidence.peakLiveBytes,
 		evidence.uncompressedBytes,
 		evidence.gzipBytes,
 		evidence.queryCount,
+		evidence.latencyMeasured,
+		evidence.dbMeasured,
+		evidence.lockWaitMeasured,
+		evidence.lockWaitWasZero,
+		evidence.encodeMeasured,
+		evidence.peakLiveMeasured,
+		evidence.bytesMeasured,
+		evidence.queryCountMeasured,
 	)
+}
+
+func validatePerformanceEvidence(evidence performanceEvidence) error {
+	measurements := []struct {
+		name  string
+		valid bool
+	}{
+		{"latency", evidence.latencyMeasured && len(evidence.latencies) > 0},
+		{"db duration", evidence.dbMeasured},
+		{"lock wait", evidence.lockWaitMeasured},
+		{"encode duration", evidence.encodeMeasured},
+		{"peak live bytes", evidence.peakLiveMeasured},
+		{"payload bytes", evidence.bytesMeasured},
+		{"query count", evidence.queryCountMeasured},
+	}
+	var missing []string
+	for _, measurement := range measurements {
+		if !measurement.valid {
+			missing = append(missing, measurement.name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf(
+			"scenario %q has unmeasured fields: %s",
+			evidence.scenario,
+			strings.Join(missing, ", "),
+		)
+	}
+	if evidence.lockWaitWasZero && evidence.lockWait != 0 {
+		return fmt.Errorf(
+			"scenario %q marks nonzero lock wait as semantic zero",
+			evidence.scenario,
+		)
+	}
+	return nil
 }
 
 func percentileIndex(sampleCount, percentile int) int {
@@ -976,6 +1492,7 @@ func seedPerformanceSubscriptions(
 		"user_pmcs_checklists",
 		"user_pmcs_revisions",
 		"user_pmcs_revision_models",
+		"user_pmcs_community_releases",
 		"user_pmcs_community_sources",
 		"user_pmcs_subscriptions",
 	} {
@@ -1034,129 +1551,373 @@ func seedPerformanceSubscriptions(
 func captureUserPmcsQueryPlans(
 	t *testing.T,
 	fixture performanceSubscriptionFixture,
+	captured map[string]observedQuery,
+	performanceDB *sql.DB,
+	counter *queryCounter,
 ) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	missingOwner := "missing-plan-owner-" + uuid.NewString()
-	plans := []struct {
-		name            string
-		query           string
-		args            []any
+
+	planOwnerUID := newUserPmcsTestUser(t)
+	planChecklistIDs := make([]string, 25)
+	planRevisionIDs := make([]string, 25)
+	for index := range planChecklistIDs {
+		planChecklistIDs[index] = uuid.NewString()
+		planRevisionIDs[index] = uuid.NewString()
+	}
+	_, err := testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_checklists
+		     (id, owner_uid, sync_version, account_change_version)
+		 SELECT id::uuid, $1, 1, ordinal
+		 FROM unnest($2::text[]) WITH ORDINALITY AS rows(id, ordinal)`,
+		planOwnerUID,
+		pq.Array(planChecklistIDs),
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_revisions
+		     (id, checklist_id, state, revision_number, name, description,
+		      content_hash, published_at)
+		 SELECT revision_id::uuid, checklist_id::uuid, 'draft', NULL,
+		        'plan draft', 'plan draft',
+		        decode(repeat('00', 32), 'hex'), NULL
+		 FROM unnest($1::text[], $2::text[])
+		      AS rows(revision_id, checklist_id)`,
+		pq.Array(planRevisionIDs),
+		pq.Array(planChecklistIDs),
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_sync_state (user_uid, current_version)
+		 VALUES ($1, 25)`,
+		planOwnerUID,
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(ctx, `ANALYZE user_pmcs_checklists`)
+	require.NoError(t, err)
+
+	planSubscriberUID := newUserPmcsTestUser(t)
+	planSubscriptionIDs := uuidStrings(fixture.checklistIDs[:25])
+	planInstalledIDs := uuidStrings(fixture.installedIDs[:25])
+	_, err = testDB.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_subscriptions
+		     (subscriber_uid, checklist_id, installed_revision_id,
+		      sync_version, account_change_version)
+		 SELECT $1, checklist_id::uuid, installed_revision_id::uuid,
+		        1, ordinal
+		 FROM unnest($2::text[], $3::text[]) WITH ORDINALITY
+		      AS rows(checklist_id, installed_revision_id, ordinal)`,
+		planSubscriberUID,
+		pq.Array(planSubscriptionIDs),
+		pq.Array(planInstalledIDs),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.Background(),
+			10*time.Second,
+		)
+		defer cleanupCancel()
+		_, cleanupErr := testDB.ExecContext(
+			cleanupCtx,
+			`DELETE FROM user_pmcs_subscriptions
+			 WHERE subscriber_uid = $1`,
+			planSubscriberUID,
+		)
+		require.NoError(t, cleanupErr)
+	})
+	_, err = testDB.ExecContext(ctx, `ANALYZE user_pmcs_subscriptions`)
+	require.NoError(t, err)
+
+	config := shared.DefaultConfig()
+	planRepository := owned.NewRepository(
+		persistence.NewStore(performanceDB, config.TransactionMaxAttempts),
+		config,
+	)
+	planChecklistID := uuid.New()
+	planDraft := preparedTree(t, uuid.New())
+	counter.reset()
+	created, err := planRepository.Create(
+		ctx,
+		planOwnerUID,
+		planChecklistID,
+		planDraft,
+		shared.Precondition{Mode: shared.PreconditionCreate},
+	)
+	require.NoError(t, err)
+	captured["account limit count"] = requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"SELECT count(*)",
+		"FROM user_pmcs_checklists",
+		"deleted_at IS NULL",
+	)
+	counter.reset()
+	published, err := planRepository.Publish(
+		ctx,
+		planOwnerUID,
+		planChecklistID,
+		preparePublication(t, planDraft.Input, 1),
+		checklistPrecondition(
+			planChecklistID,
+			created.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	counter.reset()
+	_, err = planRepository.DeleteChecklist(
+		ctx,
+		planOwnerUID,
+		planChecklistID,
+		checklistPrecondition(
+			planChecklistID,
+			published.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	captured["active pin lookup"] = requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"FROM user_pmcs_subscriptions",
+		"FOR UPDATE",
+	)
+
+	counter.reset()
+	_, err = userpmcssync.NewRepository(
+		persistence.NewStore(performanceDB, 3),
+	).GetDelta(
+		ctx,
+		planOwnerUID,
+		0,
+		25,
+		config.MaxDeltaResponseBytes,
+	)
+	require.NoError(t, err)
+	captured["merged account delta"] = requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"user_pmcs_account_delta_roots",
+	)
+
+	counter.reset()
+	_, err = persistence.LoadRevisionTrees(
+		ctx,
+		performanceDB,
+		fixture.currentIDs[:25],
+	)
+	require.NoError(t, err)
+	captured["batched revision loader"] = requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"FROM user_pmcs_revisions",
+		"WHERE id = ANY",
+	)
+
+	communityRepository := community.NewRepository(
+		persistence.NewStore(performanceDB, 3),
+		config,
+	)
+	counter.reset()
+	_, err = communityRepository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{Limit: 50},
+	)
+	require.NoError(t, err)
+	_, err = communityRepository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{
+			Limit:           50,
+			NormalizedModel: fixture.normalizedName,
+		},
+	)
+	require.NoError(t, err)
+	browseQueries := counter.snapshot()
+	captured["active recent browse"] = requireObservedQuery(
+		t,
+		browseQueries,
+		"WHERE source.status = 'active'",
+	)
+	captured["exact model browse"] = requireObservedQuery(
+		t,
+		browseQueries,
+		"EXISTS",
+	)
+
+	counter.reset()
+	_, err = subscriptions.NewRepository(
+		persistence.NewStore(performanceDB, 3),
+		config,
+	).ListUpdates(ctx, planSubscriberUID, nil, 100)
+	require.NoError(t, err)
+	captured["subscription updates"] = requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"FROM user_pmcs_subscriptions AS subscription",
+		"installed.revision_number",
+	)
+
+	type relationPlanExpectation struct {
+		relation        string
 		approvedIndexes []string
+	}
+	plans := []struct {
+		name         string
+		observation  observedQuery
+		args         []any
+		expectations []relationPlanExpectation
 	}{
 		{
-			name: "owner delta branch",
-			query: `SELECT id, account_change_version
-			        FROM user_pmcs_checklists
-			        WHERE owner_uid = $1
-			          AND account_change_version > 0
-			        ORDER BY account_change_version
-			        LIMIT 25`,
-			args: []any{missingOwner},
-			approvedIndexes: []string{
-				"user_pmcs_checklists_owner_delta_idx",
+			name:        "owner delta branch",
+			observation: captured["merged account delta"],
+			args:        []any{planOwnerUID, int64(0), 26},
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_checklists",
+					approvedIndexes: []string{
+						"user_pmcs_checklists_owner_delta_idx",
+					},
+				},
 			},
 		},
 		{
-			name: "subscription delta branch",
-			query: `SELECT checklist_id, account_change_version
-			        FROM user_pmcs_subscriptions
-			        WHERE subscriber_uid = $1
-			          AND account_change_version > 0
-			        ORDER BY account_change_version
-			        LIMIT 25`,
-			args: []any{fixture.subscriberUID},
-			approvedIndexes: []string{
-				"user_pmcs_subscriptions_delta_idx",
+			name:        "subscription delta branch",
+			observation: captured["merged account delta"],
+			args:        []any{planSubscriberUID, int64(0), 26},
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_subscriptions",
+					approvedIndexes: []string{
+						"user_pmcs_subscriptions_delta_idx",
+					},
+				},
 			},
 		},
 		{
-			name: "batched tree loader",
-			query: `SELECT id, checklist_id
-			        FROM user_pmcs_revisions
-			        WHERE id = ANY($1)`,
-			args: []any{pq.Array(uuidStrings(fixture.currentIDs[:25]))},
-			approvedIndexes: []string{
-				"user_pmcs_revisions_pkey",
+			name:        "batched tree loader",
+			observation: captured["batched revision loader"],
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_revisions",
+					approvedIndexes: []string{
+						"user_pmcs_revisions_pkey",
+					},
+				},
 			},
 		},
 		{
-			name: "active recent browse",
-			query: `SELECT checklist_id
-			        FROM user_pmcs_community_sources
-			        WHERE status = 'active'
-			        ORDER BY updated_at DESC, checklist_id
-			        LIMIT 50`,
-			approvedIndexes: []string{
-				"user_pmcs_community_sources_recent_idx",
+			name:        "active recent browse",
+			observation: captured["active recent browse"],
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_community_sources",
+					approvedIndexes: []string{
+						"user_pmcs_community_sources_recent_idx",
+					},
+				},
+				{
+					relation: "user_pmcs_community_releases",
+					approvedIndexes: []string{
+						"user_pmcs_community_releases_pkey",
+					},
+				},
+				{
+					relation: "user_pmcs_revisions",
+					approvedIndexes: []string{
+						"user_pmcs_revisions_checklist_id_id_key",
+						"user_pmcs_revisions_pkey",
+					},
+				},
 			},
 		},
 		{
-			name: "exact model browse",
-			query: `SELECT revision_id
-			        FROM user_pmcs_revision_models
-			        WHERE normalized_text = $1`,
-			args: []any{fixture.normalizedName},
-			approvedIndexes: []string{
-				"user_pmcs_revision_models_lookup_idx",
+			name:        "exact model browse",
+			observation: captured["exact model browse"],
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_revision_models",
+					approvedIndexes: []string{
+						"user_pmcs_revision_models_lookup_idx",
+					},
+				},
 			},
 		},
 		{
-			name: "subscription updates",
-			query: `SELECT checklist_id, installed_revision_id
-			        FROM user_pmcs_subscriptions
-			        WHERE subscriber_uid = $1
-			          AND deleted_at IS NULL
-			        ORDER BY checklist_id
-			        LIMIT 101`,
-			args: []any{fixture.subscriberUID},
-			approvedIndexes: []string{
-				"user_pmcs_subscriptions_active_update_idx",
+			name:        "subscription updates",
+			observation: captured["subscription updates"],
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_subscriptions",
+					approvedIndexes: []string{
+						"user_pmcs_subscriptions_active_update_idx",
+					},
+				},
 			},
 		},
 		{
-			name: "active pin lookup",
-			query: `SELECT subscriber_uid, checklist_id
-			        FROM user_pmcs_subscriptions
-			        WHERE installed_revision_id = $1
-			          AND deleted_at IS NULL`,
-			args: []any{fixture.installedIDs[0]},
-			approvedIndexes: []string{
-				"user_pmcs_subscriptions_active_pin_idx",
+			name:        "active pin lookup",
+			observation: captured["active pin lookup"],
+			args:        []any{fixture.checklistIDs[0]},
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_subscriptions",
+					approvedIndexes: []string{
+						"user_pmcs_subscriptions_source_idx",
+					},
+				},
 			},
 		},
 		{
-			name: "account limit counts",
-			query: `SELECT count(*)
-			        FROM user_pmcs_checklists
-			        WHERE owner_uid = $1
-			          AND deleted_at IS NULL`,
-			args: []any{missingOwner},
-			approvedIndexes: []string{
-				"user_pmcs_checklists_owner_delta_idx",
+			name:        "account limit counts",
+			observation: captured["account limit count"],
+			args:        []any{planOwnerUID},
+			expectations: []relationPlanExpectation{
+				{
+					relation: "user_pmcs_checklists",
+					approvedIndexes: []string{
+						"user_pmcs_checklists_owner_delta_idx",
+					},
+				},
 			},
 		},
 	}
 	for _, planCase := range plans {
+		require.NotEmpty(
+			t,
+			strings.TrimSpace(planCase.observation.query),
+			"missing captured production query for %s",
+			planCase.name,
+		)
+		args := planCase.observation.args
+		if planCase.args != nil {
+			args = planCase.args
+		}
 		plan := explainAnalyzePlan(
 			t,
 			ctx,
-			planCase.query,
-			planCase.args...,
+			planCase.observation.query,
+			args...,
 		)
 		t.Logf(
-			"EXPLAIN (ANALYZE, BUFFERS) %s:\n%s",
+			"EXPLAIN (ANALYZE, BUFFERS) %s "+
+				"[driver-captured production SQL]:\n%s",
 			planCase.name,
 			plan,
 		)
 		require.Contains(t, plan, "Buffers:")
 		require.Contains(t, plan, "Execution Time:")
-		requirePlanUsesApprovedIndex(
-			t,
-			plan,
-			planCase.approvedIndexes,
-		)
+		for _, expectation := range planCase.expectations {
+			requirePlanUsesApprovedRelationIndex(
+				t,
+				plan,
+				expectation.relation,
+				expectation.approvedIndexes,
+			)
+		}
 	}
 }
 
@@ -1184,45 +1945,100 @@ func explainAnalyzePlan(
 	return strings.Join(lines, "\n")
 }
 
-func requirePlanUsesApprovedIndex(
+func requirePlanUsesApprovedRelationIndex(
 	t *testing.T,
 	plan string,
+	relation string,
 	approvedIndexes []string,
 ) {
 	t.Helper()
+	require.NotContains(
+		t,
+		plan,
+		"Seq Scan on "+relation,
+		"unexpected sequential scan on %s:\n%s",
+		relation,
+		plan,
+	)
 	for _, index := range approvedIndexes {
-		if strings.Contains(plan, index) {
-			return
+		for _, line := range strings.Split(plan, "\n") {
+			if strings.Contains(line, index) &&
+				strings.Contains(line, relation) {
+				return
+			}
 		}
 	}
 	require.Failf(
 		t,
-		"unexpected sequential scan",
-		"plan did not use an approved index %v:\n%s",
+		"unexpected relation scan",
+		"plan did not use approved index %v on %s:\n%s",
 		approvedIndexes,
+		relation,
 		plan,
 	)
 }
 
 type queryCounter struct {
-	count atomic.Int64
+	count    atomic.Int64
+	duration atomic.Int64
+	mu       sync.Mutex
+	queries  []observedQuery
 }
 
-func (counter *queryCounter) increment() {
+type observedQuery struct {
+	query string
+	args  []any
+}
+
+func (counter *queryCounter) record(
+	query string,
+	arguments []driver.NamedValue,
+) {
 	counter.count.Add(1)
+	args := make([]any, len(arguments))
+	for index, argument := range arguments {
+		args[index] = argument.Value
+	}
+	counter.mu.Lock()
+	counter.queries = append(
+		counter.queries,
+		observedQuery{query: query, args: args},
+	)
+	counter.mu.Unlock()
+}
+
+func (counter *queryCounter) addDuration(duration time.Duration) {
+	counter.duration.Add(int64(duration))
 }
 
 func (counter *queryCounter) reset() {
 	counter.count.Store(0)
+	counter.duration.Store(0)
+	counter.mu.Lock()
+	counter.queries = nil
+	counter.mu.Unlock()
 }
 
 func (counter *queryCounter) value() int {
 	return int(counter.count.Load())
 }
 
+func (counter *queryCounter) databaseDuration() time.Duration {
+	return time.Duration(counter.duration.Load())
+}
+
+func (counter *queryCounter) snapshot() []observedQuery {
+	counter.mu.Lock()
+	defer counter.mu.Unlock()
+	queries := make([]observedQuery, len(counter.queries))
+	copy(queries, counter.queries)
+	return queries
+}
+
 type queryCountingConnector struct {
-	base    driver.Connector
-	counter *queryCounter
+	base            driver.Connector
+	counter         *queryCounter
+	applicationName string
 }
 
 func (connector *queryCountingConnector) Connect(
@@ -1231,6 +2047,17 @@ func (connector *queryCountingConnector) Connect(
 	connection, err := connector.base.Connect(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if executor, ok := connection.(driver.ExecerContext); ok {
+		_, err = executor.ExecContext(
+			ctx,
+			"SET application_name = '"+connector.applicationName+"'",
+			nil,
+		)
+		if err != nil {
+			_ = connection.Close()
+			return nil, err
+		}
 	}
 	return &queryCountingConnection{
 		Conn:    connection,
@@ -1256,8 +2083,11 @@ func (connection *queryCountingConnection) ExecContext(
 	if !ok {
 		return nil, driver.ErrSkip
 	}
-	connection.counter.increment()
-	return executor.ExecContext(ctx, query, arguments)
+	connection.counter.record(query, arguments)
+	started := time.Now()
+	result, err := executor.ExecContext(ctx, query, arguments)
+	connection.counter.addDuration(time.Since(started))
+	return result, err
 }
 
 func (connection *queryCountingConnection) QueryContext(
@@ -1269,8 +2099,33 @@ func (connection *queryCountingConnection) QueryContext(
 	if !ok {
 		return nil, driver.ErrSkip
 	}
-	connection.counter.increment()
-	return queryer.QueryContext(ctx, query, arguments)
+	connection.counter.record(query, arguments)
+	started := time.Now()
+	rows, err := queryer.QueryContext(ctx, query, arguments)
+	connection.counter.addDuration(time.Since(started))
+	if err != nil {
+		return nil, err
+	}
+	return &timedDriverRows{Rows: rows, counter: connection.counter}, nil
+}
+
+type timedDriverRows struct {
+	driver.Rows
+	counter *queryCounter
+}
+
+func (rows *timedDriverRows) Next(values []driver.Value) error {
+	started := time.Now()
+	err := rows.Rows.Next(values)
+	rows.counter.addDuration(time.Since(started))
+	return err
+}
+
+func (rows *timedDriverRows) Close() error {
+	started := time.Now()
+	err := rows.Rows.Close()
+	rows.counter.addDuration(time.Since(started))
+	return err
 }
 
 func (connection *queryCountingConnection) BeginTx(
@@ -1324,15 +2179,17 @@ func (connection *queryCountingConnection) CheckNamedValue(
 
 func newQueryCountingDatabase(
 	t *testing.T,
-) (*sql.DB, *queryCounter) {
+) (*sql.DB, *queryCounter, string) {
 	t.Helper()
 	dsn := disableSSLWhenUnspecified(os.Getenv("TEST_DATABASE_URL"))
 	base, err := pq.NewConnector(dsn)
 	require.NoError(t, err)
 	counter := &queryCounter{}
+	applicationName := "upmcs-performance-" + uuid.NewString()[:8]
 	database := sql.OpenDB(&queryCountingConnector{
-		base:    base,
-		counter: counter,
+		base:            base,
+		counter:         counter,
+		applicationName: applicationName,
 	})
 	require.NoError(t, database.Ping())
 	requireUserPmcsTestDatabase(t, database)
@@ -1340,7 +2197,7 @@ func newQueryCountingDatabase(
 	t.Cleanup(func() {
 		require.NoError(t, database.Close())
 	})
-	return database, counter
+	return database, counter, applicationName
 }
 
 func uuidStrings(values []uuid.UUID) []string {
