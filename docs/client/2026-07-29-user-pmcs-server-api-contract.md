@@ -116,8 +116,10 @@ The three body-bearing routes accept only an uncompressed
 8,388,608 bytes. Unknown fields, a second JSON value, malformed JSON, and
 invalid UTF-8 are rejected. The other mutation routes have no request JSON.
 
-UUIDs are nonzero canonical UUID strings. Server timestamps are RFC 3339
-values.
+UUID inputs must parse as nonzero UUIDs. The server accepts the textual forms
+supported by `github.com/google/uuid.Parse`; clients should send, and will
+receive, canonical lowercase hyphenated UUID strings. Server timestamps are
+RFC 3339 values.
 
 ### ETags and conditionals
 

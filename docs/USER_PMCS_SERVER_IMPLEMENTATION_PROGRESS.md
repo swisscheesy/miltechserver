@@ -60,7 +60,7 @@
 - Status: complete; independent review passed after fix round 1
 - Base commit: `1125dfac32e17f2560ac4b3a2982be7ff37274f9`
 - Implementer: `/root/foundation_task1_impl` (fresh)
-- Reviewer: `/root/foundation_task1_review` (fresh; in progress)
+- Reviewer dispatched: `/root/foundation_task1_review` (fresh; historical checkpoint)
 - Focused tests:
   - `go test ./tests/user_pmcs -run TestUserPmcsSchemaIntegrity -count=1`
     passed after canonical generation (`ok`, 0.525s final post-commit run).
@@ -117,7 +117,7 @@
   - Scoped re-review by the original reviewer: both Important findings
     ADDRESSED; no new Critical/Important breakage; no out-of-scope
     observations.
-- Current HEAD: `7508b29991331835683d798c75d69be6a82ed771`
+- Historical checkpoint HEAD: `7508b29991331835683d798c75d69be6a82ed771`
 - Worktree: only this untracked progress ledger remains
 - Next task: Foundation Task 2 — shared configuration, domain contracts, and
   HTTP primitives
@@ -127,7 +127,7 @@
 - Status: complete; independent review passed after fix round 1
 - Base commit: `7508b29991331835683d798c75d69be6a82ed771`
 - Implementer: `/root/foundation_task2_impl` (fresh)
-- Reviewer: `/root/foundation_task2_review` (fresh; in progress)
+- Reviewer dispatched: `/root/foundation_task2_review` (fresh; historical checkpoint)
 - Focused tests:
   - `go test ./api/user_pmcs/shared -count=1`: passed (`ok`, 0.491s).
   - `go test ./bootstrap ./api/route -run '^$'`: passed; bootstrap compiled
@@ -186,7 +186,7 @@
   - Minor (deferred to final whole-branch review): subprocess config tests
     retain unrelated ambient `USER_PMCS_*` variables and could fail for the
     wrong key in a contaminated environment.
-- Current HEAD: `96eff4f48c713a9eee34da57ccb5db105cfd4a0b`
+- Historical checkpoint HEAD: `96eff4f48c713a9eee34da57ccb5db105cfd4a0b`
 - Worktree: only this untracked progress ledger
 - Next task: Foundation Task 3 — Unicode normalization, validation, and
   canonical hashing
@@ -196,7 +196,7 @@
 - Status: complete
 - Base commit: `96eff4f48c713a9eee34da57ccb5db105cfd4a0b`
 - Implementer: `/root/foundation_task3_impl` (fresh)
-- Reviewer: `/root/foundation_task3_review` (fresh; in progress)
+- Reviewer dispatched: `/root/foundation_task3_review` (fresh; historical checkpoint)
 - Focused/race/dependency tests:
   - Required RED failed only on the intentionally absent Task 3 APIs.
   - A second focused RED caught draft blank-model handling before commit.
@@ -237,7 +237,7 @@
     `feat(user-pmcs): validate and hash revision trees`
   - `1fed1689c8e727a64751ecc31d4996b9aea5277a`
     `fix(user-pmcs): enforce actual mutation body size`
-- Current HEAD: `1fed1689c8e727a64751ecc31d4996b9aea5277a`
+- Historical checkpoint HEAD: `1fed1689c8e727a64751ecc31d4996b9aea5277a`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Foundation Task 4 — transactional repository and change-version
@@ -248,7 +248,7 @@
 - Status: complete
 - Base commit: `1fed1689c8e727a64751ecc31d4996b9aea5277a`
 - Implementer: `/root/foundation_task4_impl` (fresh)
-- Reviewer: `/root/foundation_task4_review` (fresh; in progress)
+- Reviewer dispatched: `/root/foundation_task4_review` (fresh; historical checkpoint)
 - Required documentation research: complete
 - Required sequential analysis: complete
 - Database skills: Go, database-optimizer, and Supabase Postgres guidance
@@ -271,7 +271,7 @@
 - Task commits:
   - `f760093ebf43bdafc840117de01604a22076ef38`
     `feat(user-pmcs): add transactional tree persistence`
-- Current HEAD: `f760093ebf43bdafc840117de01604a22076ef38`
+- Historical checkpoint HEAD: `f760093ebf43bdafc840117de01604a22076ef38`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Foundation completion gate
@@ -296,7 +296,7 @@
 - Status: complete
 - Base commit: `f760093ebf43bdafc840117de01604a22076ef38`
 - Implementer: `/root/owned_task5_impl` (fresh)
-- Reviewer: `/root/owned_task5_review` (fresh; in progress)
+- Reviewer dispatched: `/root/owned_task5_review` (fresh; historical checkpoint)
 - Required documentation research and sequential analysis: complete
 - Focused/integration/race/plan results:
   - Owned unit package passed (`0.476s`).
@@ -358,7 +358,7 @@
     `fix(user-pmcs): serialize owned tree snapshots`
   - `d0f94dd907ccc46fd2b9c3395ccd4fb77bd5c07a`
     `fix(user-pmcs): bound UUID serialization locks`
-- Current HEAD: `d0f94dd907ccc46fd2b9c3395ccd4fb77bd5c07a`
+- Historical checkpoint HEAD: `d0f94dd907ccc46fd2b9c3395ccd4fb77bd5c07a`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Owned Sync Task 6 — publication, immutable history, and offline
@@ -369,7 +369,7 @@
 - Status: complete
 - Base commit: `d0f94dd907ccc46fd2b9c3395ccd4fb77bd5c07a`
 - Implementer: `/root/owned_task6_impl` (fresh)
-- Reviewer: `/root/owned_task6_review` (fresh; in progress)
+- Reviewer dispatched: `/root/owned_task6_review` (fresh; historical checkpoint)
 - Required documentation research and sequential analysis: complete
 - Focused/integration/concurrency/race results:
   - Post-commit owned package passed (`0.412s`).
@@ -411,7 +411,7 @@
     `feat(user-pmcs): publish immutable checklist revisions`
   - `c02a887a1bf3c0c751f9785395630910ebd96ade`
     `fix(user-pmcs): preserve immutable revision retries`
-- Current HEAD: `c02a887a1bf3c0c751f9785395630910ebd96ade`
+- Historical checkpoint HEAD: `c02a887a1bf3c0c751f9785395630910ebd96ade`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Owned Sync Task 7 — checklist tombstones and deletion retention
@@ -421,7 +421,7 @@
 - Status: complete
 - Base commit: `c02a887a1bf3c0c751f9785395630910ebd96ade`
 - Implementer: `/root/owned_task7_impl` (fresh)
-- Reviewer: `/root/owned_task7_review` (fresh; in progress)
+- Reviewer dispatched: `/root/owned_task7_review` (fresh; historical checkpoint)
 - Documentation research and sequential analysis: complete
 - Tests: deletion 7 passed; full user-PMCS 64 passed; deletion stress 35
   passed; concurrency/race/vet/repository compile-only passed
@@ -447,8 +447,8 @@
   `feat(user-pmcs): retain permanent checklist tombstones`
 - Fix commit: `e51d72ebd992dd9ccc41ccc88138f9bac1e7b2fd`
   `fix(user-pmcs): lock active release pins`
-- Current HEAD: `e51d72ebd992dd9ccc41ccc88138f9bac1e7b2fd`
-- Current HEAD: `a2c81d037ec74b500b6645d8015421fc675e7edc`
+- Historical checkpoint HEAD: `e51d72ebd992dd9ccc41ccc88138f9bac1e7b2fd`
+- Historical checkpoint HEAD: `a2c81d037ec74b500b6645d8015421fc675e7edc`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Owned Sync Task 8 — embedded owner-plus-subscription account delta
@@ -458,7 +458,7 @@
 - Status: complete
 - Base commit: `e51d72ebd992dd9ccc41ccc88138f9bac1e7b2fd`
 - Implementer: `/root/owned_task8_impl` (fresh)
-- Reviewer: `/root/owned_task8_review` (fresh; in progress)
+- Reviewer dispatched: `/root/owned_task8_review` (fresh; historical checkpoint)
 - Documentation research and sequential analysis: complete
 - Tests:
   - Post-commit sync passed (`0.638s`); AccountDelta integration passed
@@ -496,8 +496,8 @@
   `feat(user-pmcs): add embedded account delta sync`
 - Fix commit: `c5e763a66d4d1920daa98f5c44366b212885655f`
   `fix(user-pmcs): enforce exact delta response size`
-- Current HEAD: `c5e763a66d4d1920daa98f5c44366b212885655f`
-- Current HEAD: `e1e33892c875b68f50fa363b6776781081590704`
+- Historical checkpoint HEAD: `c5e763a66d4d1920daa98f5c44366b212885655f`
+- Historical checkpoint HEAD: `e1e33892c875b68f50fa363b6776781081590704`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Owned-sync completion gate
@@ -533,7 +533,7 @@
 - Review: PASS; no Critical, Important, or Minor findings
 - Commit: `29438052f2de1f3fe53e37be2af427d48df25c60`
   `feat(user-pmcs): release community checklist revisions`
-- Current HEAD: `29438052f2de1f3fe53e37be2af427d48df25c60`
+- Historical checkpoint HEAD: `29438052f2de1f3fe53e37be2af427d48df25c60`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Community Task 10 — anonymous recent browse and public detail
@@ -578,7 +578,7 @@
   `feat(user-pmcs): browse active community checklists`
 - Fix commit: `00d68699f94913502e2a91b053a7b1361ad961bf`
   `fix(user-pmcs): combine public conditional headers`
-- Current HEAD: `00d68699f94913502e2a91b053a7b1361ad961bf`
+- Historical checkpoint HEAD: `00d68699f94913502e2a91b053a7b1361ad961bf`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Community Task 11 — install, unsubscribe, resubscribe, and pinned
@@ -589,7 +589,7 @@
 - Status: in progress
 - Base commit: `00d68699f94913502e2a91b053a7b1361ad961bf`
 - Implementer: `/root/community_task11_impl` (fresh)
-- Reviewer: `/root/community_task11_review` (fresh; in progress)
+- Reviewer dispatched: `/root/community_task11_review` (fresh; historical checkpoint)
 - Documentation research and sequential analysis: complete
 - Implementation commit: `72c638fb61eb4844a41b19688c2772b0b2d3e4cb`
   `feat(user-pmcs): add linked checklist subscriptions`
@@ -655,7 +655,7 @@
 - Fix round 3 scoped re-review: all five authorized cache/ETag requirements
   ADDRESSED; no new Critical/Important breakage
 - Status: complete
-- Current HEAD: `6745247bc5cda3fbb2bab49881bc82307fe7667d`
+- Historical checkpoint HEAD: `6745247bc5cda3fbb2bab49881bc82307fe7667d`
 - Worktree: only this untracked progress ledger
 - Worktree after completion: only this untracked progress ledger
 - Next task: Community Task 12 — paginated update discovery and explicit
@@ -666,7 +666,7 @@
 - Status: in progress
 - Base commit: `6745247bc5cda3fbb2bab49881bc82307fe7667d`
 - Implementer: `/root/community_task12_impl` (fresh)
-- Reviewer: `/root/community_task12_review` (fresh; in progress)
+- Reviewer dispatched: `/root/community_task12_review` (fresh; historical checkpoint)
 - Documentation research and sequential analysis: complete
 - Implementation commit: `cc7ec08a955ba1aa3b3cbd0430002aef85f2975d`
   `feat(user-pmcs): discover and accept subscription updates`
@@ -682,7 +682,7 @@
     `5.757ms`.
   - Source join used a sequential scan under the local fixture distribution;
     no query/schema manipulation was made.
-- Current HEAD: `cc7ec08a955ba1aa3b3cbd0430002aef85f2975d`
+- Historical checkpoint HEAD: `cc7ec08a955ba1aa3b3cbd0430002aef85f2975d`
 - Worktree: only this untracked progress ledger
 - Review:
   - Important: missing active/no-update integration coverage and stale
@@ -709,7 +709,7 @@
   - Reproducible EXPLAIN evidence: ADDRESSED.
   - No new Critical/Important breakage.
 - Status: complete
-- Current HEAD: `cf50a8c870664620da27e931ca1e18018cef8323`
+- Historical checkpoint HEAD: `cf50a8c870664620da27e931ca1e18018cef8323`
 - Worktree after completion: only this untracked progress ledger
 - Next step: community/subscription completion gate
 
@@ -733,7 +733,7 @@
 - Status: in progress
 - Base commit: `cf50a8c870664620da27e931ca1e18018cef8323`
 - Implementer: `/root/hardening_task13_impl` (fresh)
-- Reviewer: `/root/hardening_task13_review` (fresh; in progress)
+- Reviewer dispatched: `/root/hardening_task13_review` (fresh; historical checkpoint)
 - Documentation research and sequential analysis: complete
 - Implementation commit: `91a5d87fe633cb2c78f98548b4cd374390b1455f`
   `fix(accounts): delete PMCS data from authenticated identity`
@@ -744,7 +744,7 @@
     passed.
   - Initial RED attempt recorded exact sandbox Go-cache denial; approved RED
     rerun failed on expected missing cleaner/context contracts.
-- Current HEAD: `91a5d87fe633cb2c78f98548b4cd374390b1455f`
+- Historical checkpoint HEAD: `91a5d87fe633cb2c78f98548b4cd374390b1455f`
 - Worktree: only this untracked progress ledger
 - Review:
   - Important: active external subscription pins are counted but not locked,
@@ -799,7 +799,7 @@
 - Fix round 2 scoped re-review: lock-amplification finding ADDRESSED; no new
   Critical/Important breakage
 - Status: complete
-- Current HEAD: `b0b24e4cbf79e927e8c83153381374e074984e76`
+- Historical checkpoint HEAD: `b0b24e4cbf79e927e8c83153381374e074984e76`
 - Worktree after completion: only this untracked progress ledger
 - Next task: Hardening Task 14 — top-level routes,
   compression, rate limits, and safe observability
@@ -832,7 +832,7 @@
   `GET /api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults`; this was not
   converted to a skip or reported green.
 - Worktree after implementation: only this untracked progress ledger
-- Reviewer: `/root/hardening_task14_review` (fresh; in progress)
+- Reviewer dispatched: `/root/hardening_task14_review` (fresh; historical checkpoint)
 - Review verdicts:
   - Spec compliance: FAIL
   - Task quality: CHANGES REQUIRED
@@ -880,7 +880,7 @@
   - Authored invalid dynamic path logging: ADDRESSED.
   - No new Critical/Important breakage.
 - Status: complete
-- Current HEAD: `2a6690a0744aa9a84d5c7631009f5895c768277c`
+- Historical checkpoint HEAD: `2a6690a0744aa9a84d5c7631009f5895c768277c`
 - Worktree after completion: only this untracked progress ledger
 - Next task: Hardening Task 15 — focused authorization, concurrency, and
   query-plan test matrices
@@ -916,7 +916,7 @@
 - The Task 15 plan is tests-only, so changing production behavior requires
   explicit authority. The implementer was interrupted before any production
   change; its uncommitted helper/concurrency/HTTP test work is preserved.
-- Current HEAD: `2a6690a0744aa9a84d5c7631009f5895c768277c`
+- Historical checkpoint HEAD: `2a6690a0744aa9a84d5c7631009f5895c768277c`
 - Current worktree:
   - modified `tests/user_pmcs/helpers_test.go`
   - untracked `tests/user_pmcs/concurrency_test.go`
@@ -959,7 +959,7 @@
   `16,564 allocs/op`.
 - Tests commit: `c440a3522206e7898151a704d48d77073145123e`
   `test(user-pmcs): cover concurrency and performance limits`
-- Current HEAD: `c440a3522206e7898151a704d48d77073145123e`
+- Historical checkpoint HEAD: `c440a3522206e7898151a704d48d77073145123e`
 - Worktree after implementation: only this untracked progress ledger
 - Reviewer: `/root/hardening_task15_review` (fresh)
 - Review verdicts:
@@ -1020,7 +1020,7 @@
   - New Critical/Important findings: none.
   - Scoped result: APPROVED.
 - Status: complete.
-- Current HEAD: `ffe7b8295dfc7633335adceb209f0da460314217`.
+- Historical checkpoint HEAD: `ffe7b8295dfc7633335adceb209f0da460314217`.
 - Worktree after completion: only this untracked progress ledger.
 - Deferred Minor remains for final review: deterministic UUIDs in exact
   boundary fixtures and specific plus-one database constraint assertions.
@@ -1046,7 +1046,7 @@
 
 ### Hardening Task 16: Mobile contract, migration rehearsal, and final matrix
 
-- Status: implementation complete; independent whole-branch review pending.
+- Status: review fix round 1 complete; scoped re-review pending.
 - Base commit: `ffe7b8295dfc7633335adceb209f0da460314217`.
 - Effective pre-Task-16 HEAD after the reviewed Task 15 planner correction:
   `62ce505b4766bc159fc30798fc19e238ed29136e`.
@@ -1145,10 +1145,73 @@
 - Task 16 report:
   `.superpowers/sdd/2026-07-29-user-pmcs-hardening-rollout/task-16-report.md`
   (ignored SDD evidence).
-- Task 16 commit: this commit,
+- Initial Task 16 commit:
+  `09962fd8a8aba3531841a3cd5e24234bca25d16a`
   `docs(user-pmcs): publish server synchronization contract`.
 - Mobile sync implementation: not started; this task publishes the server
   contract only.
 - Deferred v1 limitations remain unchanged: no collaborator editing, no
   background update install, no public revisions beyond released snapshots,
   and the Task 15 deferred Minor test-fixture refinements.
+
+#### Independent review and fix round 1
+
+- Initial Task 16 post-commit state: HEAD
+  `09962fd8a8aba3531841a3cd5e24234bca25d16a`; `git status --short` produced
+  no output.
+- Reviewer: `/root/hardening_task16_review`.
+- Initial verdict: FAIL with 0 Critical, 3 Important, and 1 Minor findings.
+- Important: subscription update discovery and pinned-release reads did not
+  return `409 account_not_initialized` when Firebase authentication succeeded
+  but the UID was absent from `users`.
+- Important: this ledger lacked Task 16 reviewer, commit, HEAD, worktree, and
+  next-gate evidence and labeled historical HEAD/reviewer checkpoints as
+  current.
+- Important: the ignored Task 16 report named a nonexistent migration rollback
+  file instead of `migrations/009_rollback_user_pmcs_sync.sql`.
+- Minor: the client contract overstated UUID input canonicalization even though
+  `github.com/google/uuid.Parse` accepts additional textual forms.
+- RED:
+  `TestHTTPContractSubscriptionReadsRequireInitializedAccount` failed in
+  `0.571s`; update discovery returned `200` with an empty page and pinned
+  release retrieval returned `404 resource_not_found`, rather than the
+  required `409 account_not_initialized`.
+- Root cause: the two subscription read repositories queried only subscription
+  resources and did not apply the existing initialized-account read guard.
+- GREEN implementation:
+  - pinned-release retrieval verifies the subscriber UID in `users` before
+    loading the installed release;
+  - update discovery folds that verification into its existing query through a
+    materialized account CTE and lateral update scan;
+  - the Task 15 fixed performance bound remains one SQL query for 500
+    subscription updates;
+  - no transaction, lock order, provisioning, migration, or generated file
+    changed.
+- Focused HTTP target: PASS in `0.549s`.
+- Focused privacy, pinned-read, update-discovery, update-acceptance, cursor, and
+  retirement regression group: PASS in `9.202s`.
+- 500-subscription discovery performance gate: PASS in `2.633s` with
+  `query_count=1`.
+- All seven `api/user_pmcs/...` packages: PASS.
+- `go test -race ./api/user_pmcs/... -count=1`: PASS, 293 tests across seven
+  packages.
+- Focused repository/HTTP race command: PASS, three tests across two packages.
+- `go vet ./api/user_pmcs/... ./tests/user_pmcs`: PASS with no output.
+- Compile-only user-PMCS command: PASS after the sandboxed database connection
+  was denied and the identical approved retry reached `miltech_ng_test`.
+- Supplemental full `tests/user_pmcs` rerun: FAIL in `173.514s` only because
+  the strict public-browse physical-plan assertion accepted only
+  `user_pmcs_community_releases_pkey` while PostgreSQL selected the valid
+  unique `user_pmcs_community_releases_checklist_revision_key`. The
+  account-initialization behavior and one-query update gate passed. The
+  unrelated strict assertion was not weakened.
+- Behavior/test resolution commit:
+  `d1d4a0c3b91d3be3ba846cba58a9b31ff9525844`
+  `fix(user-pmcs): require initialized subscription readers`.
+- Post-resolution-commit `git status --short`: no output.
+- Documentation correction: this ledger-containing commit,
+  `docs(user-pmcs): correct synchronization contract evidence`; its exact hash
+  must be appended by the subsequent whole-branch closeout because a commit
+  cannot contain its own hash.
+- Next gate: the original Task 16 reviewer must perform a scoped re-review of
+  all four findings before whole-branch closeout.
