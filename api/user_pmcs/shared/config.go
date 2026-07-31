@@ -28,6 +28,18 @@ type Config struct {
 	CommunityDefaultLimit  int
 	CommunityMaxLimit      int
 	TransactionMaxAttempts int
+
+	PublicRequestsPerSecond         int
+	PublicRequestBurst              int
+	AuthenticatedReadsPerSecond     int
+	AuthenticatedReadBurst          int
+	AuthenticatedMutationsPerSecond int
+	AuthenticatedMutationBurst      int
+	ReleasesPerUserPerHour          int
+	ReleaseUserBurst                int
+	ReleasesPerIPPerHour            int
+	ReleaseIPBurst                  int
+	LimiterIdleMinutes              int
 }
 
 func DefaultConfig() Config {
@@ -53,6 +65,18 @@ func DefaultConfig() Config {
 		CommunityDefaultLimit:  20,
 		CommunityMaxLimit:      50,
 		TransactionMaxAttempts: 3,
+
+		PublicRequestsPerSecond:         2,
+		PublicRequestBurst:              20,
+		AuthenticatedReadsPerSecond:     10,
+		AuthenticatedReadBurst:          30,
+		AuthenticatedMutationsPerSecond: 2,
+		AuthenticatedMutationBurst:      10,
+		ReleasesPerUserPerHour:          12,
+		ReleaseUserBurst:                3,
+		ReleasesPerIPPerHour:            60,
+		ReleaseIPBurst:                  10,
+		LimiterIdleMinutes:              15,
 	}
 }
 
@@ -94,6 +118,17 @@ func (config Config) validate() error {
 		{"CommunityDefaultLimit", int64(config.CommunityDefaultLimit)},
 		{"CommunityMaxLimit", int64(config.CommunityMaxLimit)},
 		{"TransactionMaxAttempts", int64(config.TransactionMaxAttempts)},
+		{"PublicRequestsPerSecond", int64(config.PublicRequestsPerSecond)},
+		{"PublicRequestBurst", int64(config.PublicRequestBurst)},
+		{"AuthenticatedReadsPerSecond", int64(config.AuthenticatedReadsPerSecond)},
+		{"AuthenticatedReadBurst", int64(config.AuthenticatedReadBurst)},
+		{"AuthenticatedMutationsPerSecond", int64(config.AuthenticatedMutationsPerSecond)},
+		{"AuthenticatedMutationBurst", int64(config.AuthenticatedMutationBurst)},
+		{"ReleasesPerUserPerHour", int64(config.ReleasesPerUserPerHour)},
+		{"ReleaseUserBurst", int64(config.ReleaseUserBurst)},
+		{"ReleasesPerIPPerHour", int64(config.ReleasesPerIPPerHour)},
+		{"ReleaseIPBurst", int64(config.ReleaseIPBurst)},
+		{"LimiterIdleMinutes", int64(config.LimiterIdleMinutes)},
 	}
 	for _, value := range values {
 		if value.value <= 0 {

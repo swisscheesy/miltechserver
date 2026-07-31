@@ -18,6 +18,8 @@ import (
 	"miltechserver/api/sb_700_20"
 	"miltechserver/api/tmde"
 	"miltechserver/api/user_general"
+	"miltechserver/api/user_pmcs"
+	userpmcsshared "miltechserver/api/user_pmcs/shared"
 	"miltechserver/api/user_saves"
 	"miltechserver/api/user_suggestions"
 	"miltechserver/api/user_vehicles"
@@ -38,6 +40,21 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	testRoutes.Use(middleware.AuthenticationMiddleware(authClient))
 	NewTestRouter(db, testRoutes)
 
+	authRoutes := router.Group("/api/v1/auth")
+	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
+	userPmcsConfig := userpmcsshared.DefaultConfig()
+	if env != nil {
+		var err error
+		userPmcsConfig, err = userpmcsshared.ConfigFromEnv(env)
+		if err != nil {
+			panic(err)
+		}
+	}
+	user_pmcs.RegisterRoutes(user_pmcs.Dependencies{
+		DB:     db,
+		Config: userPmcsConfig,
+	}, v1Route, authRoutes)
+
 	v1Route.Use(middleware.LoggerMiddleware())
 	// All Public Routes
 	NewGeneralRouter(v1Route, env)
@@ -52,8 +69,6 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	docs_equipment.RegisterRoutes(docs_equipment.Dependencies{DB: db, BlobClient: blobClient}, v1Route)
 
 	// All Authenticated Routes
-	authRoutes := router.Group("/api/v1/auth")
-	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
 	user_saves.RegisterRoutes(user_saves.Dependencies{
 		DB:         db,
 		BlobClient: blobClient,

@@ -197,6 +197,18 @@ func TestDefaultConfigAndConfigFromEnv(t *testing.T) {
 		CommunityDefaultLimit:  20,
 		CommunityMaxLimit:      50,
 		TransactionMaxAttempts: 3,
+
+		PublicRequestsPerSecond:         2,
+		PublicRequestBurst:              20,
+		AuthenticatedReadsPerSecond:     10,
+		AuthenticatedReadBurst:          30,
+		AuthenticatedMutationsPerSecond: 2,
+		AuthenticatedMutationBurst:      10,
+		ReleasesPerUserPerHour:          12,
+		ReleaseUserBurst:                3,
+		ReleasesPerIPPerHour:            60,
+		ReleaseIPBurst:                  10,
+		LimiterIdleMinutes:              15,
 	}
 	require.Equal(t, want, shared.DefaultConfig())
 
@@ -222,11 +234,25 @@ func TestDefaultConfigAndConfigFromEnv(t *testing.T) {
 		CommunityDefaultLimit:  19,
 		CommunityMaxLimit:      20,
 		TransactionMaxAttempts: 21,
+
+		PublicRequestsPerSecond:         22,
+		PublicRequestBurst:              23,
+		AuthenticatedReadsPerSecond:     24,
+		AuthenticatedReadBurst:          25,
+		AuthenticatedMutationsPerSecond: 26,
+		AuthenticatedMutationBurst:      27,
+		ReleasesPerUserPerHour:          28,
+		ReleaseUserBurst:                29,
+		ReleasesPerIPPerHour:            30,
+		ReleaseIPBurst:                  31,
+		LimiterIdleMinutes:              32,
 	}})
 	require.NoError(t, err)
 	require.Equal(t, 1, config.MaxOwnedChecklists)
 	require.Equal(t, int64(13), config.MaxMutationBodyBytes)
 	require.Equal(t, 21, config.TransactionMaxAttempts)
+	require.Equal(t, 22, config.PublicRequestsPerSecond)
+	require.Equal(t, 32, config.LimiterIdleMinutes)
 
 	_, err = shared.ConfigFromEnv(&bootstrap.Env{UserPmcs: bootstrap.UserPmcsConfig{MaxOwnedChecklists: -1}})
 	require.Error(t, err)

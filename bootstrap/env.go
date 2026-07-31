@@ -59,6 +59,18 @@ type UserPmcsConfig struct {
 	CommunityDefaultLimit  int
 	CommunityMaxLimit      int
 	TransactionMaxAttempts int
+
+	PublicRequestsPerSecond         int
+	PublicRequestBurst              int
+	AuthenticatedReadsPerSecond     int
+	AuthenticatedReadBurst          int
+	AuthenticatedMutationsPerSecond int
+	AuthenticatedMutationBurst      int
+	ReleasesPerUserPerHour          int
+	ReleaseUserBurst                int
+	ReleasesPerIPPerHour            int
+	ReleaseIPBurst                  int
+	LimiterIdleMinutes              int
 }
 
 func NewEnv() *Env {
@@ -137,6 +149,17 @@ func newUserPmcsConfigFromEnvironment() (UserPmcsConfig, error) {
 		{"USER_PMCS_COMMUNITY_DEFAULT_LIMIT", 20, func(value int) { config.CommunityDefaultLimit = value }},
 		{"USER_PMCS_COMMUNITY_MAX_LIMIT", 50, func(value int) { config.CommunityMaxLimit = value }},
 		{"USER_PMCS_TRANSACTION_MAX_ATTEMPTS", 3, func(value int) { config.TransactionMaxAttempts = value }},
+		{"USER_PMCS_PUBLIC_REQUESTS_PER_SECOND", 2, func(value int) { config.PublicRequestsPerSecond = value }},
+		{"USER_PMCS_PUBLIC_REQUEST_BURST", 20, func(value int) { config.PublicRequestBurst = value }},
+		{"USER_PMCS_AUTH_READS_PER_SECOND", 10, func(value int) { config.AuthenticatedReadsPerSecond = value }},
+		{"USER_PMCS_AUTH_READ_BURST", 30, func(value int) { config.AuthenticatedReadBurst = value }},
+		{"USER_PMCS_AUTH_MUTATIONS_PER_SECOND", 2, func(value int) { config.AuthenticatedMutationsPerSecond = value }},
+		{"USER_PMCS_AUTH_MUTATION_BURST", 10, func(value int) { config.AuthenticatedMutationBurst = value }},
+		{"USER_PMCS_RELEASES_PER_USER_PER_HOUR", 12, func(value int) { config.ReleasesPerUserPerHour = value }},
+		{"USER_PMCS_RELEASE_USER_BURST", 3, func(value int) { config.ReleaseUserBurst = value }},
+		{"USER_PMCS_RELEASES_PER_IP_PER_HOUR", 60, func(value int) { config.ReleasesPerIPPerHour = value }},
+		{"USER_PMCS_RELEASE_IP_BURST", 10, func(value int) { config.ReleaseIPBurst = value }},
+		{"USER_PMCS_LIMITER_IDLE_MINUTES", 15, func(value int) { config.LimiterIdleMinutes = value }},
 	}
 
 	for _, value := range values {
@@ -187,6 +210,17 @@ func (config UserPmcsConfig) validate() error {
 		{"USER_PMCS_COMMUNITY_DEFAULT_LIMIT", int64(config.CommunityDefaultLimit)},
 		{"USER_PMCS_COMMUNITY_MAX_LIMIT", int64(config.CommunityMaxLimit)},
 		{"USER_PMCS_TRANSACTION_MAX_ATTEMPTS", int64(config.TransactionMaxAttempts)},
+		{"USER_PMCS_PUBLIC_REQUESTS_PER_SECOND", int64(config.PublicRequestsPerSecond)},
+		{"USER_PMCS_PUBLIC_REQUEST_BURST", int64(config.PublicRequestBurst)},
+		{"USER_PMCS_AUTH_READS_PER_SECOND", int64(config.AuthenticatedReadsPerSecond)},
+		{"USER_PMCS_AUTH_READ_BURST", int64(config.AuthenticatedReadBurst)},
+		{"USER_PMCS_AUTH_MUTATIONS_PER_SECOND", int64(config.AuthenticatedMutationsPerSecond)},
+		{"USER_PMCS_AUTH_MUTATION_BURST", int64(config.AuthenticatedMutationBurst)},
+		{"USER_PMCS_RELEASES_PER_USER_PER_HOUR", int64(config.ReleasesPerUserPerHour)},
+		{"USER_PMCS_RELEASE_USER_BURST", int64(config.ReleaseUserBurst)},
+		{"USER_PMCS_RELEASES_PER_IP_PER_HOUR", int64(config.ReleasesPerIPPerHour)},
+		{"USER_PMCS_RELEASE_IP_BURST", int64(config.ReleaseIPBurst)},
+		{"USER_PMCS_LIMITER_IDLE_MINUTES", int64(config.LimiterIdleMinutes)},
 	}
 	for _, value := range values {
 		if value.value <= 0 {

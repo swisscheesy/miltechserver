@@ -1,11 +1,18 @@
 package route
 
 import (
+	"bytes"
+	"io"
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+
+	userpmcsshared "miltechserver/api/user_pmcs/shared"
+	"miltechserver/bootstrap"
 )
 
 func TestSetupRegistersPmcsSbsFaultRoutesUnderAuth(t *testing.T) {
@@ -27,6 +34,87 @@ func TestSetupRegistersPmcsSbsImageRoute(t *testing.T) {
 	Setup(nil, router, nil, nil, nil)
 
 	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/library/pmcs-sbs/image")
+}
+
+func TestSetupRegistersUserPmcsRoutesOnApprovedGroups(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+
+	Setup(nil, router, nil, nil, nil)
+
+	routes := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/auth/user-pmcs/sync"},
+		{method: http.MethodGet, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/drafts/:revision_id"},
+		{method: http.MethodDelete, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/drafts/:revision_id"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/publications/:revision_id"},
+		{method: http.MethodGet, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/revisions/:revision_id"},
+		{method: http.MethodDelete, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/community-releases/:revision_id"},
+		{method: http.MethodDelete, path: "/api/v1/auth/user-pmcs/checklists/:checklist_id/community-source"},
+		{method: http.MethodGet, path: "/api/v1/user-pmcs/community"},
+		{method: http.MethodGet, path: "/api/v1/user-pmcs/community/:checklist_id"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/subscriptions/:checklist_id"},
+		{method: http.MethodDelete, path: "/api/v1/auth/user-pmcs/subscriptions/:checklist_id"},
+		{method: http.MethodGet, path: "/api/v1/auth/user-pmcs/subscriptions/updates"},
+		{method: http.MethodPut, path: "/api/v1/auth/user-pmcs/subscriptions/:checklist_id/installed-releases/:revision_id"},
+		{method: http.MethodGet, path: "/api/v1/auth/user-pmcs/subscriptions/:checklist_id/installed-releases/:revision_id"},
+	}
+
+	for _, route := range routes {
+		requireRouteRegistered(t, router, route.method, route.path)
+	}
+}
+
+func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalErrorWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = io.Discard
+	t.Cleanup(func() {
+		gin.DefaultErrorWriter = originalErrorWriter
+	})
+
+	var output bytes.Buffer
+	originalLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
+	t.Cleanup(func() {
+		slog.SetDefault(originalLogger)
+	})
+
+	config := userpmcsshared.DefaultConfig()
+	config.PublicRequestsPerSecond = 1
+	config.PublicRequestBurst = 1
+	env := &bootstrap.Env{
+		UserPmcs: bootstrap.UserPmcsConfig(config),
+	}
+	router := gin.New()
+	router.Use(gin.Recovery())
+	Setup(nil, router, nil, env, nil)
+
+	const authoredQuery = "authored-community-model-secret"
+	firstRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community?model="+authoredQuery,
+		nil,
+	)
+	firstRequest.RemoteAddr = "192.0.2.50:1000"
+	router.ServeHTTP(httptest.NewRecorder(), firstRequest)
+
+	secondRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community?model="+authoredQuery,
+		nil,
+	)
+	secondRequest.RemoteAddr = "192.0.2.50:2000"
+	secondRecorder := httptest.NewRecorder()
+	router.ServeHTTP(secondRecorder, secondRequest)
+
+	require.Equal(t, http.StatusTooManyRequests, secondRecorder.Code)
+	require.NotContains(t, output.String(), authoredQuery)
 }
 
 func requireRouteRegistered(t *testing.T, router *gin.Engine, method string, path string) {
