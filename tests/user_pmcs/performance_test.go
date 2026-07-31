@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -58,7 +59,20 @@ type performanceSubscriptionFixture struct {
 	currentIDs     []uuid.UUID
 	noiseUserUIDs  []string
 	normalizedName string
+	cleanup        performanceSubscriptionFixtureCleanup
 }
+
+type performanceSubscriptionFixtureCleanup struct {
+	ownerUID     string
+	checklistIDs []string
+	userUIDs     []string
+}
+
+type performanceFixtureExecContext func(
+	context.Context,
+	string,
+	...any,
+) (sql.Result, error)
 
 var performanceSubscriptionFixturePlannerRelations = [...]string{
 	"user_pmcs_checklists",
@@ -127,6 +141,167 @@ func TestPerformanceSubscriptionFixtureCleanupRestoresPlannerStatistics(
 		if difference > tolerance {
 			t.Errorf(
 				"%s planner estimate was not refreshed after cleanup: actual=%d estimated=%.0f tolerance=%.0f",
+				relation,
+				actualRows,
+				estimatedRows,
+				tolerance,
+			)
+		}
+	}
+}
+
+func TestPerformanceSubscriptionFixtureSetupAnalyzeFailureStillCleansUp(
+	t *testing.T,
+) {
+	requireUserPmcsTestDatabase(t, testDB)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	actualRowsBefore := performancePlannerRelationActualRows(t, ctx)
+	var fallbackCleanup performanceSubscriptionFixtureCleanup
+	t.Cleanup(func() {
+		if fallbackCleanup.ownerUID == "" {
+			return
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(
+			context.Background(),
+			30*time.Second,
+		)
+		defer cleanupCancel()
+		require.NoError(
+			t,
+			cleanupPerformanceSubscriptionFixture(
+				cleanupCtx,
+				fallbackCleanup,
+				testDB.ExecContext,
+			),
+		)
+	})
+
+	injectedErr := errors.New("injected setup analyze failure")
+	sawCommittedRows := false
+	t.Run("failure after commit", func(t *testing.T) {
+		fixture, err := seedPerformanceSubscriptionsWithNoiseAndAnalyze(
+			t,
+			500,
+			4,
+			func(
+				execCtx context.Context,
+				_ string,
+				_ ...any,
+			) (sql.Result, error) {
+				actualRows, _ := observePlannerRelation(
+					t,
+					execCtx,
+					"user_pmcs_checklists",
+				)
+				sawCommittedRows =
+					actualRows > actualRowsBefore["user_pmcs_checklists"]
+				return nil, injectedErr
+			},
+		)
+		fallbackCleanup = fixture.cleanup
+		require.ErrorIs(t, err, injectedErr)
+		require.True(t, sawCommittedRows)
+	})
+
+	requirePerformancePlannerRelationsRestored(t, ctx, actualRowsBefore)
+}
+
+func TestPerformanceSubscriptionFixtureCleanupAttemptsEveryOperation(
+	t *testing.T,
+) {
+	requireUserPmcsTestDatabase(t, testDB)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	actualRowsBefore := performancePlannerRelationActualRows(t, ctx)
+	t.Run("one cleanup operation fails", func(t *testing.T) {
+		fixture := seedPerformanceSubscriptions(t, 500)
+		injectedErr := errors.New("injected subscription delete failure")
+		attempts := 0
+		failureInjected := false
+		err := cleanupPerformanceSubscriptionFixture(
+			ctx,
+			fixture.cleanup,
+			func(
+				execCtx context.Context,
+				query string,
+				args ...any,
+			) (sql.Result, error) {
+				attempts++
+				if !failureInjected &&
+					strings.Contains(
+						query,
+						"DELETE FROM user_pmcs_subscriptions",
+					) {
+					failureInjected = true
+					return nil, injectedErr
+				}
+				return testDB.ExecContext(execCtx, query, args...)
+			},
+		)
+		require.ErrorIs(t, err, injectedErr)
+		require.ErrorContains(t, err, "delete subscriptions")
+		require.ErrorContains(t, err, "delete checklists")
+		require.ErrorContains(t, err, "delete users")
+		require.Equal(
+			t,
+			5+len(performanceSubscriptionFixturePlannerRelations),
+			attempts,
+			"cleanup must attempt every delete and ANALYZE operation",
+		)
+	})
+	requirePerformancePlannerRelationsRestored(t, ctx, actualRowsBefore)
+}
+
+func performancePlannerRelationActualRows(
+	t *testing.T,
+	ctx context.Context,
+) map[string]int64 {
+	t.Helper()
+	actualRows := make(
+		map[string]int64,
+		len(performanceSubscriptionFixturePlannerRelations),
+	)
+	for _, relation := range performanceSubscriptionFixturePlannerRelations {
+		relationRows, _ := observePlannerRelation(t, ctx, relation)
+		actualRows[relation] = relationRows
+	}
+	return actualRows
+}
+
+func requirePerformancePlannerRelationsRestored(
+	t *testing.T,
+	ctx context.Context,
+	actualRowsBefore map[string]int64,
+) {
+	t.Helper()
+	for _, relation := range performanceSubscriptionFixturePlannerRelations {
+		actualRows, estimatedRows := observePlannerRelation(
+			t,
+			ctx,
+			relation,
+		)
+		if actualRows != actualRowsBefore[relation] {
+			t.Errorf(
+				"%s fixture rows were not restored: before=%d after=%d",
+				relation,
+				actualRowsBefore[relation],
+				actualRows,
+			)
+		}
+		tolerance := float64(actualRows) / 10
+		if tolerance < 1 {
+			tolerance = 1
+		}
+		difference := estimatedRows - float64(actualRows)
+		if difference < 0 {
+			difference = -difference
+		}
+		if difference > tolerance {
+			t.Errorf(
+				"%s planner estimate was not restored: actual=%d estimated=%.0f tolerance=%.0f",
 				relation,
 				actualRows,
 				estimatedRows,
@@ -1612,6 +1787,23 @@ func seedPerformanceSubscriptionsWithNoise(
 	noiseSubscriberCount int,
 ) performanceSubscriptionFixture {
 	t.Helper()
+	fixture, err := seedPerformanceSubscriptionsWithNoiseAndAnalyze(
+		t,
+		count,
+		noiseSubscriberCount,
+		testDB.ExecContext,
+	)
+	require.NoError(t, err)
+	return fixture
+}
+
+func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
+	t *testing.T,
+	count int,
+	noiseSubscriberCount int,
+	analyzeExec performanceFixtureExecContext,
+) (performanceSubscriptionFixture, error) {
+	t.Helper()
 	requireUserPmcsTestDatabase(t, testDB)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -1832,71 +2024,117 @@ func seedPerformanceSubscriptionsWithNoise(
 		fixture.ownerUID,
 	)
 	require.NoError(t, err)
-	require.NoError(t, tx.Commit())
-	for _, table := range performanceSubscriptionFixturePlannerRelations {
-		_, err = testDB.ExecContext(
-			ctx,
-			"ANALYZE "+pq.QuoteIdentifier(table),
-		)
-		require.NoError(t, err)
+	fixture.cleanup = performanceSubscriptionFixtureCleanup{
+		ownerUID:     fixture.ownerUID,
+		checklistIDs: checklists,
+		userUIDs:     userUIDs,
 	}
+	require.NoError(t, tx.Commit())
+	registerPerformanceSubscriptionFixtureCleanup(t, fixture.cleanup)
+	if err := analyzePerformanceSubscriptionFixtureRelations(
+		ctx,
+		analyzeExec,
+	); err != nil {
+		return fixture, err
+	}
+	return fixture, nil
+}
 
+func registerPerformanceSubscriptionFixtureCleanup(
+	t *testing.T,
+	cleanup performanceSubscriptionFixtureCleanup,
+) {
+	t.Helper()
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(
 			context.Background(),
 			30*time.Second,
 		)
 		defer cleanupCancel()
-		_, cleanupErr := testDB.ExecContext(
-			cleanupCtx,
-			`DELETE FROM user_pmcs_subscriptions
-			 WHERE checklist_id = ANY($1::uuid[])`,
-			pq.Array(checklists),
-		)
-		require.NoError(t, cleanupErr)
-		_, cleanupErr = testDB.ExecContext(
-			cleanupCtx,
-			`DELETE FROM user_pmcs_community_sources AS source
-			 USING user_pmcs_checklists AS checklist
-			 WHERE source.checklist_id = checklist.id
-			   AND checklist.owner_uid = $1`,
-			fixture.ownerUID,
-		)
-		require.NoError(t, cleanupErr)
-		_, cleanupErr = testDB.ExecContext(
-			cleanupCtx,
-			`DELETE FROM user_pmcs_community_releases AS release
-			 USING user_pmcs_checklists AS checklist
-			 WHERE release.checklist_id = checklist.id
-			   AND checklist.owner_uid = $1`,
-			fixture.ownerUID,
-		)
-		require.NoError(t, cleanupErr)
-		_, cleanupErr = testDB.ExecContext(
-			cleanupCtx,
-			`DELETE FROM user_pmcs_checklists
-			 WHERE owner_uid = $1`,
-			fixture.ownerUID,
-		)
-		require.NoError(t, cleanupErr)
-		_, cleanupErr = testDB.ExecContext(
-			cleanupCtx,
-			`DELETE FROM users WHERE uid = ANY($1)`,
-			pq.Array(userUIDs),
-		)
-		require.NoError(t, cleanupErr)
-		// The fixture deliberately updates global planner statistics. Refresh
-		// every affected relation after cleanup so later tests do not plan
-		// against removed rows.
-		for _, table := range performanceSubscriptionFixturePlannerRelations {
-			_, cleanupErr = testDB.ExecContext(
+		require.NoError(
+			t,
+			cleanupPerformanceSubscriptionFixture(
 				cleanupCtx,
-				"ANALYZE "+pq.QuoteIdentifier(table),
-			)
-			require.NoError(t, cleanupErr)
-		}
+				cleanup,
+				testDB.ExecContext,
+			),
+		)
 	})
-	return fixture
+}
+
+func analyzePerformanceSubscriptionFixtureRelations(
+	ctx context.Context,
+	exec performanceFixtureExecContext,
+) error {
+	for _, table := range performanceSubscriptionFixturePlannerRelations {
+		if _, err := exec(
+			ctx,
+			"ANALYZE "+pq.QuoteIdentifier(table),
+		); err != nil {
+			return fmt.Errorf("analyze %s: %w", table, err)
+		}
+	}
+	return nil
+}
+
+func cleanupPerformanceSubscriptionFixture(
+	ctx context.Context,
+	cleanup performanceSubscriptionFixtureCleanup,
+	exec performanceFixtureExecContext,
+) error {
+	cleanupErrors := make([]error, 0)
+	attempt := func(operation string, query string, args ...any) {
+		if _, err := exec(ctx, query, args...); err != nil {
+			cleanupErrors = append(
+				cleanupErrors,
+				fmt.Errorf("%s: %w", operation, err),
+			)
+		}
+	}
+
+	attempt(
+		"delete subscriptions",
+		`DELETE FROM user_pmcs_subscriptions
+		 WHERE checklist_id = ANY($1::uuid[])`,
+		pq.Array(cleanup.checklistIDs),
+	)
+	attempt(
+		"delete community sources",
+		`DELETE FROM user_pmcs_community_sources AS source
+		 USING user_pmcs_checklists AS checklist
+		 WHERE source.checklist_id = checklist.id
+		   AND checklist.owner_uid = $1`,
+		cleanup.ownerUID,
+	)
+	attempt(
+		"delete community releases",
+		`DELETE FROM user_pmcs_community_releases AS release
+		 USING user_pmcs_checklists AS checklist
+		 WHERE release.checklist_id = checklist.id
+		   AND checklist.owner_uid = $1`,
+		cleanup.ownerUID,
+	)
+	attempt(
+		"delete checklists",
+		`DELETE FROM user_pmcs_checklists
+		 WHERE owner_uid = $1`,
+		cleanup.ownerUID,
+	)
+	attempt(
+		"delete users",
+		`DELETE FROM users WHERE uid = ANY($1)`,
+		pq.Array(cleanup.userUIDs),
+	)
+	// The fixture deliberately updates global planner statistics. Refresh
+	// every affected relation after cleanup so later tests do not plan
+	// against removed rows.
+	for _, table := range performanceSubscriptionFixturePlannerRelations {
+		attempt(
+			"analyze "+table,
+			"ANALYZE "+pq.QuoteIdentifier(table),
+		)
+	}
+	return errors.Join(cleanupErrors...)
 }
 
 func captureUserPmcsQueryPlans(
