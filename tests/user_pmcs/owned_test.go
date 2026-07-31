@@ -2,6 +2,8 @@ package user_pmcs_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -436,6 +438,130 @@ func TestGetOwnedChecklistConcurrentPutReturnsOneRevisionSnapshot(t *testing.T) 
 	}
 }
 
+func TestPutDraftLargeDifferentAccountsDoNotShareTreeLocks(t *testing.T) {
+	repository := newOwnedRepository()
+	firstOwner := newUserPmcsTestUser(t)
+	secondOwner := newUserPmcsTestUser(t)
+	firstChecklistID := uuid.New()
+	secondChecklistID := uuid.New()
+	firstCreated, err := repository.Create(
+		context.Background(),
+		firstOwner,
+		firstChecklistID,
+		preparedTree(t, uuid.New()),
+		shared.Precondition{Mode: shared.PreconditionCreate},
+	)
+	require.NoError(t, err)
+	secondCreated, err := repository.Create(
+		context.Background(),
+		secondOwner,
+		secondChecklistID,
+		preparedTree(t, uuid.New()),
+		shared.Precondition{Mode: shared.PreconditionCreate},
+	)
+	require.NoError(t, err)
+
+	firstReplacement := allTreeStripesDraft(t, uuid.New(), 1)
+	secondReplacement := allTreeStripesDraft(t, uuid.New(), 2)
+	releaseFirst := installChecklistUpdateBarrier(t, firstChecklistID)
+	releaseSecond := installRevisionUpdateBarrier(
+		t,
+		secondReplacement.Input.ID,
+	)
+	type putOutcome struct {
+		result *owned.MutationResult
+		err    error
+	}
+	firstResult := make(chan putOutcome, 1)
+	secondResult := make(chan putOutcome, 1)
+	go func() {
+		result, putErr := repository.PutDraft(
+			context.Background(),
+			firstOwner,
+			firstChecklistID,
+			firstReplacement,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeChecklistETag(
+					firstChecklistID,
+					firstCreated.Aggregate.SyncVersion,
+				),
+			},
+		)
+		firstResult <- putOutcome{result: result, err: putErr}
+	}()
+	require.True(
+		t,
+		waitForDatabaseActivity(
+			15*time.Second,
+			"lower(wait_event) = 'advisory' AND query LIKE '%UPDATE user_pmcs_checklists%'",
+		),
+		"first account did not reach its post-tree root-update barrier",
+	)
+
+	go func() {
+		result, putErr := repository.PutDraft(
+			context.Background(),
+			secondOwner,
+			secondChecklistID,
+			secondReplacement,
+			shared.Precondition{
+				Mode: shared.PreconditionMatch,
+				ETag: shared.MakeChecklistETag(
+					secondChecklistID,
+					secondCreated.Aggregate.SyncVersion,
+				),
+			},
+		)
+		secondResult <- putOutcome{result: result, err: putErr}
+	}()
+	reachedSecondTree := waitForDatabaseActivity(
+		10*time.Second,
+		"lower(wait_event) = 'advisory' AND query LIKE '%UPDATE user_pmcs_revisions%'",
+	)
+	if !reachedSecondTree {
+		releaseSecond()
+		releaseFirst()
+		<-firstResult
+		<-secondResult
+	}
+	require.True(
+		t,
+		reachedSecondTree,
+		"second account waited before reaching its own revision mutation",
+	)
+
+	releaseSecond()
+	select {
+	case second := <-secondResult:
+		require.NoError(t, second.err)
+		require.NotNil(t, second.result)
+	case <-time.After(15 * time.Second):
+		releaseFirst()
+		t.Fatal("second account did not commit while first account remained paused")
+	}
+	select {
+	case first := <-firstResult:
+		require.Failf(
+			t,
+			"first write unexpectedly completed",
+			"result=%v error=%v",
+			first.result,
+			first.err,
+		)
+	default:
+	}
+
+	releaseFirst()
+	first := <-firstResult
+	require.NoError(t, first.err)
+	require.NotNil(t, first.result)
+	require.Equal(t, int64(2), accountVersion(t, firstOwner))
+	require.Equal(t, int64(2), accountVersion(t, secondOwner))
+	require.Equal(t, int64(2), checklistVersion(t, firstChecklistID))
+	require.Equal(t, int64(2), checklistVersion(t, secondChecklistID))
+}
+
 func TestPutDraftReplacesDraftUUIDAndIncrementsVersionsOnce(t *testing.T) {
 	ownerUID := newUserPmcsTestUser(t)
 	repository := newOwnedRepository()
@@ -810,6 +936,33 @@ func wideOwnedDraft(
 	return prepareOwnedDraft(t, input)
 }
 
+func allTreeStripesDraft(
+	t *testing.T,
+	revisionID uuid.UUID,
+	seed uint64,
+) shared.PreparedRevision {
+	t.Helper()
+	draft := wideOwnedDraft(t, revisionID, 100, 20)
+	// Cover every stripe from the removed process-wide lock implementation so
+	// this regression deterministically detects its independent-user stall.
+	for stripe := uint64(0); stripe < 32; stripe++ {
+		draft.Input.Sections[stripe].ID = uuidForTreeStripe(seed, stripe)
+	}
+	return prepareOwnedDraft(t, draft.Input)
+}
+
+func uuidForTreeStripe(seed uint64, stripe uint64) uuid.UUID {
+	for candidate := uint64(1); ; candidate++ {
+		var id uuid.UUID
+		binary.BigEndian.PutUint64(id[:8], seed)
+		binary.BigEndian.PutUint64(id[8:], candidate)
+		digest := sha256.Sum256(id[:])
+		if binary.BigEndian.Uint64(digest[:8])%32 == stripe {
+			return id
+		}
+	}
+}
+
 func validOwnedRevisionInput(revisionID uuid.UUID) shared.RevisionInput {
 	return shared.RevisionInput{
 		ID:          revisionID,
@@ -824,6 +977,31 @@ func validOwnedRevisionInput(revisionID uuid.UUID) shared.RevisionInput {
 func installChecklistUpdateBarrier(
 	t *testing.T,
 	checklistID uuid.UUID,
+) func() {
+	t.Helper()
+	return installRowUpdateBarrier(
+		t,
+		"user_pmcs_checklists",
+		checklistID,
+	)
+}
+
+func installRevisionUpdateBarrier(
+	t *testing.T,
+	revisionID uuid.UUID,
+) func() {
+	t.Helper()
+	return installRowUpdateBarrier(
+		t,
+		"user_pmcs_revisions",
+		revisionID,
+	)
+}
+
+func installRowUpdateBarrier(
+	t *testing.T,
+	tableName string,
+	rowID uuid.UUID,
 ) func() {
 	t.Helper()
 	ctx := context.Background()
@@ -868,8 +1046,9 @@ func installChecklistUpdateBarrier(
 			if _, dropErr := testDB.ExecContext(
 				context.Background(),
 				fmt.Sprintf(
-					`DROP TRIGGER %s ON user_pmcs_checklists`,
+					`DROP TRIGGER %s ON %s`,
 					quotedTrigger,
+					pq.QuoteIdentifier(tableName),
 				),
 			); dropErr != nil {
 				t.Errorf("drop barrier trigger: %v", dropErr)
@@ -912,7 +1091,7 @@ func installChecklistUpdateBarrier(
 			 END
 			 $barrier$`,
 			quotedFunction,
-			checklistID.String(),
+			rowID.String(),
 			lockKey,
 		),
 	)
@@ -922,9 +1101,10 @@ func installChecklistUpdateBarrier(
 		ctx,
 		fmt.Sprintf(
 			`CREATE TRIGGER %s
-			 BEFORE UPDATE ON user_pmcs_checklists
+			 BEFORE UPDATE ON %s
 			 FOR EACH ROW EXECUTE FUNCTION %s()`,
 			quotedTrigger,
+			pq.QuoteIdentifier(tableName),
 			quotedFunction,
 		),
 	)

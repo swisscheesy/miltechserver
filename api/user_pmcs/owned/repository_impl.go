@@ -172,7 +172,7 @@ func (repository *RepositoryImpl) Create(
 	draft shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	return persistence.WithWriteTx(
+	result, err := persistence.WithSerializableWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -191,13 +191,6 @@ func (repository *RepositoryImpl) Create(
 			}
 			if precondition.Mode != shared.PreconditionCreate {
 				return nil, staleChecklistError()
-			}
-			if err := lockPreparedTreeUUIDs(
-				ctx,
-				tx,
-				draft.Input,
-			); err != nil {
-				return nil, err
 			}
 			if found {
 				return repository.resolveCreateRetry(
@@ -306,6 +299,10 @@ func (repository *RepositoryImpl) Create(
 			}, nil
 		},
 	)
+	if err != nil {
+		return nil, normalizePreparedTreeConflict(err)
+	}
+	return result, nil
 }
 
 func (repository *RepositoryImpl) PutDraft(
@@ -315,7 +312,7 @@ func (repository *RepositoryImpl) PutDraft(
 	draft shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	return persistence.WithWriteTx(
+	result, err := persistence.WithSerializableWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -344,14 +341,6 @@ func (repository *RepositoryImpl) PutDraft(
 			)) {
 				return nil, staleChecklistError()
 			}
-			if err := lockPreparedTreeUUIDs(
-				ctx,
-				tx,
-				draft.Input,
-			); err != nil {
-				return nil, err
-			}
-
 			currentDraftID, hasDraft, err := currentDraftID(
 				ctx,
 				tx,
@@ -428,6 +417,10 @@ func (repository *RepositoryImpl) PutDraft(
 			return &MutationResult{Aggregate: *aggregate}, nil
 		},
 	)
+	if err != nil {
+		return nil, normalizePreparedTreeConflict(err)
+	}
+	return result, nil
 }
 
 func (repository *RepositoryImpl) DeleteDraft(
@@ -701,7 +694,7 @@ func (repository *RepositoryImpl) Publish(
 	revision shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	return persistence.WithWriteTx(
+	result, err := persistence.WithSerializableWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -767,14 +760,6 @@ func (repository *RepositoryImpl) Publish(
 					map[string]any{"expected_revision_number": nextNumber},
 				)
 			}
-			if err := lockPreparedTreeUUIDs(
-				ctx,
-				tx,
-				revision.Input,
-			); err != nil {
-				return nil, err
-			}
-
 			draftID, hasDraft, err := currentDraftID(ctx, tx, checklistID)
 			if err != nil {
 				return nil, err
@@ -909,6 +894,10 @@ func (repository *RepositoryImpl) Publish(
 			return &MutationResult{Aggregate: *aggregate}, nil
 		},
 	)
+	if err != nil {
+		return nil, normalizePreparedTreeConflict(err)
+	}
+	return result, nil
 }
 
 func (repository *RepositoryImpl) resolvePublicationRetry(

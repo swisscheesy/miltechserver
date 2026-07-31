@@ -2,10 +2,10 @@ package owned
 
 import (
 	"context"
-	"slices"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 
 	"miltechserver/api/user_pmcs/shared"
@@ -423,59 +423,27 @@ func TestHistoricalGetReturnsImmutableETag(t *testing.T) {
 	require.Equal(t, revisionID, repository.receivedRevision)
 }
 
-func TestPreparedTreeAdvisoryKeysAreStableSortedAndDeduplicated(t *testing.T) {
-	revisionID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
-	firstNodeID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-	secondNodeID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-	input := shared.RevisionInput{
-		ID: revisionID,
-		Sections: []shared.SectionInput{
-			{
-				ID: secondNodeID,
-				Items: []shared.ItemInput{
-					{ID: firstNodeID},
-					{ID: secondNodeID},
-				},
-			},
-		},
+func TestNormalizePreparedTreeConflictMapsOnlyKnownPrimaryKeys(t *testing.T) {
+	knownConflict := &pq.Error{
+		Code:       pq.ErrorCode("23505"),
+		Constraint: "user_pmcs_sections_pkey",
 	}
+	requireAPIError(
+		t,
+		normalizePreparedTreeConflict(knownConflict),
+		422,
+		"validation_failed",
+	)
 
-	keys := preparedTreeAdvisoryKeys(input)
-	reordered := input
-	reordered.Sections[0].Items[0], reordered.Sections[0].Items[1] =
-		reordered.Sections[0].Items[1], reordered.Sections[0].Items[0]
-
-	require.Len(t, keys, 3)
-	require.True(t, slices.IsSorted(keys))
-	require.Equal(t, keys, preparedTreeAdvisoryKeys(reordered))
-}
-
-func TestPreparedTreeAdvisoryKeysAreBoundedAtMaximumTreeCeiling(t *testing.T) {
-	input := shared.RevisionInput{ID: uuid.New()}
-	for sectionIndex := 0; sectionIndex < 100; sectionIndex++ {
-		section := shared.SectionInput{ID: uuid.New()}
-		for itemIndex := 0; itemIndex < 20; itemIndex++ {
-			item := shared.ItemInput{ID: uuid.New()}
-			for noticeIndex := 0; noticeIndex < 2; noticeIndex++ {
-				item.Notices = append(
-					item.Notices,
-					shared.NoticeInput{ID: uuid.New()},
-				)
-			}
-			for stepIndex := 0; stepIndex < 5; stepIndex++ {
-				item.ProcedureSteps = append(
-					item.ProcedureSteps,
-					shared.ProcedureStepInput{ID: uuid.New()},
-				)
-			}
-			section.Items = append(section.Items, item)
-		}
-		input.Sections = append(input.Sections, section)
+	unrelatedConflict := &pq.Error{
+		Code:       pq.ErrorCode("23505"),
+		Constraint: "unrelated_resource_pkey",
 	}
-
-	keys := preparedTreeAdvisoryKeys(input)
-
-	require.LessOrEqual(t, len(keys), 32)
+	require.Same(
+		t,
+		unrelatedConflict,
+		normalizePreparedTreeConflict(unrelatedConflict),
+	)
 }
 
 func validDraftInput(revisionID uuid.UUID) shared.RevisionInput {

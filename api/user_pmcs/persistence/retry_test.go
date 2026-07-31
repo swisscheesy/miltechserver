@@ -75,6 +75,28 @@ func TestTreeWriteTransactionRetriesOnlyRetryableFailures(t *testing.T) {
 	})
 }
 
+func TestSerializableTreeWriteTransactionUsesSerializableIsolation(t *testing.T) {
+	t.Parallel()
+	database, state := openScriptedDatabase(t, nil)
+
+	result, err := WithSerializableWriteTx(
+		context.Background(),
+		database,
+		3,
+		func(_ *sql.Tx) (string, error) {
+			return "committed", nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "committed", result)
+	require.Equal(
+		t,
+		driver.IsolationLevel(sql.LevelSerializable),
+		state.isolationLevel(),
+	)
+}
+
 func TestTreeWriteTransactionBoundsAttemptsAndDiscardsResults(t *testing.T) {
 	t.Parallel()
 

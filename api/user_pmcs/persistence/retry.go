@@ -21,6 +21,39 @@ func WithWriteTx[T any](
 	maxAttempts int,
 	fn TxFunc[T],
 ) (T, error) {
+	return withWriteTx(
+		ctx,
+		database,
+		maxAttempts,
+		sql.LevelReadCommitted,
+		fn,
+	)
+}
+
+func WithSerializableWriteTx[T any](
+	ctx context.Context,
+	database *sql.DB,
+	maxAttempts int,
+	fn TxFunc[T],
+) (T, error) {
+	// Serializable retries let callers protect read-then-write invariants
+	// without introducing one process-wide blocking lock.
+	return withWriteTx(
+		ctx,
+		database,
+		maxAttempts,
+		sql.LevelSerializable,
+		fn,
+	)
+}
+
+func withWriteTx[T any](
+	ctx context.Context,
+	database *sql.DB,
+	maxAttempts int,
+	isolation sql.IsolationLevel,
+	fn TxFunc[T],
+) (T, error) {
 	var zero T
 	if database == nil {
 		return zero, errors.New("write transaction database is nil")
@@ -37,7 +70,7 @@ func WithWriteTx[T any](
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		startedAt := time.Now()
-		result, err := runWriteAttempt(ctx, database, fn)
+		result, err := runWriteAttempt(ctx, database, isolation, fn)
 		shared.RecordDBDuration(ctx, time.Since(startedAt))
 		if err == nil {
 			return result, nil
@@ -58,10 +91,11 @@ func WithWriteTx[T any](
 func runWriteAttempt[T any](
 	ctx context.Context,
 	database *sql.DB,
+	isolation sql.IsolationLevel,
 	fn TxFunc[T],
 ) (result T, err error) {
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelReadCommitted,
+		Isolation: isolation,
 	})
 	if err != nil {
 		return result, err

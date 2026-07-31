@@ -5,10 +5,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,16 +93,6 @@ type lockedChecklist struct {
 	syncVersion int64
 	deletedAt   *time.Time
 }
-
-const (
-	// The verified server baseline has max_locks_per_transaction=64. Capping
-	// one submitted tree at half that value bounds shared lock-table pressure
-	// and leaves capacity for relation locks and concurrent writers.
-	preparedTreeAdvisoryStripeCount uint64 = 32
-
-	// 0x55504d43 is ASCII "UPMC"; the low bits identify a UUID stripe.
-	preparedTreeAdvisoryNamespace int64 = 0x55504d4300000000
-)
 
 func lockChecklist(
 	ctx context.Context,
@@ -265,80 +253,25 @@ func ensurePreparedTreeIDsAvailable(
 	return nil
 }
 
-func preparedTreeAdvisoryKeys(revision shared.RevisionInput) []int64 {
-	ids := []uuid.UUID{revision.ID}
-	for _, section := range revision.Sections {
-		ids = append(ids, section.ID)
-		for _, item := range section.Items {
-			ids = append(ids, item.ID)
-			for _, notice := range item.Notices {
-				ids = append(ids, notice.ID)
-			}
-			for _, step := range item.ProcedureSteps {
-				ids = append(ids, step.ID)
-			}
-		}
+func normalizePreparedTreeConflict(err error) error {
+	var postgresError *pq.Error
+	if !errors.As(err, &postgresError) ||
+		postgresError.Code != pq.ErrorCode("23505") {
+		return err
 	}
-
-	keys := make([]int64, 0, len(ids))
-	for _, id := range ids {
-		digest := sha256.Sum256(id[:])
-		stripe := int64(
-			binary.BigEndian.Uint64(digest[:8]) %
-				preparedTreeAdvisoryStripeCount,
+	switch postgresError.Constraint {
+	case "user_pmcs_revisions_pkey",
+		"user_pmcs_sections_pkey",
+		"user_pmcs_items_pkey",
+		"user_pmcs_notices_pkey",
+		"user_pmcs_procedure_steps_pkey":
+		return shared.NewValidationFailed(
+			"revision tree UUID belongs to another resource",
+			nil,
 		)
-		keys = append(keys, preparedTreeAdvisoryNamespace+stripe)
+	default:
+		return err
 	}
-	// Identical UUIDs always share a stripe. Stripe collisions only add
-	// contention, and sorted acquisition prevents overlapping trees from
-	// deadlocking.
-	sort.Slice(keys, func(left, right int) bool {
-		return keys[left] < keys[right]
-	})
-
-	deduplicatedKeys := keys[:0]
-	for index, key := range keys {
-		if index == 0 || key != keys[index-1] {
-			deduplicatedKeys = append(deduplicatedKeys, key)
-		}
-	}
-	return deduplicatedKeys
-}
-
-func lockPreparedTreeUUIDs(
-	ctx context.Context,
-	tx *sql.Tx,
-	revision shared.RevisionInput,
-) error {
-	keys := preparedTreeAdvisoryKeys(revision)
-	if len(keys) == 0 {
-		return nil
-	}
-
-	var acquired int
-	if err := tx.QueryRowContext(
-		ctx,
-		`WITH RECURSIVE acquired(position, lock_result) AS (
-		     SELECT 1, pg_advisory_xact_lock(($1::bigint[])[1])
-		     UNION ALL
-		     SELECT position + 1,
-		            pg_advisory_xact_lock(($1::bigint[])[position + 1])
-		     FROM acquired
-		     WHERE position < cardinality($1::bigint[])
-		 )
-		 SELECT count(*) FROM acquired`,
-		pq.Array(keys),
-	).Scan(&acquired); err != nil {
-		return fmt.Errorf("lock submitted revision tree UUIDs: %w", err)
-	}
-	if acquired != len(keys) {
-		return fmt.Errorf(
-			"lock submitted revision tree UUIDs: acquired %d of %d locks",
-			acquired,
-			len(keys),
-		)
-	}
-	return nil
 }
 
 func requireInitializedAccount(
