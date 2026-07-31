@@ -16,6 +16,7 @@ import (
 const (
 	limiterCleanupInterval = time.Minute
 	maxCleanupEntries      = 128
+	maxLimiterEntries      = 4096
 )
 
 type limiterFactory func(rate.Limit, int) *rate.Limiter
@@ -81,6 +82,10 @@ func (limiter *keyedLimiter) allow(key string) bool {
 
 	entry, exists := limiter.entries[key]
 	if !exists {
+		if len(limiter.entries) >= maxLimiterEntries &&
+			!limiter.evictOldestIdleEntry(currentTime) {
+			return false
+		}
 		entry = &limiterEntry{
 			limiter: limiter.factory(limiter.limit, limiter.burst),
 		}
@@ -88,6 +93,31 @@ func (limiter *keyedLimiter) allow(key string) bool {
 	}
 	entry.lastSeen = currentTime
 	return entry.limiter.AllowN(currentTime, 1)
+}
+
+func (limiter *keyedLimiter) evictOldestIdleEntry(
+	currentTime time.Time,
+) bool {
+	var (
+		candidateKey      string
+		candidateLastSeen time.Time
+	)
+	for key, entry := range limiter.entries {
+		if currentTime.Sub(entry.lastSeen) < limiter.idleTTL {
+			continue
+		}
+		if candidateKey == "" ||
+			entry.lastSeen.Before(candidateLastSeen) ||
+			(entry.lastSeen.Equal(candidateLastSeen) && key < candidateKey) {
+			candidateKey = key
+			candidateLastSeen = entry.lastSeen
+		}
+	}
+	if candidateKey == "" {
+		return false
+	}
+	delete(limiter.entries, candidateKey)
+	return true
 }
 
 func (limiter *keyedLimiter) cleanupIdleEntries(currentTime time.Time) {

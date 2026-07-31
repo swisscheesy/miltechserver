@@ -2,6 +2,7 @@ package user_pmcs
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -88,6 +89,71 @@ func TestKeyedLimiterCreatesOneBucketUnderConcurrentAccess(t *testing.T) {
 	require.Equal(t, 1, keyedLimiterEntryCount(limiter))
 }
 
+func TestKeyedLimiterBoundsActiveKeysWithoutResettingExistingBuckets(
+	t *testing.T,
+) {
+	const expectedMaximumEntries = 4096
+	clock := &fakeClock{now: time.Unix(2_500, 0)}
+	limiter := newKeyedLimiter(
+		rate.Limit(1),
+		1,
+		15*time.Minute,
+		clock.Now,
+		defaultLimiterFactory,
+	)
+
+	for index := range expectedMaximumEntries {
+		require.True(
+			t,
+			limiter.allow(fmt.Sprintf("active-%04d", index)),
+		)
+	}
+
+	for index := range 1024 {
+		require.False(
+			t,
+			limiter.allow(fmt.Sprintf("unseen-at-capacity-%04d", index)),
+		)
+	}
+	require.Equal(
+		t,
+		expectedMaximumEntries,
+		keyedLimiterEntryCount(limiter),
+	)
+	require.False(t, limiter.allow("active-0000"))
+}
+
+func TestKeyedLimiterAtCapacityEvictsDeterministicOldestIdleKey(
+	t *testing.T,
+) {
+	const expectedMaximumEntries = 4096
+	clock := &fakeClock{now: time.Unix(2_750, 0)}
+	limiter := newKeyedLimiter(
+		rate.Limit(1),
+		1,
+		time.Second,
+		clock.Now,
+		defaultLimiterFactory,
+	)
+	for index := range expectedMaximumEntries {
+		require.True(
+			t,
+			limiter.allow(fmt.Sprintf("idle-%04d", index)),
+		)
+	}
+
+	clock.Advance(2 * time.Second)
+	require.True(t, limiter.allow("replacement"))
+	require.Equal(
+		t,
+		expectedMaximumEntries,
+		keyedLimiterEntryCount(limiter),
+	)
+	require.False(t, keyedLimiterHasEntry(limiter, "idle-0000"))
+	require.True(t, keyedLimiterHasEntry(limiter, "idle-0001"))
+	require.True(t, keyedLimiterHasEntry(limiter, "replacement"))
+}
+
 func TestPublicLimiterReturnsStable429EnvelopePerClientIP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	clock := &fakeClock{now: time.Unix(3_000, 0)}
@@ -157,6 +223,13 @@ func keyedLimiterEntryCount(limiter *keyedLimiter) int {
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
 	return len(limiter.entries)
+}
+
+func keyedLimiterHasEntry(limiter *keyedLimiter, key string) bool {
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	_, exists := limiter.entries[key]
+	return exists
 }
 
 func performLimiterRequest(

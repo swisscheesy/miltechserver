@@ -38,6 +38,9 @@ const userPmcsAccessPathKey = "user_pmcs_access_path"
 
 func NewEngine() *gin.Engine {
 	router := gin.New()
+	if err := router.SetTrustedProxies(nil); err != nil {
+		panic(fmt.Errorf("disable trusted proxies: %w", err))
+	}
 	router.Use(gin.LoggerWithFormatter(formatAccessLog))
 	router.Use(recordUserPmcsAccessPath())
 	router.Use(gin.Recovery())

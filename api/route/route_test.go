@@ -164,6 +164,52 @@ func TestSetupUserPmcsPublicObservabilityDoesNotLogAuthoredQueryText(t *testing.
 	require.Contains(t, accessOutput.String(), "useful-structural-query")
 }
 
+func TestNewEngineIgnoresForwardedClientIPFromUntrustedRemote(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalDefaultWriter := gin.DefaultWriter
+	gin.DefaultWriter = io.Discard
+	t.Cleanup(func() {
+		gin.DefaultWriter = originalDefaultWriter
+	})
+	originalErrorWriter := gin.DefaultErrorWriter
+	gin.DefaultErrorWriter = io.Discard
+	t.Cleanup(func() {
+		gin.DefaultErrorWriter = originalErrorWriter
+	})
+
+	config := userpmcsshared.DefaultConfig()
+	config.PublicRequestsPerSecond = 1
+	config.PublicRequestBurst = 1
+	env := &bootstrap.Env{
+		UserPmcs: bootstrap.UserPmcsConfig(config),
+	}
+	router := NewEngine()
+	Setup(nil, router, nil, env, nil)
+
+	firstRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community",
+		nil,
+	)
+	firstRequest.RemoteAddr = "192.0.2.60:1000"
+	firstRequest.Header.Set("X-Forwarded-For", "198.51.100.10")
+	firstRecorder := httptest.NewRecorder()
+	router.ServeHTTP(firstRecorder, firstRequest)
+	require.Equal(t, http.StatusInternalServerError, firstRecorder.Code)
+
+	spoofedRequest := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/user-pmcs/community",
+		nil,
+	)
+	spoofedRequest.RemoteAddr = "192.0.2.60:2000"
+	spoofedRequest.Header.Set("X-Forwarded-For", "198.51.100.11")
+	spoofedRecorder := httptest.NewRecorder()
+	router.ServeHTTP(spoofedRecorder, spoofedRequest)
+
+	require.Equal(t, http.StatusTooManyRequests, spoofedRecorder.Code)
+}
+
 func requireRouteRegistered(t *testing.T, router *gin.Engine, method string, path string) {
 	t.Helper()
 
