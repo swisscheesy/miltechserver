@@ -1218,8 +1218,8 @@
 
 ### Whole-branch Task 5 reservation resolution
 
-- Status: implementation and focused verification complete; fresh independent
-  review pending.
+- Status: implementation and focused verification complete; the fresh
+  independent review recorded below passed.
 - Authorization: the user approved the migration 010 transaction-scoped
   content UUID reservation protocol in the controlling reservation-fix brief.
 - Implementer: `/root/owned_task5_impl`.
@@ -1272,7 +1272,7 @@
     and p50/p95 transaction latency `434.083ms/458.703ms`;
   - maximum-size reservation churn: acquisition p50/p95
     `79.718ms/109.812ms`, cleanup `44.798ms/58.631ms`, transaction
-    `145.034ms/192.938ms`, WAL delta `9,922,656` bytes, and zero retained rows;
+    `145.034ms/192.938ms`, WAL delta `9,932,384` bytes, and zero retained rows;
   - disjoint maximum-size writes: p50/p95 `2.090s/2.216s`, zero failures,
     zero measured lock waits, 252 queries, and zero retained rows.
 - PostgreSQL 14.18 does not expose `pg_stat_force_next_flush`, and
@@ -1294,5 +1294,119 @@
     `chore(user-pmcs): regenerate reservation models`.
 - Pre-ledger HEAD:
   `2213de8356cc3efdb8ada44e8e06fcda1986abe8`.
-- Next gate: fresh independent review of the complete reservation change and
-  recorded evidence.
+- Historical next gate: fresh independent review of the complete reservation
+  change and recorded evidence; completed below.
+
+### Whole-branch server synchronization rollout closeout
+
+- User authorization: the user explicitly authorized the migration 010
+  transaction-scoped content UUID reservation protocol and this final
+  evidence-only closeout. No code, test, migration, schema, generated file, or
+  production connection is authorized by this closeout.
+- Pre-closeout branch/HEAD: clean `user_generated_pmcs` at
+  `c4764c9f17905facabebda08789e1f5c195e61c5`.
+- Migration 010 delivery commits:
+  - `2455f3d9bd762270ff5349eac5fb2dc861baeec7`
+    `feat(user-pmcs): add content UUID reservations`;
+  - `337c99500bb1cf902a38f6365ab2ce06e1f89b86`
+    `fix(user-pmcs): reserve content UUID writes`;
+  - `2213de8356cc3efdb8ada44e8e06fcda1986abe8`
+    `chore(user-pmcs): regenerate reservation models`;
+  - `4b315d26c7f3260a1660e5229c1aa75b9b651243`
+    `docs(user-pmcs): record reservation fix evidence`.
+- Migration 010 gates: `miltech_ng_test` completed forward/rollback/forward
+  after database-name verification and ended migrated; `miltech_ng` received
+  one forward migration after separate database-name verification and was
+  never rolled back. No production connection occurred.
+- Reservation reviewer: `/root/owned_task5_review`; PASS with 0 Critical,
+  0 Important, and 2 deferred Minor findings. The Minors were explicit helper
+  deduplication and omission of exact reservation relation/bloat values from
+  tracked evidence.
+- Exact maximum-size reservation relation evidence:
+  - table bytes: `0 -> 2,146,304`;
+  - index bytes: `3,219,456 -> 3,219,456`;
+  - approximate dead tuples: `0 -> 48,303`;
+  - WAL bytes: `9,932,384`;
+  - final reservation rows: `0`.
+- Task 15 final planner/cleanup corrections and reviews:
+  - `6f885b0c2cd61b9931724eb0719bd7fd464c6359`
+    `test(user-pmcs): stabilize subscription planner fixtures`; scoped review
+    found 1 Important because five non-subscription relation estimates remained
+    inflated after cleanup;
+  - `01e4f02baf82e4e9f4e58ea44a9ce727a7654c8e`
+    `test(user-pmcs): restore planner stats after fixtures`; scoped review found
+    1 Important because cleanup registered after a fallible setup `ANALYZE` and
+    stopped on its first cleanup error;
+  - `c4764c9f17905facabebda08789e1f5c195e61c5`
+    `test(user-pmcs): harden performance fixture cleanup`; scoped re-review
+    confirmed the open Important was addressed with 0 new Critical, Important,
+    or Minor findings.
+- Aggregate whole-branch scoped reviewer result at
+  `c4764c9f17905facabebda08789e1f5c195e61c5`: PROCEED with 0 Critical and
+  0 Important findings; all four original Important findings were addressed.
+- Five non-blocking Minors were carried into closeout:
+  1. `NewRepository` permits a nil `AccountCleaner` and would panic.
+  2. The restrictive-FK test does not isolate the release-to-revision
+     constraint.
+  3. A malformed `revision_id` is labeled `checklist_id` in its validation
+     error.
+  4. The reservation helper sorts but does not explicitly deduplicate IDs;
+     mandatory upstream duplicate validation mitigates this.
+  5. Tracked evidence omitted exact reservation relation/bloat values; this
+     ledger records the reviewed values above.
+
+#### Fresh final verification matrix
+
+- `go test ./api/user_pmcs/... ./api/user_general ./api/route -count=1`:
+  FAIL in `4.565s`; 308 passed and 1 failed across nine packages. The only
+  failure was the accepted stale
+  `api/route.TestSetupRegistersPmcsSbsFaultRoutesUnderAuth` assertion requiring
+  `GET /api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults`.
+- `go test ./tests/user_pmcs -count=1`: PASS; 272 tests passed with tool-observed
+  wall time `180.008s`. No planner, reservation, or cleanup failure occurred.
+- `go test -race ./api/user_pmcs/... -count=1`: PASS in `6.088s`; 296 tests
+  passed across seven packages.
+- Exact `go test ./... -count=1`: FAIL with tool-observed wall time `205.984s`;
+  1,195 passed, 20 failed, and 14 skipped across 98 packages. Failures were:
+  - stale `api/route` assertion: 1;
+  - `tests/equipment_services`: 6;
+  - `tests/pmcs_sbs_progress`: 9;
+  - `tests/shops`: 2;
+  - `tests/user_saves`: 1;
+  - `tests/user_pmcs`: 1 account-deletion lock-scope assertion.
+- The exact-suite raw log contains ten explicit PostgreSQL deadlocks plus
+  foreign-key, missing-fixture, and HTTP-creation fallout. The user-PMCS
+  failure reported that account deletion waited for an unrelated historical
+  tombstone under concurrent package load. This exact command is not green.
+- Supplemental `go test -p 1 ./... -count=1`: FAIL with tool-observed wall time
+  `330.030s`; 1,214 passed, 1 failed, and 14 skipped across 98 packages. The
+  only failure was the same stale `api/route` assertion. Every integration
+  package, including `tests/user_pmcs`, passed serialized. This classifies the
+  additional 19 parallel-suite failures as shared-test-database interference
+  and consequent fixture fallout without relabeling the exact command.
+- `go vet ./...`: PASS in `1.215s` with no output.
+- `go test ./... -run '^$' -count=1`: PASS in `17.925s`; all packages compiled
+  and no tests ran.
+
+#### Read-only final database and repository state
+
+- No migration command was rerun during closeout.
+- A read-only catalog query on the separately verified test target returned
+  `miltech_ng_test|t|t|t|t|0`: migration-009 sync/subscription anchors,
+  migration-010 reservation table and primary key were present, and the
+  reservation table contained zero rows.
+- The equivalent read-only query on the separately verified development target
+  returned `miltech_ng|t|t|t|t|0` with the same schema and zero-row result.
+- No production database was connected.
+- `git diff --exit-code -- .gen`, `git status --short -- .gen`, and
+  `git diff --stat -- .gen`: PASS with no output. Jet output was neither
+  regenerated nor edited during closeout.
+- Pre-edit `git diff --check` and `git status --short`: PASS with no output.
+- Closeout commit: this ledger-only commit,
+  `docs(user-pmcs): close server synchronization rollout`; its exact hash is
+  reported after commit because a commit cannot contain its own hash.
+- Next handoff: the mobile repository may consume
+  `docs/client/2026-07-29-user-pmcs-server-api-contract.md`. Server rollout
+  verification is complete subject to the explicitly reported stale route
+  assertion, shared-test-database parallel interference, and five carried
+  non-blocking Minors above.
