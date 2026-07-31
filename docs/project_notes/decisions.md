@@ -481,3 +481,38 @@ Based on the current project setup:
 - `InspectionResponse` grew two fields (`notes`, `comments`); `InspectionSummaryResponse` grew one (`comment_count`) — additive, non-breaking for existing API consumers
 - `author_id` on `pmcs_sbs_inspection_comments` has no `ON DELETE` action (matching the live `item_comments_author_id_fkey` constraint), so a user with existing comments cannot be hard-deleted from `users` without first handling their comments — same constraint that already exists for `item_comments` authors
 - The Flutter mobile client needs corresponding UI to display/edit notes and render the comment thread on the inspection detail screen — out of scope for this server-side change, tracked separately in the `miltech` repo
+
+### ADR-019: Reclaim Orphaned User-PMCS Release on Final Unsubscribe (2026-07-30)
+
+**Context:**
+- User-PMCS account deletion retains immutable community releases that are
+  pinned by active external subscriptions, while nulling the deleted owner's
+  identity and tombstoning the checklist
+- If account deletion completes before the last subscriber unsubscribes, that
+  final unsubscribe can leave an owner-null, tombstoned checklist and retired
+  source with a zero-pin release tree that no account can reach
+- The approved v1 design otherwise limits release reclamation to checklist or
+  account deletion and does not authorize general unsubscribe garbage
+  collection
+
+**Decision:**
+- On unsubscribe, reclaim retained release content only when the subscription
+  is the final active pin and the source is already owner-null, its checklist
+  is tombstoned, and the community source is retired
+- Preserve ordinary unsubscribe as a target-row operation and lock only active
+  pins needed to prove final-pin eligibility
+- Do not garbage-collect active sources, owned checklist history, or ordinary
+  unpinned release history during unsubscribe
+
+**Alternatives considered:**
+- Leave the retained zero-pin release tree indefinitely
+- Run broad release garbage collection on every unsubscribe
+- Add a periodic background release collector
+
+**Consequences:**
+- Account-deletion-first and unsubscribe-first interleavings converge without
+  leaking unreachable retained content
+- Active and owned history remains protected from unsubscribe cleanup
+- Final-pin unsubscribe performs additional eligibility checks and
+  deterministic locking, while ordinary unsubscribe avoids lock amplification
+  across historical subscription rows
