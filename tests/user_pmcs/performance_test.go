@@ -60,11 +60,101 @@ type performanceSubscriptionFixture struct {
 	normalizedName string
 }
 
+var performanceSubscriptionFixturePlannerRelations = [...]string{
+	"user_pmcs_checklists",
+	"user_pmcs_revisions",
+	"user_pmcs_revision_models",
+	"user_pmcs_community_releases",
+	"user_pmcs_community_sources",
+	"user_pmcs_subscriptions",
+}
+
 func TestPerformanceEvidenceRejectsUnmeasuredFields(t *testing.T) {
 	err := validatePerformanceEvidence(performanceEvidence{
 		scenario: "incomplete",
 	})
 	require.ErrorContains(t, err, "unmeasured")
+}
+
+func TestPerformanceSubscriptionFixtureCleanupRestoresPlannerStatistics(
+	t *testing.T,
+) {
+	requireUserPmcsTestDatabase(t, testDB)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	actualRowsBefore := make(
+		map[string]int64,
+		len(performanceSubscriptionFixturePlannerRelations),
+	)
+	for _, relation := range performanceSubscriptionFixturePlannerRelations {
+		actualRows, _ := observePlannerRelation(t, ctx, relation)
+		actualRowsBefore[relation] = actualRows
+	}
+
+	t.Run("committed fixture", func(t *testing.T) {
+		seedPerformanceSubscriptions(t, 500)
+	})
+
+	for _, relation := range performanceSubscriptionFixturePlannerRelations {
+		actualRows, estimatedRows := observePlannerRelation(
+			t,
+			ctx,
+			relation,
+		)
+		require.Equal(
+			t,
+			actualRowsBefore[relation],
+			actualRows,
+			"fixture cleanup did not restore %s rows",
+			relation,
+		)
+		tolerance := float64(actualRows) / 10
+		if tolerance < 1 {
+			tolerance = 1
+		}
+		t.Logf(
+			"relation=%s actual_rows=%d estimated_rows=%.0f tolerance=%.0f",
+			relation,
+			actualRows,
+			estimatedRows,
+			tolerance,
+		)
+		difference := estimatedRows - float64(actualRows)
+		if difference < 0 {
+			difference = -difference
+		}
+		if difference > tolerance {
+			t.Errorf(
+				"%s planner estimate was not refreshed after cleanup: actual=%d estimated=%.0f tolerance=%.0f",
+				relation,
+				actualRows,
+				estimatedRows,
+				tolerance,
+			)
+		}
+	}
+}
+
+func observePlannerRelation(
+	t *testing.T,
+	ctx context.Context,
+	relation string,
+) (int64, float64) {
+	t.Helper()
+	var actualRows int64
+	var estimatedRows float64
+	err := testDB.QueryRowContext(
+		ctx,
+		`SELECT
+			(SELECT count(*) FROM `+pq.QuoteIdentifier(relation)+`),
+			reltuples
+		 FROM pg_class
+		 WHERE oid = $1::regclass`,
+		relation,
+	).Scan(&actualRows, &estimatedRows)
+	require.NoError(t, err)
+	return actualRows, estimatedRows
 }
 
 func TestPerformanceScenarios(t *testing.T) {
@@ -1743,15 +1833,11 @@ func seedPerformanceSubscriptionsWithNoise(
 	)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
-	for _, table := range []string{
-		"user_pmcs_checklists",
-		"user_pmcs_revisions",
-		"user_pmcs_revision_models",
-		"user_pmcs_community_releases",
-		"user_pmcs_community_sources",
-		"user_pmcs_subscriptions",
-	} {
-		_, err = testDB.ExecContext(ctx, "ANALYZE "+table)
+	for _, table := range performanceSubscriptionFixturePlannerRelations {
+		_, err = testDB.ExecContext(
+			ctx,
+			"ANALYZE "+pq.QuoteIdentifier(table),
+		)
 		require.NoError(t, err)
 	}
 
@@ -1800,12 +1886,15 @@ func seedPerformanceSubscriptionsWithNoise(
 		)
 		require.NoError(t, cleanupErr)
 		// The fixture deliberately updates global planner statistics. Refresh
-		// them after cleanup so later tests do not plan against removed rows.
-		_, cleanupErr = testDB.ExecContext(
-			cleanupCtx,
-			`ANALYZE user_pmcs_subscriptions`,
-		)
-		require.NoError(t, cleanupErr)
+		// every affected relation after cleanup so later tests do not plan
+		// against removed rows.
+		for _, table := range performanceSubscriptionFixturePlannerRelations {
+			_, cleanupErr = testDB.ExecContext(
+				cleanupCtx,
+				"ANALYZE "+pq.QuoteIdentifier(table),
+			)
+			require.NoError(t, cleanupErr)
+		}
 	})
 	return fixture
 }
