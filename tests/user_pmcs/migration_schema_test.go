@@ -9,6 +9,7 @@ import (
 func TestUserPmcsSchemaIntegrity(t *testing.T) {
 	requiredTables := []string{
 		"user_pmcs_sync_state",
+		"user_pmcs_content_uuid_reservations",
 		"user_pmcs_checklists",
 		"user_pmcs_revisions",
 		"user_pmcs_revision_models",
@@ -34,6 +35,25 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 			require.True(t, exists, "required table %s is missing", tableName)
 		})
 	}
+
+	var reservationPrimaryKeyColumns string
+	err := testDB.QueryRow(`
+		SELECT string_agg(
+			primary_key_column.attname,
+			',' ORDER BY primary_key.ordinality
+		)
+		FROM pg_constraint AS constraint_definition
+		JOIN LATERAL unnest(constraint_definition.conkey)
+			WITH ORDINALITY AS primary_key(attnum, ordinality) ON true
+		JOIN pg_attribute AS primary_key_column
+			ON primary_key_column.attrelid = constraint_definition.conrelid
+			AND primary_key_column.attnum = primary_key.attnum
+		WHERE constraint_definition.conrelid =
+				'user_pmcs_content_uuid_reservations'::regclass
+			AND constraint_definition.contype = 'p'
+		GROUP BY constraint_definition.oid`).Scan(&reservationPrimaryKeyColumns)
+	require.NoError(t, err)
+	require.Equal(t, "id", reservationPrimaryKeyColumns)
 
 	restrictiveForeignKeys := []struct {
 		constraintName    string
