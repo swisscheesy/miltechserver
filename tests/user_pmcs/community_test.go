@@ -3,6 +3,7 @@ package user_pmcs_test
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -629,6 +630,118 @@ func TestCommunityDetailLoadsCompleteCurrentReleaseAndVisibility(t *testing.T) {
 		fixture.checklist,
 	)
 	requireAPIIntegrationError(t, err, 404, "resource_not_found")
+}
+
+func TestCommunityDetailETagChangesWithCreatorDisplayName(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 1)
+	released, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	fixture.aggregate = released.Aggregate
+
+	repositoryRelease, err := fixture.repository.GetCurrentRelease(
+		ctx,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "user-pmcs-test", repositoryRelease.CreatorDisplayName)
+	service := community.NewService(fixture.repository, shared.DefaultConfig())
+	_, originalServiceETag, err := service.GetCurrentRelease(
+		ctx,
+		fixture.checklist.String(),
+	)
+	require.NoError(t, err)
+
+	router := newUserPmcsContractRouter(shared.DefaultConfig())
+	path := "/user-pmcs/community/" + fixture.checklist.String()
+	initial := performContractRequest(
+		router,
+		http.MethodGet,
+		path,
+		"",
+		nil,
+		nil,
+	)
+	require.Equal(t, http.StatusOK, initial.Code, initial.Body.String())
+	originalHTTPETag := initial.Header().Get("ETag")
+	require.Equal(t, originalServiceETag, originalHTTPETag)
+	require.Contains(
+		t,
+		initial.Body.String(),
+		`"creator_display_name":"user-pmcs-test"`,
+	)
+	notice := fixture.revisions[0].Input.Sections[0].Items[0].Notices[0]
+	require.Contains(t, initial.Body.String(), notice.ID.String())
+	require.Contains(t, initial.Body.String(), `"type":"warning"`)
+	require.Contains(t, initial.Body.String(), `"notice_text":"Use caution"`)
+
+	unchanged := performContractRequest(
+		router,
+		http.MethodGet,
+		path,
+		"",
+		nil,
+		map[string]string{"If-None-Match": originalHTTPETag},
+	)
+	require.Equal(t, http.StatusNotModified, unchanged.Code)
+	require.Empty(t, unchanged.Body.Bytes())
+	require.Equal(t, originalHTTPETag, unchanged.Header().Get("ETag"))
+
+	renamedCreator := "renamed-" + uuid.NewString()[:8]
+	_, err = testDB.ExecContext(
+		ctx,
+		`UPDATE users SET username = $1 WHERE uid = $2`,
+		renamedCreator,
+		fixture.ownerUID,
+	)
+	require.NoError(t, err)
+	repositoryRelease, err = fixture.repository.GetCurrentRelease(
+		ctx,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, renamedCreator, repositoryRelease.CreatorDisplayName)
+	_, renamedServiceETag, err := service.GetCurrentRelease(
+		ctx,
+		fixture.checklist.String(),
+	)
+	require.NoError(t, err)
+
+	renamed := performContractRequest(
+		router,
+		http.MethodGet,
+		path,
+		"",
+		nil,
+		map[string]string{"If-None-Match": originalHTTPETag},
+	)
+	require.Equal(t, http.StatusOK, renamed.Code, renamed.Body.String())
+	require.NotEqual(t, originalServiceETag, renamedServiceETag)
+	require.Equal(t, renamedServiceETag, renamed.Header().Get("ETag"))
+	require.NotEqual(t, originalHTTPETag, renamed.Header().Get("ETag"))
+	require.Contains(
+		t,
+		renamed.Body.String(),
+		`"creator_display_name":"`+renamedCreator+`"`,
+	)
+
+	stable := performContractRequest(
+		router,
+		http.MethodGet,
+		path,
+		"",
+		nil,
+		map[string]string{"If-None-Match": renamed.Header().Get("ETag")},
+	)
+	require.Equal(t, http.StatusNotModified, stable.Code)
+	require.Empty(t, stable.Body.Bytes())
+	require.Equal(t, renamed.Header().Get("ETag"), stable.Header().Get("ETag"))
 }
 
 func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {

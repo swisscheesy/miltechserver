@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"hash"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -164,23 +167,70 @@ func (service *ServiceImpl) GetCurrentRelease(
 		return nil, "", err
 	}
 	return release, makePublicReleaseETag(
-		release.ChecklistID,
-		release.Revision.ID,
+		*release,
 		contentHash,
 	), nil
 }
 
 func makePublicReleaseETag(
-	checklistID uuid.UUID,
-	revisionID uuid.UUID,
+	release shared.PublicChecklistRelease,
 	contentHash [sha256.Size]byte,
 ) string {
 	digest := sha256.New()
-	_, _ = digest.Write([]byte("community-release"))
-	_, _ = digest.Write(checklistID[:])
-	_, _ = digest.Write(revisionID[:])
-	_, _ = digest.Write(contentHash[:])
+	writePublicReleaseETagField(digest, []byte("community-release-v2"))
+	writePublicReleaseETagField(digest, release.ChecklistID[:])
+	writePublicReleaseETagField(
+		digest,
+		[]byte(release.CreatorDisplayName),
+	)
+	writePublicReleaseETagField(digest, canonicalETagTime(release.ReleasedAt))
+	writePublicReleaseETagField(digest, release.Revision.ID[:])
+	if release.Revision.RevisionNumber == nil {
+		writePublicReleaseETagField(digest, []byte{0})
+	} else {
+		var revisionNumber [4]byte
+		binary.BigEndian.PutUint32(
+			revisionNumber[:],
+			uint32(*release.Revision.RevisionNumber),
+		)
+		writePublicReleaseETagField(
+			digest,
+			append([]byte{1}, revisionNumber[:]...),
+		)
+	}
+	writePublicReleaseETagField(digest, []byte(release.Revision.State))
+	writePublicReleaseETagField(
+		digest,
+		canonicalETagTime(release.Revision.CreatedAt),
+	)
+	writePublicReleaseETagField(
+		digest,
+		canonicalETagTime(release.Revision.UpdatedAt),
+	)
+	if release.Revision.PublishedAt == nil {
+		writePublicReleaseETagField(digest, []byte{0})
+	} else {
+		writePublicReleaseETagField(
+			digest,
+			append(
+				[]byte{1},
+				canonicalETagTime(*release.Revision.PublishedAt)...,
+			),
+		)
+	}
+	writePublicReleaseETagField(digest, contentHash[:])
 	return `"` + base64.RawURLEncoding.EncodeToString(digest.Sum(nil)) + `"`
+}
+
+func writePublicReleaseETagField(digest hash.Hash, value []byte) {
+	var length [8]byte
+	binary.BigEndian.PutUint64(length[:], uint64(len(value)))
+	_, _ = digest.Write(length[:])
+	_, _ = digest.Write(value)
+}
+
+func canonicalETagTime(value time.Time) []byte {
+	return []byte(value.UTC().Format(time.RFC3339Nano))
 }
 
 func authenticatedUID(user *bootstrap.User) (string, *shared.APIError) {

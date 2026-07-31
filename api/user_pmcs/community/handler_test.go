@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -524,25 +525,111 @@ func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 func TestPublicReleaseETagIncludesChecklistRevisionAndContentHash(t *testing.T) {
 	checklistID := uuid.New()
 	revisionID := uuid.New()
+	revisionNumber := int32(2)
+	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	release := shared.PublicChecklistRelease{
+		ChecklistID:        checklistID,
+		CreatorDisplayName: "Creator",
+		ReleasedAt:         now,
+		Revision: shared.Revision{
+			ID:             revisionID,
+			RevisionNumber: &revisionNumber,
+			State:          "published",
+			CreatedAt:      now.Add(-time.Hour),
+			UpdatedAt:      now.Add(-30 * time.Minute),
+			PublishedAt:    &now,
+		},
+	}
 	var contentHash [32]byte
 	contentHash[0] = 1
-	baseline := makePublicReleaseETag(checklistID, revisionID, contentHash)
+	baseline := makePublicReleaseETag(release, contentHash)
 
+	changed := release
+	changed.ChecklistID = uuid.New()
 	require.NotEqual(
 		t,
 		baseline,
-		makePublicReleaseETag(uuid.New(), revisionID, contentHash),
+		makePublicReleaseETag(changed, contentHash),
 	)
+	changed = release
+	changed.Revision.ID = uuid.New()
 	require.NotEqual(
 		t,
 		baseline,
-		makePublicReleaseETag(checklistID, uuid.New(), contentHash),
+		makePublicReleaseETag(changed, contentHash),
 	)
 	contentHash[31] = 2
 	require.NotEqual(
 		t,
 		baseline,
-		makePublicReleaseETag(checklistID, revisionID, contentHash),
+		makePublicReleaseETag(release, contentHash),
+	)
+}
+
+func TestPublicReleaseETagCoversReturnedMetadataDeterministically(t *testing.T) {
+	revisionNumber := int32(2)
+	publishedAt := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	release := shared.PublicChecklistRelease{
+		ChecklistID:        uuid.New(),
+		CreatorDisplayName: "Creator",
+		ReleasedAt:         publishedAt.Add(time.Minute),
+		Revision: shared.Revision{
+			ID:             uuid.New(),
+			RevisionNumber: &revisionNumber,
+			State:          "published",
+			CreatedAt:      publishedAt.Add(-time.Hour),
+			UpdatedAt:      publishedAt.Add(-time.Minute),
+			PublishedAt:    &publishedAt,
+		},
+	}
+	contentHash := sha256.Sum256([]byte("canonical tree"))
+	baseline := makePublicReleaseETag(release, contentHash)
+	require.Equal(t, baseline, makePublicReleaseETag(release, contentHash))
+
+	mutations := []func(*shared.PublicChecklistRelease){
+		func(value *shared.PublicChecklistRelease) {
+			value.CreatorDisplayName = "Renamed creator"
+		},
+		func(value *shared.PublicChecklistRelease) {
+			value.ReleasedAt = value.ReleasedAt.Add(time.Second)
+		},
+		func(value *shared.PublicChecklistRelease) {
+			number := int32(3)
+			value.Revision.RevisionNumber = &number
+		},
+		func(value *shared.PublicChecklistRelease) {
+			value.Revision.State = "superseded"
+		},
+		func(value *shared.PublicChecklistRelease) {
+			value.Revision.CreatedAt = value.Revision.CreatedAt.Add(time.Second)
+		},
+		func(value *shared.PublicChecklistRelease) {
+			value.Revision.UpdatedAt = value.Revision.UpdatedAt.Add(time.Second)
+		},
+		func(value *shared.PublicChecklistRelease) {
+			changed := value.Revision.PublishedAt.Add(time.Second)
+			value.Revision.PublishedAt = &changed
+		},
+	}
+	for _, mutate := range mutations {
+		changed := release
+		mutate(&changed)
+		require.NotEqual(t, baseline, makePublicReleaseETag(changed, contentHash))
+	}
+
+	withoutRevisionNumber := release
+	withoutRevisionNumber.Revision.RevisionNumber = nil
+	require.NotEqual(
+		t,
+		baseline,
+		makePublicReleaseETag(withoutRevisionNumber, contentHash),
+	)
+	withoutPublishedAt := release
+	withoutPublishedAt.Revision.PublishedAt = nil
+	require.NotEqual(
+		t,
+		baseline,
+		makePublicReleaseETag(withoutPublishedAt, contentHash),
 	)
 }
 
