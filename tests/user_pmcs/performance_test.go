@@ -1513,6 +1513,14 @@ func seedPerformanceSubscriptions(
 	t *testing.T,
 	count int,
 ) performanceSubscriptionFixture {
+	return seedPerformanceSubscriptionsWithNoise(t, count, 4)
+}
+
+func seedPerformanceSubscriptionsWithNoise(
+	t *testing.T,
+	count int,
+	noiseSubscriberCount int,
+) performanceSubscriptionFixture {
 	t.Helper()
 	requireUserPmcsTestDatabase(t, testDB)
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
@@ -1526,7 +1534,7 @@ func seedPerformanceSubscriptions(
 		currentIDs:     make([]uuid.UUID, count),
 		normalizedName: "exact-performance-model",
 	}
-	for index := 0; index < 4; index++ {
+	for index := 0; index < noiseSubscriberCount; index++ {
 		fixture.noiseUserUIDs = append(
 			fixture.noiseUserUIDs,
 			fmt.Sprintf("perf-noise-%d-%s", index, uuid.NewString()),
@@ -2047,6 +2055,7 @@ func captureUserPmcsQueryPlans(
 					relation: "user_pmcs_subscriptions",
 					approvedIndexes: []string{
 						"user_pmcs_subscriptions_delta_idx",
+						"user_pmcs_subscriptions_pkey",
 					},
 				},
 			},
