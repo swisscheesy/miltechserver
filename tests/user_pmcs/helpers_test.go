@@ -15,6 +15,7 @@ import (
 
 func newUserPmcsTestUser(t *testing.T) string {
 	t.Helper()
+	requireUserPmcsTestDatabase(t, testDB)
 
 	userUID := "user-pmcs-" + uuid.NewString()
 	_, err := testDB.ExecContext(
@@ -45,6 +46,22 @@ func newUserPmcsTestUser(t *testing.T) string {
 	return userUID
 }
 
+func requireUserPmcsTestDatabase(t *testing.T, database *sql.DB) {
+	t.Helper()
+
+	require.NotNil(t, database)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var databaseName string
+	require.NoError(
+		t,
+		database.QueryRowContext(ctx, `SELECT current_database()`).Scan(&databaseName),
+	)
+	require.Equal(t, "miltech_ng_test", databaseName)
+	t.Logf("database safety proof: current_database()=%s", databaseName)
+}
+
 func insertChecklistAndRevision(
 	t *testing.T,
 	ownerUID string,
@@ -53,6 +70,7 @@ func insertChecklistAndRevision(
 	state string,
 ) {
 	t.Helper()
+	requireUserPmcsTestDatabase(t, testDB)
 
 	revisionNumber := any(nil)
 	publishedAt := any(nil)
@@ -150,6 +168,158 @@ func preparedTree(t *testing.T, revisionID uuid.UUID) shared.PreparedRevision {
 type countingQueryer struct {
 	database   *sql.DB
 	queryCount int
+}
+
+type deterministicTreeSize struct {
+	Sections int
+	Items    int
+	Notices  int
+	Steps    int
+}
+
+func maximumDeterministicTree(
+	t testing.TB,
+	fixtureID string,
+	revisionID uuid.UUID,
+) shared.RevisionInput {
+	t.Helper()
+	return deterministicRevisionTree(
+		t,
+		fixtureID,
+		revisionID,
+		deterministicTreeSize{
+			Sections: 100,
+			Items:    2_000,
+			Notices:  4_000,
+			Steps:    10_000,
+		},
+	)
+}
+
+func deterministicRevisionTree(
+	t testing.TB,
+	fixtureID string,
+	revisionID uuid.UUID,
+	size deterministicTreeSize,
+) shared.RevisionInput {
+	t.Helper()
+	require.Positive(t, size.Sections)
+	require.GreaterOrEqual(t, size.Items, size.Sections)
+	require.LessOrEqual(t, size.Items, size.Sections*500)
+	require.LessOrEqual(t, size.Notices, size.Items*100)
+	require.LessOrEqual(t, size.Steps, size.Items*250)
+
+	input := shared.RevisionInput{
+		ID:          revisionID,
+		Name:        "n",
+		Description: "d",
+		Models: []shared.ModelInput{
+			{DisplayText: "m"},
+		},
+		Sections: make([]shared.SectionInput, 0, size.Sections),
+	}
+	noticeType := "warning"
+	itemIndex := 0
+	for sectionIndex := 0; sectionIndex < size.Sections; sectionIndex++ {
+		itemCount := distributedCount(
+			size.Items,
+			size.Sections,
+			sectionIndex,
+		)
+		section := shared.SectionInput{
+			ID: deterministicFixtureUUID(
+				fixtureID,
+				fmt.Sprintf("section-%d", sectionIndex),
+			),
+			Position: int32(sectionIndex + 1),
+			Title:    "s",
+			Items:    make([]shared.ItemInput, 0, itemCount),
+		}
+		for itemPosition := 0; itemPosition < itemCount; itemPosition++ {
+			noticeCount := distributedCount(
+				size.Notices,
+				size.Items,
+				itemIndex,
+			)
+			stepCount := distributedCount(
+				size.Steps,
+				size.Items,
+				itemIndex,
+			)
+			item := shared.ItemInput{
+				ID: deterministicFixtureUUID(
+					fixtureID,
+					fmt.Sprintf("item-%d", itemIndex),
+				),
+				Position:                  int32(itemPosition + 1),
+				Interval:                  "i",
+				ItemToBeCheckedOrServiced: "c",
+				PerformedBy:               "p",
+				Notices: make(
+					[]shared.NoticeInput,
+					0,
+					noticeCount,
+				),
+				ProcedureSteps: make(
+					[]shared.ProcedureStepInput,
+					0,
+					stepCount,
+				),
+			}
+			for noticeIndex := 0; noticeIndex < noticeCount; noticeIndex++ {
+				item.Notices = append(item.Notices, shared.NoticeInput{
+					ID: deterministicFixtureUUID(
+						fixtureID,
+						fmt.Sprintf(
+							"item-%d-notice-%d",
+							itemIndex,
+							noticeIndex,
+						),
+					),
+					Position:   int32(noticeIndex + 1),
+					Type:       &noticeType,
+					NoticeText: "w",
+				})
+			}
+			for stepIndex := 0; stepIndex < stepCount; stepIndex++ {
+				item.ProcedureSteps = append(
+					item.ProcedureSteps,
+					shared.ProcedureStepInput{
+						ID: deterministicFixtureUUID(
+							fixtureID,
+							fmt.Sprintf(
+								"item-%d-step-%d",
+								itemIndex,
+								stepIndex,
+							),
+						),
+						Position:     int32(stepIndex + 1),
+						StepText:     "x",
+						FaultFoundIf: "f",
+					},
+				)
+			}
+			section.Items = append(section.Items, item)
+			itemIndex++
+		}
+		input.Sections = append(input.Sections, section)
+	}
+	return input
+}
+
+func distributedCount(total, buckets, index int) int {
+	base := total / buckets
+	if index < total%buckets {
+		return base + 1
+	}
+	return base
+}
+
+func deterministicFixtureUUID(fixtureID, nodeID string) uuid.UUID {
+	return uuid.NewSHA1(
+		uuid.NameSpaceOID,
+		[]byte("user-pmcs-test/"+fixtureID+"/"+nodeID),
+	)
 }
 
 func (queryer *countingQueryer) ExecContext(
