@@ -172,7 +172,7 @@ func (repository *RepositoryImpl) Create(
 	draft shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	result, err := persistence.WithSerializableWriteTx(
+	result, err := persistence.WithWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -200,6 +200,14 @@ func (repository *RepositoryImpl) Create(
 					existing,
 					draft,
 				)
+			}
+			reservations, err := persistence.AcquireContentUUIDReservations(
+				ctx,
+				tx,
+				draft.Input,
+			)
+			if err != nil {
+				return nil, err
 			}
 			if err := ensurePreparedTreeIDsAvailable(
 				ctx,
@@ -293,6 +301,9 @@ func (repository *RepositoryImpl) Create(
 			if err != nil {
 				return nil, err
 			}
+			if err := reservations.Release(ctx, tx); err != nil {
+				return nil, err
+			}
 			return &MutationResult{
 				Aggregate: *aggregate,
 				Created:   true,
@@ -312,7 +323,7 @@ func (repository *RepositoryImpl) PutDraft(
 	draft shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	result, err := persistence.WithSerializableWriteTx(
+	result, err := persistence.WithWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -345,6 +356,14 @@ func (repository *RepositoryImpl) PutDraft(
 				ctx,
 				tx,
 				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			reservations, err := persistence.AcquireContentUUIDReservations(
+				ctx,
+				tx,
+				draft.Input,
 			)
 			if err != nil {
 				return nil, err
@@ -412,6 +431,9 @@ func (repository *RepositoryImpl) PutDraft(
 				checklistID,
 			)
 			if err != nil {
+				return nil, err
+			}
+			if err := reservations.Release(ctx, tx); err != nil {
 				return nil, err
 			}
 			return &MutationResult{Aggregate: *aggregate}, nil
@@ -694,7 +716,7 @@ func (repository *RepositoryImpl) Publish(
 	revision shared.PreparedRevision,
 	precondition shared.Precondition,
 ) (*MutationResult, error) {
-	result, err := persistence.WithSerializableWriteTx(
+	result, err := persistence.WithWriteTx(
 		ctx,
 		repository.store.DB,
 		repository.store.MaxWriteAttempts,
@@ -741,6 +763,14 @@ func (repository *RepositoryImpl) Publish(
 			}
 			if !preconditionMatches {
 				return nil, staleChecklistError()
+			}
+			reservations, err := persistence.AcquireContentUUIDReservations(
+				ctx,
+				tx,
+				revision.Input,
+			)
+			if err != nil {
+				return nil, err
 			}
 
 			submittedNumber := *revision.Input.RevisionNumber
@@ -889,6 +919,9 @@ func (repository *RepositoryImpl) Publish(
 				checklistID,
 			)
 			if err != nil {
+				return nil, err
+			}
+			if err := reservations.Release(ctx, tx); err != nil {
 				return nil, err
 			}
 			return &MutationResult{Aggregate: *aggregate}, nil

@@ -257,6 +257,32 @@ func TestCreateOwnedChecklistConcurrentCrossTableUUIDCollisionSerializes(t *test
 	)
 }
 
+func TestCreateOwnedChecklistConcurrentMixedSizeCrossTableUUIDCollisionSerializes(
+	t *testing.T,
+) {
+	sharedNodeID := uuid.New()
+	smallDraft := preparedTree(t, uuid.New())
+	smallDraft.Input.Sections[0].ID = sharedNodeID
+	smallDraft = prepareOwnedDraft(t, smallDraft.Input)
+
+	fixtureID := "mixed-collision-" + uuid.NewString()
+	largeInput := deterministicRevisionTree(
+		t,
+		fixtureID,
+		deterministicFixtureUUID(fixtureID, "revision"),
+		deterministicTreeSize{
+			Sections: 2,
+			Items:    10,
+			Notices:  10,
+			Steps:    40,
+		},
+	)
+	largeInput.Sections[0].Items[0].ID = sharedNodeID
+	largeDraft := prepareOwnedDraft(t, largeInput)
+
+	assertConcurrentCreateUUIDCollision(t, smallDraft, largeDraft)
+}
+
 func TestCreateOwnedChecklistEnforcesActiveCeiling(t *testing.T) {
 	ownerUID := newUserPmcsTestUser(t)
 	config := shared.DefaultConfig()
@@ -888,6 +914,7 @@ func assertConcurrentCreateUUIDCollision(
 	}
 	require.Equal(t, 1, successCount)
 	require.Equal(t, 1, validationCount)
+	requireReservationRowCount(t, 0)
 }
 
 func prepareOwnedDraft(

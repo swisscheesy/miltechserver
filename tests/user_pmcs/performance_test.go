@@ -133,6 +133,89 @@ func TestPerformanceScenarios(t *testing.T) {
 		assertPostgresTextFieldByteBoundaries(t, userUID)
 	})
 
+	t.Run("maximum reservation acquisition and cleanup", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			2*time.Minute,
+		)
+		defer cancel()
+		input := maximumDeterministicTree(
+			t,
+			"maximum-reservations",
+			deterministicFixtureUUID("maximum-reservations", "revision"),
+		)
+		sections, items, notices, steps, _ := treeInputCounts(input)
+		require.Equal(t, 16_101, 1+sections+items+notices+steps)
+		requireReservationRowCount(t, 0)
+
+		before := observeReservationRelation(t)
+		var initialLSN string
+		require.NoError(t, testDB.QueryRowContext(
+			ctx,
+			`SELECT pg_current_wal_lsn()::text`,
+		).Scan(&initialLSN))
+		acquisitionDurations := make([]time.Duration, 0, 3)
+		cleanupDurations := make([]time.Duration, 0, 3)
+		transactionDurations := make([]time.Duration, 0, 3)
+		queryCounter.reset()
+		for range 3 {
+			transactionStarted := time.Now()
+			tx, err := performanceDB.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			acquisitionStarted := time.Now()
+			reservations, err :=
+				persistence.AcquireContentUUIDReservations(ctx, tx, input)
+			acquisitionDurations = append(
+				acquisitionDurations,
+				time.Since(acquisitionStarted),
+			)
+			require.NoError(t, err)
+			cleanupStarted := time.Now()
+			require.NoError(t, reservations.Release(ctx, tx))
+			cleanupDurations = append(
+				cleanupDurations,
+				time.Since(cleanupStarted),
+			)
+			require.NoError(t, tx.Commit())
+			transactionDurations = append(
+				transactionDurations,
+				time.Since(transactionStarted),
+			)
+			requireReservationRowCount(t, 0)
+		}
+		var walBytes int64
+		require.NoError(t, testDB.QueryRowContext(
+			ctx,
+			`SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), $1::pg_lsn)::bigint`,
+			initialLSN,
+		).Scan(&walBytes))
+		after := observeReservationRelation(t)
+		require.Equal(t, 6, queryCounter.value())
+		t.Logf(
+			"scenario=maximum_reservation_churn ids=16101 runs=3 "+
+				"acquire_p50=%s acquire_p95=%s cleanup_p50=%s "+
+				"cleanup_p95=%s transaction_p50=%s transaction_p95=%s "+
+				"query_count=%d wal_bytes=%d table_bytes_before=%d "+
+				"table_bytes_after=%d index_bytes_before=%d "+
+				"index_bytes_after=%d dead_tuples_before=%d "+
+				"dead_tuples_after=%d reservation_rows=0",
+			durationPercentile(acquisitionDurations, 50),
+			durationPercentile(acquisitionDurations, 95),
+			durationPercentile(cleanupDurations, 50),
+			durationPercentile(cleanupDurations, 95),
+			durationPercentile(transactionDurations, 50),
+			durationPercentile(transactionDurations, 95),
+			queryCounter.value(),
+			walBytes,
+			before.tableBytes,
+			after.tableBytes,
+			before.indexBytes,
+			after.indexBytes,
+			before.deadTuples,
+			after.deadTuples,
+		)
+	})
+
 	t.Run("maximum draft replacement and publication", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(
 			context.Background(),
@@ -317,6 +400,101 @@ func TestPerformanceScenarios(t *testing.T) {
 			bytesMeasured:      true,
 			queryCountMeasured: true,
 		})
+	})
+
+	t.Run("disjoint maximum writes", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(
+			context.Background(),
+			3*time.Minute,
+		)
+		defer cancel()
+		const writerCount = 2
+		type maximumWrite struct {
+			ownerUID    string
+			checklistID uuid.UUID
+			draft       shared.PreparedRevision
+		}
+		writes := make([]maximumWrite, writerCount)
+		for index := range writes {
+			fixtureID := fmt.Sprintf(
+				"disjoint-maximum-%d-%s",
+				index,
+				uuid.NewString(),
+			)
+			input := maximumDeterministicTree(
+				t,
+				fixtureID,
+				deterministicFixtureUUID(fixtureID, "revision"),
+			)
+			draft, err := shared.PrepareDraft(input, config)
+			require.NoError(t, err)
+			writes[index] = maximumWrite{
+				ownerUID:    newUserPmcsTestUser(t),
+				checklistID: uuid.New(),
+				draft:       draft,
+			}
+		}
+		repository := owned.NewRepository(
+			persistence.NewStore(
+				performanceDB,
+				config.TransactionMaxAttempts,
+			),
+			config,
+		)
+		type maximumOutcome struct {
+			duration time.Duration
+			err      error
+		}
+		start := make(chan struct{})
+		outcomes := make(chan maximumOutcome, writerCount)
+		queryCounter.reset()
+		lockSampler := startLockWaitSampler(ctx, performanceApplicationName)
+		var workers sync.WaitGroup
+		for _, write := range writes {
+			write := write
+			workers.Add(1)
+			go func() {
+				defer workers.Done()
+				<-start
+				started := time.Now()
+				_, err := repository.Create(
+					ctx,
+					write.ownerUID,
+					write.checklistID,
+					write.draft,
+					shared.Precondition{Mode: shared.PreconditionCreate},
+				)
+				outcomes <- maximumOutcome{
+					duration: time.Since(started),
+					err:      err,
+				}
+			}()
+		}
+		close(start)
+		waitForWorkers(t, &workers, 2*time.Minute)
+		close(outcomes)
+		latencies := make([]time.Duration, 0, writerCount)
+		failures := 0
+		for outcome := range outcomes {
+			if outcome.err != nil {
+				failures++
+			}
+			require.NoError(t, outcome.err)
+			latencies = append(latencies, outcome.duration)
+		}
+		lockWait := finishLockWaitSampler(t, lockSampler)
+		requireReservationRowCount(t, 0)
+		t.Logf(
+			"scenario=disjoint_maximum_writes ids_per_write=16101 "+
+				"p50=%s p95=%s failures=%d db=%s lock_wait=%s "+
+				"query_count=%d reservation_rows=0",
+			durationPercentile(latencies, 50),
+			durationPercentile(latencies, 95),
+			failures,
+			queryCounter.databaseDuration(),
+			lockWait,
+			queryCounter.value(),
+		)
 	})
 
 	t.Run("25 root embedded delta near byte ceiling", func(t *testing.T) {
@@ -518,7 +696,8 @@ func TestPerformanceScenarios(t *testing.T) {
 		}
 		require.Len(t, samples, userCount)
 		concurrentQueryCount := queryCounter.value()
-		require.Equal(t, userCount*30, concurrentQueryCount)
+		require.Equal(t, userCount*31, concurrentQueryCount)
+		requireReservationRowCount(t, 0)
 		encodeStarted := time.Now()
 		payload, err := json.Marshal(aggregates)
 		require.NoError(t, err)
@@ -545,6 +724,10 @@ func TestPerformanceScenarios(t *testing.T) {
 			bytesMeasured:      true,
 			queryCountMeasured: true,
 		})
+		t.Log(
+			"scenario=20_concurrent_independent_users " +
+				"failures=0 reservation_rows=0",
+		)
 	})
 
 	fixture := seedPerformanceSubscriptions(t, 500)
@@ -1284,6 +1467,46 @@ func validatePerformanceEvidence(evidence performanceEvidence) error {
 func percentileIndex(sampleCount, percentile int) int {
 	index := (sampleCount*percentile + 99) / 100
 	return max(0, min(sampleCount-1, index-1))
+}
+
+func durationPercentile(
+	durations []time.Duration,
+	percentile int,
+) time.Duration {
+	sorted := append([]time.Duration(nil), durations...)
+	sort.Slice(sorted, func(left, right int) bool {
+		return sorted[left] < sorted[right]
+	})
+	if len(sorted) == 0 {
+		return 0
+	}
+	return sorted[percentileIndex(len(sorted), percentile)]
+}
+
+type reservationRelationObservation struct {
+	tableBytes int64
+	indexBytes int64
+	deadTuples int64
+}
+
+func observeReservationRelation(
+	t *testing.T,
+) reservationRelationObservation {
+	t.Helper()
+	var observation reservationRelationObservation
+	require.NoError(t, testDB.QueryRow(`
+		SELECT
+			pg_relation_size('user_pmcs_content_uuid_reservations'),
+			pg_relation_size('user_pmcs_content_uuid_reservations_pkey'),
+			statistics.n_dead_tup
+		FROM pg_stat_user_tables AS statistics
+		WHERE statistics.relname =
+			'user_pmcs_content_uuid_reservations'`).Scan(
+		&observation.tableBytes,
+		&observation.indexBytes,
+		&observation.deadTuples,
+	))
+	return observation
 }
 
 func seedPerformanceSubscriptions(
