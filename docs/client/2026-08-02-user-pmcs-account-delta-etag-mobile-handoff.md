@@ -307,9 +307,20 @@ Verification performed while preparing this handoff:
 - mobile-guide JSON examples: 31 blocks parsed; and
 - `git diff --check`: passed before the implementation commit.
 
+`go test ./...` was also run. It was not green for two reasons outside this
+change:
+
+- `api/route` failed
+  `TestSetupRegistersPmcsSbsFaultRoutesUnderAuth` because
+  `GET /api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults` was not registered;
+  and
+- database-backed integration packages could not connect to
+  `192.168.20.70:5432` from the sandbox.
+
 The database-backed `tests/user_pmcs` run could not reach the configured test
 database from the implementation environment: the connection to
-`192.168.20.70:5432` timed out. The four integration assertions are committed,
-but that database-backed package must be rerun in an environment with access to
-the non-production test database before describing the server integration suite
-as green.
+`192.168.20.70:5432` was denied in the sandbox and timed out when the focused
+test received external-network approval. The four integration assertions are
+committed, but that database-backed package must be rerun in an environment
+with access to the non-production test database before describing the server
+integration suite as green.

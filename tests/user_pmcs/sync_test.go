@@ -69,6 +69,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		t,
 		subscriberUID,
 		checklistID,
+		20,
 		2,
 		nil,
 		[]deltaRevision{
@@ -91,6 +92,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		t,
 		subscriberUID,
 		deletedChecklistID,
+		40,
 		4,
 		&deletedAt,
 		nil,
@@ -99,6 +101,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		t,
 		creatorUID,
 		sourceChecklistID,
+		10,
 		1,
 		nil,
 		[]deltaRevision{
@@ -120,6 +123,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		subscriberUID,
 		sourceChecklistID,
 		&installedRevisionID,
+		30,
 		3,
 		nil,
 	)
@@ -129,6 +133,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		subscriberUID,
 		unsubscribedChecklistID,
 		nil,
+		50,
 		5,
 		&unsubscribedAt,
 	)
@@ -198,7 +203,8 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.Nil(t, owned.Installed)
 	require.Equal(t, checklistID, owned.Checklist.ID)
 	require.Equal(t, int64(2), owned.Checklist.AccountChangeVersion)
-	require.Equal(t, shared.MakeChecklistETag(checklistID, 2), owned.ETag)
+	require.Equal(t, shared.MakeChecklistETag(checklistID, 20), owned.ETag)
+	require.NotEqual(t, shared.MakeChecklistETag(checklistID, 2), owned.ETag)
 	require.NotNil(t, owned.Checklist.Draft)
 	require.Equal(t, draftID, owned.Checklist.Draft.ID)
 	require.NotNil(t, owned.Checklist.Publication)
@@ -225,6 +231,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.NotNil(t, activeSubscription.Installed)
 	require.Equal(
 		t,
+		shared.MakeSubscriptionETag(sourceChecklistID, 30),
+		activeSubscription.ETag,
+	)
+	require.NotEqual(
+		t,
 		shared.MakeSubscriptionETag(sourceChecklistID, 3),
 		activeSubscription.ETag,
 	)
@@ -250,6 +261,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.Equal(t, deletedChecklistID, checklistTombstone.Checklist.ID)
 	require.Equal(
 		t,
+		shared.MakeChecklistETag(deletedChecklistID, 40),
+		checklistTombstone.ETag,
+	)
+	require.NotEqual(
+		t,
 		shared.MakeChecklistETag(deletedChecklistID, 4),
 		checklistTombstone.ETag,
 	)
@@ -274,6 +290,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		subscriptionTombstone.Subscription.ChecklistID,
 	)
 	require.Equal(
+		t,
+		shared.MakeSubscriptionETag(unsubscribedChecklistID, 50),
+		subscriptionTombstone.ETag,
+	)
+	require.NotEqual(
 		t,
 		shared.MakeSubscriptionETag(unsubscribedChecklistID, 5),
 		subscriptionTombstone.ETag,
@@ -390,7 +411,7 @@ func TestAccountDeltaRepeatableSnapshotDefersConcurrentMutation(t *testing.T) {
 
 	userUID := newUserPmcsTestUser(t)
 	checklistID := uuid.New()
-	insertDeltaChecklist(t, userUID, checklistID, 1, nil, nil)
+	insertDeltaChecklist(t, userUID, checklistID, 1, 1, nil, nil)
 	setDeltaAccountVersion(t, userUID, 1)
 
 	blocker, err := testDB.Conn(ctx)
@@ -510,6 +531,7 @@ func insertDeltaChecklist(
 	t *testing.T,
 	ownerUID string,
 	checklistID uuid.UUID,
+	syncVersion int64,
 	accountVersion int64,
 	deletedAt *time.Time,
 	revisions []deltaRevision,
@@ -524,9 +546,10 @@ func insertDeltaChecklist(
 		ctx,
 		`INSERT INTO user_pmcs_checklists
 		     (id, owner_uid, sync_version, account_change_version, deleted_at)
-		 VALUES ($1, $2, $3, $3, $4)`,
+		 VALUES ($1, $2, $3, $4, $5)`,
 		checklistID,
 		ownerUID,
+		syncVersion,
 		accountVersion,
 		deletedAt,
 	)
@@ -622,6 +645,7 @@ func insertDeltaSubscription(
 	subscriberUID string,
 	checklistID uuid.UUID,
 	installedRevisionID *uuid.UUID,
+	syncVersion int64,
 	accountVersion int64,
 	deletedAt *time.Time,
 ) {
@@ -631,10 +655,11 @@ func insertDeltaSubscription(
 		`INSERT INTO user_pmcs_subscriptions
 		     (subscriber_uid, checklist_id, installed_revision_id,
 		      sync_version, account_change_version, deleted_at)
-		 VALUES ($1, $2, $3, $4, $4, $5)`,
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		subscriberUID,
 		checklistID,
 		installedRevisionID,
+		syncVersion,
 		accountVersion,
 		deletedAt,
 	)

@@ -100,6 +100,20 @@ func TestAccountDeltaPassesRawPaginationToService(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
 	require.Equal(t, http.StatusOK, envelope.Status)
 	require.Equal(t, expected, envelope.Data)
+
+	var wireEnvelope struct {
+		Data struct {
+			Changes []map[string]json.RawMessage `json:"changes"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &wireEnvelope))
+	require.Len(t, wireEnvelope.Data.Changes, 1)
+	wireChange := wireEnvelope.Data.Changes[0]
+	require.Contains(t, wireChange, "etag")
+	require.NotContains(t, wireChange, "ETag")
+	var wireETag string
+	require.NoError(t, json.Unmarshal(wireChange["etag"], &wireETag))
+	require.Equal(t, `"opaque-current-root"`, wireETag)
 }
 
 func TestAccountDeltaReturnsTypedServiceError(t *testing.T) {
