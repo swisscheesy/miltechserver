@@ -6,7 +6,8 @@
 
 **Audience:** mobile engineers implementing private synchronization, community browsing, and linked community installations
 
-**Verified server baseline:** `517c7c1fd95edc4bd22ed17b4056a8fc69958c92`
+**Verified server contract:** the Git revision containing this guide; the prior
+17-route audit baseline was `517c7c1fd95edc4bd22ed17b4056a8fc69958c92`
 
 ## Purpose and scope
 
@@ -120,6 +121,7 @@ Example request: `GET /api/v1/auth/user-pmcs/sync?after=41&limit=10`
       {
         "account_change_version": 45,
         "kind": "checklist",
+        "etag": "\"opaque-checklist-root-validator\"",
         "checklist": {
           "id": "60000000-0000-4000-8000-000000000001",
           "sync_version": 7,
@@ -143,6 +145,7 @@ Example request: `GET /api/v1/auth/user-pmcs/sync?after=41&limit=10`
       {
         "account_change_version": 46,
         "kind": "subscription",
+        "etag": "\"opaque-subscription-root-validator\"",
         "subscription": {
           "checklist_id": "70000000-0000-4000-8000-000000000001",
           "installed_revision_id": "71000000-0000-4000-8000-000000000001",
@@ -182,15 +185,58 @@ An empty page sets `through_cursor` equal to the requested `after` value.
 `account_version` is the server snapshot boundary, not necessarily the last
 change returned.
 
+Every change includes a required `etag`. It is the exact quoted, opaque strong
+validator for the complete root in that change: the owned-checklist root ETag
+for `kind: "checklist"`, or the subscription root ETag for
+`kind: "subscription"`. It is not the installed-release representation ETag.
+The field remains present on both tombstone shapes:
+
+```json
+[
+  {
+    "account_change_version": 47,
+    "kind": "checklist",
+    "etag": "\"opaque-checklist-tombstone-validator\"",
+    "checklist": {
+      "id": "60000000-0000-4000-8000-000000000002",
+      "sync_version": 4,
+      "account_change_version": 47,
+      "created_at": "2026-07-31T11:00:00Z",
+      "updated_at": "2026-07-31T12:10:00Z",
+      "deleted_at": "2026-07-31T12:10:00Z"
+    }
+  },
+  {
+    "account_change_version": 48,
+    "kind": "subscription",
+    "etag": "\"opaque-subscription-tombstone-validator\"",
+    "subscription": {
+      "checklist_id": "70000000-0000-4000-8000-000000000002",
+      "sync_version": 5,
+      "account_change_version": 48,
+      "created_at": "2026-07-31T11:50:00Z",
+      "updated_at": "2026-07-31T12:15:00Z",
+      "deleted_at": "2026-07-31T12:15:00Z"
+    }
+  }
+]
+```
+
+After JSON decoding, retain the quote characters in the ETag string. Do not
+strip them, decode the opaque payload, construct a replacement from
+`sync_version`, substitute `account_change_version`, or reuse an installed
+release ETag.
+
 The server does not split an aggregate. It normally stops before 20 MiB of
 uncompressed canonical envelope JSON, but one otherwise valid large aggregate
 may occupy a page alone.
 
-**Mobile persistence rule:** Apply every complete resource in `changes` and
-persist `through_cursor` in the same local database transaction. Advance the
-cursor only after that transaction commits. Continue requesting pages while
-`has_more` is `true`. On an empty response with `has_more: false`, the local
-cursor remains `through_cursor`.
+**Mobile persistence rule:** Apply every complete resource and its exact
+`etag` in `changes`, then persist `through_cursor` in the same local database
+transaction. Advance the cursor only after that transaction commits. Continue
+requesting pages while `has_more` is `true`. On an empty response with
+`has_more: false`, the local cursor remains `through_cursor`. Replay the stored
+root ETag unchanged as `If-Match` for the next mutation of that root.
 
 **Important failures:** `400 invalid_request` for an invalid cursor/limit,
 `409 account_not_initialized`, `413 content_too_large` if an account aggregate
@@ -1606,8 +1652,8 @@ original identifiers and logical content for ambiguity recovery.
    first account sync.
 2. Pull endpoint 1 with a conservative page limit.
 3. In one local transaction, replace each checklist/subscription root with its
-   complete returned aggregate, apply tombstones, store embedded installed
-   content, and update the cursor to `through_cursor`.
+   complete returned aggregate and exact `etag`, apply tombstones, store
+   embedded installed content, and update the cursor to `through_cursor`.
 4. Commit the transaction before requesting the next page.
 5. Continue while `has_more` is `true`.
 6. Separately call endpoint 15 when the product wants community update badges.

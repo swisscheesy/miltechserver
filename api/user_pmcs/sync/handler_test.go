@@ -62,7 +62,17 @@ func TestAccountDeltaPassesRawPaginationToService(t *testing.T) {
 		ThroughCursor:  46,
 		AccountVersion: 49,
 		HasMore:        true,
-		Changes:        []AccountChange{},
+		Changes: []AccountChange{
+			{
+				AccountChangeVersion: 46,
+				Kind:                 ChangeKindChecklist,
+				ETag:                 `"opaque-current-root"`,
+				Checklist: &shared.ChecklistAggregate{
+					ID:          uuid.MustParse("60000000-0000-4000-8000-000000000001"),
+					SyncVersion: 7,
+				},
+			},
+		},
 	}
 	stub := &serviceStub{result: expected}
 	router := accountDeltaTestRouter(stub, true, shared.DefaultConfig())

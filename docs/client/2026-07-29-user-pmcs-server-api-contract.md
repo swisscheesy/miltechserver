@@ -421,6 +421,7 @@ the unsubscribe route returns the tagged subscription object directly.
       {
         "account_change_version": 46,
         "kind": "checklist",
+        "etag": "\"opaque-checklist-root-validator\"",
         "checklist": {}
       }
     ]
@@ -433,6 +434,49 @@ A subscription change has `subscription` and, only when active, `installed`.
 Tombstones omit authored/installed content. Changes are ordered by
 `account_change_version`. Multiple mutations to one root between pulls
 collapse to its latest complete state, so version gaps are valid.
+
+Every change has a required `etag` containing the exact quoted, opaque strong
+validator for the complete root returned in that change. Checklist changes use
+the current owned-checklist root ETag. Subscription changes use the current
+subscription root ETag. The field remains present on checklist deletion and
+subscription unsubscribe tombstones:
+
+```json
+[
+  {
+    "account_change_version": 47,
+    "kind": "checklist",
+    "etag": "\"opaque-checklist-tombstone-validator\"",
+    "checklist": {
+      "id": "60000000-0000-4000-8000-000000000002",
+      "sync_version": 4,
+      "account_change_version": 47,
+      "created_at": "2026-07-31T11:00:00Z",
+      "updated_at": "2026-07-31T12:10:00Z",
+      "deleted_at": "2026-07-31T12:10:00Z"
+    }
+  },
+  {
+    "account_change_version": 48,
+    "kind": "subscription",
+    "etag": "\"opaque-subscription-tombstone-validator\"",
+    "subscription": {
+      "checklist_id": "70000000-0000-4000-8000-000000000002",
+      "sync_version": 5,
+      "account_change_version": 48,
+      "created_at": "2026-07-31T11:50:00Z",
+      "updated_at": "2026-07-31T12:15:00Z",
+      "deleted_at": "2026-07-31T12:15:00Z"
+    }
+  }
+]
+```
+
+Clients store `etag` unchanged with its root and persist both with
+`through_cursor` in one local transaction. A later root mutation replays that
+exact decoded string as `If-Match`. Clients must not derive a validator from
+`sync_version`, substitute `account_change_version`, or use an installed-release
+representation ETag as the subscription-root validator.
 
 The server never splits an aggregate. It stops before 20 MiB of uncompressed
 canonical envelope JSON, except that one otherwise-valid aggregate may occupy

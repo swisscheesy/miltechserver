@@ -264,12 +264,20 @@ func loadAccountChanges(
 			if err := attachChecklistTrees(&loaded, trees); err != nil {
 				return nil, err
 			}
+			change.ETag = shared.MakeChecklistETag(
+				loaded.aggregate.ID,
+				loaded.aggregate.SyncVersion,
+			)
 			change.Checklist = &loaded.aggregate
 		case ChangeKindSubscription:
 			loaded, found := subscriptions[root.identity]
 			if !found {
 				return nil, fmt.Errorf("account delta subscription root disappeared")
 			}
+			change.ETag = shared.MakeSubscriptionETag(
+				loaded.subscription.ChecklistID,
+				loaded.subscription.SyncVersion,
+			)
 			change.Subscription = &loaded.subscription
 			if loaded.installed != nil {
 				tree, found := trees[loaded.installed.Revision.ID]

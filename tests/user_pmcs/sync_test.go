@@ -198,6 +198,7 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.Nil(t, owned.Installed)
 	require.Equal(t, checklistID, owned.Checklist.ID)
 	require.Equal(t, int64(2), owned.Checklist.AccountChangeVersion)
+	require.Equal(t, shared.MakeChecklistETag(checklistID, 2), owned.ETag)
 	require.NotNil(t, owned.Checklist.Draft)
 	require.Equal(t, draftID, owned.Checklist.Draft.ID)
 	require.NotNil(t, owned.Checklist.Publication)
@@ -222,6 +223,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.Nil(t, activeSubscription.Checklist)
 	require.NotNil(t, activeSubscription.Subscription)
 	require.NotNil(t, activeSubscription.Installed)
+	require.Equal(
+		t,
+		shared.MakeSubscriptionETag(sourceChecklistID, 3),
+		activeSubscription.ETag,
+	)
 	require.Equal(t, sourceChecklistID, activeSubscription.Subscription.ChecklistID)
 	require.Equal(
 		t,
@@ -242,6 +248,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 	require.Equal(t, userpmcssync.ChangeKindChecklist, checklistTombstone.Kind)
 	require.NotNil(t, checklistTombstone.Checklist)
 	require.Equal(t, deletedChecklistID, checklistTombstone.Checklist.ID)
+	require.Equal(
+		t,
+		shared.MakeChecklistETag(deletedChecklistID, 4),
+		checklistTombstone.ETag,
+	)
 	require.NotNil(t, checklistTombstone.Checklist.DeletedAt)
 	require.Nil(t, checklistTombstone.Checklist.Draft)
 	require.Nil(t, checklistTombstone.Checklist.Publication)
@@ -261,6 +272,11 @@ func TestAccountDeltaMergesCompleteCurrentAggregatesAndTombstones(t *testing.T) 
 		t,
 		unsubscribedChecklistID,
 		subscriptionTombstone.Subscription.ChecklistID,
+	)
+	require.Equal(
+		t,
+		shared.MakeSubscriptionETag(unsubscribedChecklistID, 5),
+		subscriptionTombstone.ETag,
 	)
 	require.NotNil(t, subscriptionTombstone.Subscription.DeletedAt)
 	require.Nil(t, subscriptionTombstone.Subscription.InstalledRevisionID)

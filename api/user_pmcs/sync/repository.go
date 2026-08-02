@@ -22,6 +22,7 @@ type AccountDelta struct {
 type AccountChange struct {
 	AccountChangeVersion int64                             `json:"account_change_version"`
 	Kind                 string                            `json:"kind"`
+	ETag                 string                            `json:"etag"`
 	Checklist            *shared.ChecklistAggregate        `json:"checklist,omitempty"`
 	Subscription         *shared.Subscription              `json:"subscription,omitempty"`
 	Installed            *shared.InstalledChecklistRelease `json:"installed,omitempty"`
