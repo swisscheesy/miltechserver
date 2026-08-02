@@ -8,6 +8,9 @@ community-sharing plans
 **Server implementation commit:**
 `13cfdfe4d64abf826cbf271a4740134f1b919f13`
 
+**Independent-review fixes and reviewed server head:**
+`7cd356ee04724739ad8a3084ce6f208b583556f6`
+
 **Changed endpoint:** `GET /api/v1/auth/user-pmcs/sync`
 
 ## Continuation status
@@ -21,9 +24,9 @@ representation returned in that change. This includes:
 - active linked subscriptions; and
 - subscription unsubscribe tombstones.
 
-The client may use the server commit above to satisfy Step 0 of the mobile
-master plan and the ETag gate at the start of Plan 3. Plan 2 wire DTOs must
-require and preserve the field before Plan 3 begins.
+The client may use the reviewed server head above to satisfy Step 0 of the
+mobile master plan and the ETag gate at the start of Plan 3. Plan 2 wire DTOs
+must require and preserve the field before Plan 3 begins.
 
 ## What changed on the server
 
@@ -255,8 +258,9 @@ device.
 
 Before beginning mobile Plan 3:
 
-- [ ] Record server commit
-  `13cfdfe4d64abf826cbf271a4740134f1b919f13` in the progress ledger.
+- [ ] Record implementation commit
+  `13cfdfe4d64abf826cbf271a4740134f1b919f13` and reviewed server head
+  `7cd356ee04724739ad8a3084ce6f208b583556f6` in the progress ledger.
 - [ ] Refresh the mobile repository's copied server guide from
   `docs/client/2026-07-31-user-pmcs-mobile-api-implementation-guide.md` at or
   after that commit.
