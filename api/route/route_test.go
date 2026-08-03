@@ -15,16 +15,16 @@ import (
 	"miltechserver/bootstrap"
 )
 
-func TestSetupRegistersPmcsSbsFaultRoutesUnderAuth(t *testing.T) {
+func TestSetupRegistersPmcsSbsInspectionScopedFaultRoutesUnderAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
 	Setup(nil, router, nil, nil, nil)
 
-	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
-	requireRouteRegistered(t, router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
-	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults")
-	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/faults/bulk")
+	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id")
+	requireRouteRegistered(t, router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults")
+	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults")
+	requireRouteRegistered(t, router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults/bulk")
 }
 
 func TestSetupRegistersPmcsSbsImageRoute(t *testing.T) {
