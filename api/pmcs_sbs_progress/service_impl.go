@@ -120,16 +120,20 @@ func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID st
 
 	responses := make([]InspectionSummaryResponse, 0, len(summaries))
 	for _, summary := range summaries {
-		guideManual := summary.GuideManual
 		responses = append(responses, InspectionSummaryResponse{
-			ID:                  summary.ID,
-			SourceType:          "guide",
-			GuideManual:         &guideManual,
-			PerformedDate:       summary.PerformedDate,
-			FaultCount:          summary.FaultCount,
-			CreatedAt:           summary.CreatedAt,
-			PerformedBy:         summary.PerformedBy,
-			PerformedByUsername: summary.PerformedByUsername,
+			ID:                   summary.ID,
+			SourceType:           summary.SourceType,
+			GuideManual:          summary.GuideManual,
+			CustomChecklistID:    summary.CustomChecklistID,
+			CustomRevisionID:     summary.CustomRevisionID,
+			CustomRevisionNumber: summary.CustomRevisionNumber,
+			CustomChecklistName:  summary.CustomChecklistName,
+			PerformedDate:        summary.PerformedDate,
+			FaultCount:           summary.FaultCount,
+			CommentCount:         summary.CommentCount,
+			CreatedAt:            summary.CreatedAt,
+			PerformedBy:          summary.PerformedBy,
+			PerformedByUsername:  summary.PerformedByUsername,
 		})
 	}
 	return &InspectionListResponse{Inspections: responses, Count: len(responses)}, nil

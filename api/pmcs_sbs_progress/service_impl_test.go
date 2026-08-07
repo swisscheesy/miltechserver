@@ -559,25 +559,43 @@ func TestListInspectionsValidatesGuideManualFilterWhenProvided(t *testing.T) {
 	requireServiceError(t, err, ErrInvalidGuideManual)
 }
 
-func TestListInspectionsMapsSummaries(t *testing.T) {
+func TestListInspectionsMapsGuideAndCustomSummaries(t *testing.T) {
 	now := time.Now().UTC()
 	performedBy := "user-1"
 	performedByUsername := "jsmith"
+	guideManual := "pmcs_sbs/hmmwv/file.json"
+	customID := uuid.New()
+	customChecklistID := uuid.New()
+	customRevisionID := uuid.New()
+	customRevisionNumber := int32(3)
+	customChecklistName := "Weekly Generator PMCS"
 	stub := &repoStub{summaries: []InspectionSummary{
-		{ID: samplePmcsID(), GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, FaultCount: 2, CreatedAt: now, PerformedBy: &performedBy, PerformedByUsername: &performedByUsername},
+		{ID: samplePmcsID(), SourceType: "guide", GuideManual: &guideManual, PerformedDate: now, FaultCount: 2, CommentCount: 1, CreatedAt: now, PerformedBy: &performedBy, PerformedByUsername: &performedByUsername},
+		{ID: customID, SourceType: "custom", CustomChecklistID: &customChecklistID, CustomRevisionID: &customRevisionID, CustomRevisionNumber: &customRevisionNumber, CustomChecklistName: &customChecklistName, PerformedDate: now.Add(-time.Hour), FaultCount: 1, CommentCount: 2, CreatedAt: now},
 	}}
 	svc := NewService(stub)
 
 	resp, err := svc.ListInspections(requireUser(), "vehicle-1", ListInspectionsRequest{Limit: 10, Offset: 0})
 
 	require.NoError(t, err)
-	require.Equal(t, 1, resp.Count)
+	require.Equal(t, 2, resp.Count)
 	require.Equal(t, "guide", resp.Inspections[0].SourceType)
+	require.Equal(t, &guideManual, resp.Inspections[0].GuideManual)
 	require.Equal(t, 2, resp.Inspections[0].FaultCount)
+	require.Equal(t, 1, resp.Inspections[0].CommentCount)
 	require.NotNil(t, resp.Inspections[0].PerformedBy)
 	require.Equal(t, "user-1", *resp.Inspections[0].PerformedBy)
 	require.NotNil(t, resp.Inspections[0].PerformedByUsername)
 	require.Equal(t, "jsmith", *resp.Inspections[0].PerformedByUsername)
+	require.Equal(t, customID, resp.Inspections[1].ID)
+	require.Equal(t, "custom", resp.Inspections[1].SourceType)
+	require.Nil(t, resp.Inspections[1].GuideManual)
+	require.Equal(t, &customChecklistID, resp.Inspections[1].CustomChecklistID)
+	require.Equal(t, &customRevisionID, resp.Inspections[1].CustomRevisionID)
+	require.Equal(t, &customRevisionNumber, resp.Inspections[1].CustomRevisionNumber)
+	require.Equal(t, &customChecklistName, resp.Inspections[1].CustomChecklistName)
+	require.Equal(t, 1, resp.Inspections[1].FaultCount)
+	require.Equal(t, 2, resp.Inspections[1].CommentCount)
 }
 
 func TestDeleteInspectionValidatesPmcsID(t *testing.T) {

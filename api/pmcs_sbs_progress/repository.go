@@ -37,14 +37,19 @@ type FaultKey struct {
 }
 
 type InspectionSummary struct {
-	ID                  uuid.UUID
-	GuideManual         string
-	PerformedDate       time.Time
-	FaultCount          int
-	CommentCount        int
-	CreatedAt           time.Time
-	PerformedBy         *string
-	PerformedByUsername *string
+	ID                   uuid.UUID
+	SourceType           string
+	GuideManual          *string
+	CustomChecklistID    *uuid.UUID
+	CustomRevisionID     *uuid.UUID
+	CustomRevisionNumber *int32
+	CustomChecklistName  *string
+	PerformedDate        time.Time
+	FaultCount           int
+	CommentCount         int
+	CreatedAt            time.Time
+	PerformedBy          *string
+	PerformedByUsername  *string
 }
 
 type CommentWithAuthor struct {

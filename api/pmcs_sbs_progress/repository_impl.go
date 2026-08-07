@@ -46,8 +46,7 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(
 			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
-				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))).
-				AND(PmcsSbsInspections.SourceType.EQ(String("guide"))),
+				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
 		)
 
 	if err := stmt.Query(repo.db, &row); err != nil {
@@ -99,10 +98,11 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		return nil, err
 	}
 
-	condition := PmcsSbsInspections.EquipmentID.EQ(String(equipmentID)).
-		AND(PmcsSbsInspections.SourceType.EQ(String("guide")))
+	condition := PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))
 	if guideManual != "" {
-		condition = condition.AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual)))
+		condition = condition.
+			AND(PmcsSbsInspections.SourceType.EQ(String("guide"))).
+			AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual)))
 	}
 
 	var inspections []struct {
@@ -174,14 +174,19 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 	summaries := make([]InspectionSummary, 0, len(inspections))
 	for _, inspection := range inspections {
 		summaries = append(summaries, InspectionSummary{
-			ID:                  inspection.ID,
-			GuideManual:         *inspection.GuideManual,
-			PerformedDate:       inspection.PerformedDate,
-			FaultCount:          countByID[inspection.ID],
-			CommentCount:        commentCountByID[inspection.ID],
-			CreatedAt:           inspection.CreatedAt,
-			PerformedBy:         inspection.PerformedBy,
-			PerformedByUsername: inspection.PerformedByUsername,
+			ID:                   inspection.ID,
+			SourceType:           inspection.SourceType,
+			GuideManual:          inspection.GuideManual,
+			CustomChecklistID:    inspection.CustomChecklistID,
+			CustomRevisionID:     inspection.CustomRevisionID,
+			CustomRevisionNumber: inspection.CustomRevisionNumber,
+			CustomChecklistName:  inspection.CustomChecklistName,
+			PerformedDate:        inspection.PerformedDate,
+			FaultCount:           countByID[inspection.ID],
+			CommentCount:         commentCountByID[inspection.ID],
+			CreatedAt:            inspection.CreatedAt,
+			PerformedBy:          inspection.PerformedBy,
+			PerformedByUsername:  inspection.PerformedByUsername,
 		})
 	}
 	return summaries, nil
@@ -216,19 +221,8 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		return nil, err
 	}
 
-	tx, err := repo.db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("begin upsert pmcs sbs fault transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	savedInspection, err := ensureInspection(tx, inspection)
-	if err != nil {
-		return nil, err
-	}
-
 	now := time.Now().UTC()
-	fault.PmcsID = savedInspection.ID
+	fault.PmcsID = inspection.ID
 	if fault.CreatedAt.IsZero() {
 		fault.CreatedAt = now
 	}
@@ -242,6 +236,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		PmcsSbsFaults.Status,
 		PmcsSbsFaults.FaultText,
 		PmcsSbsFaults.CorrectiveAction,
+		PmcsSbsFaults.SectionTitle,
 		PmcsSbsFaults.CreatedAt,
 		PmcsSbsFaults.UpdatedAt,
 	).VALUES(
@@ -252,6 +247,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		String(fault.Status),
 		String(fault.FaultText),
 		String(fault.CorrectiveAction),
+		nullableStringExpression(fault.SectionTitle),
 		TimestampzT(fault.CreatedAt),
 		TimestampzT(now),
 	).ON_CONFLICT(
@@ -263,8 +259,19 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		PmcsSbsFaults.Status.SET(String(fault.Status)),
 		PmcsSbsFaults.FaultText.SET(String(fault.FaultText)),
 		PmcsSbsFaults.CorrectiveAction.SET(String(fault.CorrectiveAction)),
+		PmcsSbsFaults.SectionTitle.SET(nullableStringExpression(fault.SectionTitle)),
 		PmcsSbsFaults.UpdatedAt.SET(TimestampzT(now)),
 	)).RETURNING(PmcsSbsFaults.AllColumns)
+
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin upsert pmcs sbs fault transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := ensureInspection(tx, inspection); err != nil {
+		return nil, err
+	}
 
 	var saved model.PmcsSbsFaults
 	if err := stmt.Query(tx, &saved); err != nil {
@@ -473,18 +480,11 @@ func (repo *RepositoryImpl) LookupUsername(userID string) (*string, error) {
 	return row.Username, nil
 }
 
-// ensureInspection inserts the inspection if it doesn't exist yet, or, if a
-// row with this id already exists, verifies equipment_id and guide_manual
-// match and updates performed_date. A mismatch on either field returns
-// ErrInspectionConflict. queryable is either *sql.DB (standalone calls) or
-// *sql.Tx (the implicit-creation path inside UpsertFault) — both satisfy
-// qrm.Queryable.
+// ensureInspection inserts the inspection if it doesn't exist yet. A retry
+// updates mutable inspection metadata only when equipment and the complete
+// immutable source tuple match the existing row. queryable is either *sql.DB
+// for standalone calls or *sql.Tx for fault upserts.
 func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
-	if inspection.GuideManual == nil {
-		return nil, ErrInvalidGuideManual
-	}
-	guideManual := *inspection.GuideManual
-
 	now := time.Now().UTC()
 	var performedByExpr Expression = NULL
 	if inspection.PerformedBy != nil {
@@ -500,6 +500,10 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		PmcsSbsInspections.EquipmentID,
 		PmcsSbsInspections.SourceType,
 		PmcsSbsInspections.GuideManual,
+		PmcsSbsInspections.CustomChecklistID,
+		PmcsSbsInspections.CustomRevisionID,
+		PmcsSbsInspections.CustomRevisionNumber,
+		PmcsSbsInspections.CustomChecklistName,
 		PmcsSbsInspections.PerformedDate,
 		PmcsSbsInspections.PerformedBy,
 		PmcsSbsInspections.Notes,
@@ -508,8 +512,12 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 	).VALUES(
 		UUID(inspection.ID),
 		String(inspection.EquipmentID),
-		String("guide"),
-		String(guideManual),
+		String(inspection.SourceType),
+		nullableStringExpression(inspection.GuideManual),
+		nullableUUIDExpression(inspection.CustomChecklistID),
+		nullableUUIDExpression(inspection.CustomRevisionID),
+		nullableInt32Expression(inspection.CustomRevisionNumber),
+		nullableStringExpression(inspection.CustomChecklistName),
 		TimestampzT(inspection.PerformedDate),
 		performedByExpr,
 		notesExpr,
@@ -521,8 +529,13 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 			PmcsSbsInspections.Notes.SET(notesExpr),
 			PmcsSbsInspections.UpdatedAt.SET(TimestampzT(now)),
 		).WHERE(
-			PmcsSbsInspections.EquipmentID.EQ(String(inspection.EquipmentID)).
-				AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual))),
+			PmcsSbsInspections.EquipmentID.EQ(PmcsSbsInspections.EXCLUDED.EquipmentID).
+				AND(PmcsSbsInspections.SourceType.EQ(PmcsSbsInspections.EXCLUDED.SourceType)).
+				AND(PmcsSbsInspections.GuideManual.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.GuideManual)).
+				AND(PmcsSbsInspections.CustomChecklistID.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomChecklistID)).
+				AND(PmcsSbsInspections.CustomRevisionID.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomRevisionID)).
+				AND(PmcsSbsInspections.CustomRevisionNumber.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomRevisionNumber)).
+				AND(PmcsSbsInspections.CustomChecklistName.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomChecklistName)),
 		),
 	).RETURNING(PmcsSbsInspections.AllColumns)
 
@@ -534,4 +547,25 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		return nil, fmt.Errorf("ensure pmcs sbs inspection: %w", err)
 	}
 	return &saved, nil
+}
+
+func nullableStringExpression(value *string) StringExpression {
+	if value == nil {
+		return StringExp(NULL)
+	}
+	return String(*value)
+}
+
+func nullableUUIDExpression(value *uuid.UUID) StringExpression {
+	if value == nil {
+		return StringExp(NULL)
+	}
+	return UUID(*value)
+}
+
+func nullableInt32Expression(value *int32) IntegerExpression {
+	if value == nil {
+		return IntExp(NULL)
+	}
+	return Int32(*value)
 }

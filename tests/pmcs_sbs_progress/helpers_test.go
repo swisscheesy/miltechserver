@@ -36,8 +36,10 @@ func ensureUser(t *testing.T, db *sql.DB, user *bootstrap.User) {
 
 func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec(
-		`TRUNCATE TABLE
+
+	truncate := func() {
+		_, err := db.Exec(
+			`TRUNCATE TABLE
 			pmcs_sbs_faults,
 			pmcs_sbs_inspection_comments,
 			pmcs_sbs_inspections,
@@ -47,8 +49,12 @@ func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 			shop_members,
 			shops
 		RESTART IDENTITY CASCADE`,
-	)
-	require.NoError(t, err)
+		)
+		require.NoError(t, err)
+	}
+
+	truncate()
+	t.Cleanup(truncate)
 }
 
 func createShopWithMember(t *testing.T, db *sql.DB, user *bootstrap.User, role string) string {
@@ -132,9 +138,29 @@ func sampleInspection(equipmentID string, performedBy string) model.PmcsSbsInspe
 	return model.PmcsSbsInspections{
 		ID:            uuid.New(),
 		EquipmentID:   equipmentID,
+		SourceType:    "guide",
 		GuideManual:   &guideManual,
 		PerformedDate: time.Now().UTC(),
 		PerformedBy:   &performedByCopy,
+	}
+}
+
+func sampleCustomInspection(equipmentID string, performedBy string) model.PmcsSbsInspections {
+	performedByCopy := performedBy
+	checklistID := uuid.New()
+	revisionID := uuid.New()
+	revisionNumber := int32(3)
+	checklistName := "Weekly Generator PMCS"
+	return model.PmcsSbsInspections{
+		ID:                   uuid.New(),
+		EquipmentID:          equipmentID,
+		SourceType:           "custom",
+		CustomChecklistID:    &checklistID,
+		CustomRevisionID:     &revisionID,
+		CustomRevisionNumber: &revisionNumber,
+		CustomChecklistName:  &checklistName,
+		PerformedDate:        time.Now().UTC(),
+		PerformedBy:          &performedByCopy,
 	}
 }
 

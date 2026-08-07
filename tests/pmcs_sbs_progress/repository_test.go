@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/pmcs_sbs_progress"
 
 	"github.com/google/uuid"
@@ -32,7 +33,6 @@ func TestRepositoryEnsureInspectionCreatesRecord(t *testing.T) {
 
 func TestInspectionSourceConstraint(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	defer clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-source-constraint")
 	ensureUser(t, testDB, user)
 	shopID := createShopWithMember(t, testDB, user, "member")
@@ -126,38 +126,328 @@ func TestInspectionSourceConstraint(t *testing.T) {
 	}
 }
 
-func TestRepositoryGetAndListInspectionsIgnoreCustomSource(t *testing.T) {
+func TestRepositoryCustomListAndDetailReturnNullableSourceProvenanceCountsAndOrder(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
-	defer clearPmcsSbsTables(t, testDB)
-	user := testUser("pmcs-guide-only-read")
+	user := testUser("pmcs-custom-read")
 	ensureUser(t, testDB, user)
 	shopID := createShopWithMember(t, testDB, user, "member")
-	vehicleID := createShopVehicle(t, testDB, shopID, user, "G1")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C1")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
 	guide := sampleInspection(vehicleID, user.UserID)
+	guide.PerformedDate = time.Now().UTC().Add(-24 * time.Hour)
 	_, err := repo.EnsureInspection(user, guide)
 	require.NoError(t, err)
 
-	customID := uuid.New()
-	_, err = testDB.Exec(
-		`INSERT INTO pmcs_sbs_inspections
-		  (id, equipment_id, source_type, guide_manual,
-		   custom_checklist_id, custom_revision_id,
-		   custom_revision_number, custom_checklist_name,
-		   performed_date, performed_by)
-		 VALUES ($1, $2, 'custom', NULL, $3, $4, 0, 'Device Checklist', $5, $6)`,
-		customID, vehicleID, uuid.New(), uuid.New(), time.Now().UTC(), user.UserID,
-	)
+	custom := sampleCustomInspection(vehicleID, user.UserID)
+	custom.PerformedDate = time.Now().UTC()
+	_, err = repo.UpsertFault(user, custom, sampleFault(custom.ID))
+	require.NoError(t, err)
+	_, err = repo.CreateComment(user, vehicleID, custom.ID, "custom comment")
 	require.NoError(t, err)
 
-	_, _, _, err = repo.GetInspection(user, vehicleID, customID)
-	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
+	detail, faults, comments, err := repo.GetInspection(user, vehicleID, custom.ID)
+	require.NoError(t, err)
+	require.Equal(t, "custom", detail.SourceType)
+	require.Nil(t, detail.GuideManual)
+	require.Equal(t, custom.CustomChecklistID, detail.CustomChecklistID)
+	require.Equal(t, custom.CustomRevisionID, detail.CustomRevisionID)
+	require.Equal(t, custom.CustomRevisionNumber, detail.CustomRevisionNumber)
+	require.Equal(t, custom.CustomChecklistName, detail.CustomChecklistName)
+	require.Len(t, faults, 1)
+	require.Len(t, comments, 1)
 
 	summaries, err := repo.ListInspections(user, vehicleID, "", 10, 0)
 	require.NoError(t, err)
-	require.Len(t, summaries, 1)
-	require.Equal(t, guide.ID, summaries[0].ID)
+	require.Len(t, summaries, 2)
+	require.Equal(t, custom.ID, summaries[0].ID)
+	require.Equal(t, 1, summaries[0].FaultCount)
+	require.Equal(t, 1, summaries[0].CommentCount)
+	require.Equal(t, guide.ID, summaries[1].ID)
+
+	require.Equal(t, "custom", summaries[0].SourceType)
+	require.Nil(t, summaries[0].GuideManual)
+	require.Equal(t, custom.CustomChecklistID, summaries[0].CustomChecklistID)
+	require.Equal(t, custom.CustomRevisionID, summaries[0].CustomRevisionID)
+	require.Equal(t, custom.CustomRevisionNumber, summaries[0].CustomRevisionNumber)
+	require.Equal(t, custom.CustomChecklistName, summaries[0].CustomChecklistName)
+
+	guideSummaries, err := repo.ListInspections(user, vehicleID, *guide.GuideManual, 10, 0)
+	require.NoError(t, err)
+	require.Len(t, guideSummaries, 1)
+	require.Equal(t, guide.ID, guideSummaries[0].ID)
+}
+
+func TestRepositoryCustomUpsertFaultCreatesInspectionImplicitly(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("cst-fault-implicit")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C2")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	saved, err := repo.UpsertFault(user, inspection, sampleFault(inspection.ID))
+
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, saved.PmcsID)
+	detail, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Equal(t, "custom", detail.SourceType)
+	require.Nil(t, detail.GuideManual)
+	require.Equal(t, inspection.CustomChecklistID, detail.CustomChecklistID)
+	require.Equal(t, inspection.CustomRevisionID, detail.CustomRevisionID)
+	require.Equal(t, inspection.CustomRevisionNumber, detail.CustomRevisionNumber)
+	require.Equal(t, inspection.CustomChecklistName, detail.CustomChecklistName)
+	require.Len(t, faults, 1)
+}
+
+func TestRepositoryCustomEnsureInspectionCreatesCleanInspection(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-custom-clean")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C3")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	saved, err := repo.EnsureInspection(user, inspection)
+
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, saved.ID)
+	require.Equal(t, "custom", saved.SourceType)
+	require.Nil(t, saved.GuideManual)
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Empty(t, faults)
+}
+
+func TestRepositoryCustomEnsureInspectionRetryUpdatesOnlyMutableFields(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	creator := testUser("pmcs-custom-retry-creator")
+	retryingMember := testUser("pmcs-custom-retry-member")
+	ensureUser(t, testDB, creator)
+	ensureUser(t, testDB, retryingMember)
+	shopID := createShopWithMember(t, testDB, creator, "admin")
+	addShopMember(t, testDB, shopID, retryingMember, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, creator, "C4")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, creator.UserID)
+	firstNotes := "first notes"
+	inspection.Notes = &firstNotes
+	first, err := repo.EnsureInspection(creator, inspection)
+	require.NoError(t, err)
+
+	retry := inspection
+	retryDate := inspection.PerformedDate.Add(-time.Hour)
+	retry.PerformedDate = retryDate
+	retryingMemberID := retryingMember.UserID
+	retry.PerformedBy = &retryingMemberID
+	retryNotes := "corrected notes"
+	retry.Notes = &retryNotes
+	second, err := repo.EnsureInspection(retryingMember, retry)
+
+	require.NoError(t, err)
+	require.Equal(t, first.ID, second.ID)
+	require.True(t, retryDate.Equal(second.PerformedDate))
+	require.Equal(t, &retryNotes, second.Notes)
+	require.Equal(t, &creator.UserID, second.PerformedBy)
+	require.Equal(t, inspection.CustomChecklistID, second.CustomChecklistID)
+
+	var count int
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE id=$1`, inspection.ID).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+}
+
+func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("cst-source-conflict")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C5")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	mutations := []struct {
+		name   string
+		mutate func(model model.PmcsSbsInspections) model.PmcsSbsInspections
+	}{
+		{
+			name: "source type",
+			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+				guideManual := "pmcs_sbs/hmmwv/file.json"
+				model.SourceType = "guide"
+				model.GuideManual = &guideManual
+				model.CustomChecklistID = nil
+				model.CustomRevisionID = nil
+				model.CustomRevisionNumber = nil
+				model.CustomChecklistName = nil
+				return model
+			},
+		},
+		{
+			name: "checklist id",
+			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+				value := uuid.New()
+				model.CustomChecklistID = &value
+				return model
+			},
+		},
+		{
+			name: "revision id",
+			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+				value := uuid.New()
+				model.CustomRevisionID = &value
+				return model
+			},
+		},
+		{
+			name: "revision number",
+			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+				value := *model.CustomRevisionNumber + 1
+				model.CustomRevisionNumber = &value
+				return model
+			},
+		},
+		{
+			name: "checklist name",
+			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+				value := "Different Checklist"
+				model.CustomChecklistName = &value
+				return model
+			},
+		},
+	}
+
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			_, err := repo.EnsureInspection(user, mutation.mutate(inspection))
+			require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
+		})
+	}
+}
+
+func TestRepositoryCustomEnsureInspectionRejectsEquipmentMutation(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("cst-equipment-conflict")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C6")
+	otherVehicleID := createShopVehicle(t, testDB, shopID, user, "C7")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	mutated := inspection
+	mutated.EquipmentID = otherVehicleID
+	_, err = repo.EnsureInspection(user, mutated)
+
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
+}
+
+func TestRepositoryCustomInspectionAllowsShopMemberAccess(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	owner := testUser("pmcs-custom-access-owner")
+	member := testUser("pmcs-custom-access-member")
+	ensureUser(t, testDB, owner)
+	ensureUser(t, testDB, member)
+	shopID := createShopWithMember(t, testDB, owner, "admin")
+	addShopMember(t, testDB, shopID, member, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, owner, "C8")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, member.UserID)
+	_, err := repo.EnsureInspection(member, inspection)
+	require.NoError(t, err)
+
+	detail, _, _, err := repo.GetInspection(owner, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Equal(t, inspection.ID, detail.ID)
+}
+
+func TestRepositoryCustomInspectionHidesVehicleFromNonmember(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	owner := testUser("pmcs-custom-hidden-owner")
+	nonmember := testUser("cst-hidden-nonmember")
+	ensureUser(t, testDB, owner)
+	ensureUser(t, testDB, nonmember)
+	shopID := createShopWithMember(t, testDB, owner, "admin")
+	vehicleID := createShopVehicle(t, testDB, shopID, owner, "C9")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, nonmember.UserID)
+	_, err := repo.EnsureInspection(nonmember, inspection)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+
+	inspection.PerformedBy = &owner.UserID
+	_, err = repo.EnsureInspection(owner, inspection)
+	require.NoError(t, err)
+	_, _, _, err = repo.GetInspection(nonmember, vehicleID, inspection.ID)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
+}
+
+func TestRepositoryUpsertFaultPersistsAndUpdatesSectionTitle(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-custom-section-title")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C10")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	fault := sampleFault(inspection.ID)
+	firstTitle := "Before Operation"
+	fault.SectionTitle = &firstTitle
+	first, err := repo.UpsertFault(user, inspection, fault)
+	require.NoError(t, err)
+	require.Equal(t, &firstTitle, first.SectionTitle)
+
+	updatedTitle := "Before Checks"
+	fault.SectionTitle = &updatedTitle
+	second, err := repo.UpsertFault(user, inspection, fault)
+	require.NoError(t, err)
+	require.Equal(t, &updatedTitle, second.SectionTitle)
+
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Len(t, faults, 1)
+	require.Equal(t, &updatedTitle, faults[0].SectionTitle)
+}
+
+func TestRepositoryCustomVehicleDeleteCascadesInspectionFaultAndComment(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-custom-cascade")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "C11")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleCustomInspection(vehicleID, user.UserID)
+	_, err := repo.UpsertFault(user, inspection, sampleFault(inspection.ID))
+	require.NoError(t, err)
+	_, err = repo.CreateComment(user, vehicleID, inspection.ID, "cascade comment")
+	require.NoError(t, err)
+
+	_, err = testDB.Exec(`DELETE FROM shop_vehicle WHERE id=$1`, vehicleID)
+	require.NoError(t, err)
+
+	var inspectionCount, faultCount, commentCount int
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE id=$1`, inspection.ID).Scan(&inspectionCount)
+	require.NoError(t, err)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
+	require.NoError(t, err)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
+	require.NoError(t, err)
+	require.Zero(t, inspectionCount)
+	require.Zero(t, faultCount)
+	require.Zero(t, commentCount)
 }
 
 func TestRepositoryEnsureInspectionIsIdempotentAndUpdatesPerformedDate(t *testing.T) {
