@@ -435,7 +435,7 @@ func normalizeInspectionSource(req InspectionSourceRequest) (ValidatedInspection
 		return ValidatedInspectionSource{}, ErrInvalidRequest
 	}
 
-	sourceType := strings.TrimSpace(req.SourceType)
+	sourceType := req.SourceType
 	hasCustomFields := req.CustomChecklistID != "" ||
 		req.CustomRevisionID != "" ||
 		req.CustomRevisionNumber != nil ||
@@ -453,7 +453,7 @@ func normalizeInspectionSource(req InspectionSourceRequest) (ValidatedInspection
 		}
 		return normalizeGuideInspectionSource(req.GuideManual)
 	case "custom":
-		if strings.TrimSpace(req.GuideManual) != "" {
+		if req.GuideManual != "" {
 			return ValidatedInspectionSource{}, ErrInvalidRequest
 		}
 		return normalizeCustomInspectionSource(req)

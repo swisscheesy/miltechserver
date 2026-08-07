@@ -287,6 +287,44 @@ func TestValidateInspectionSource(t *testing.T) {
 			wantErr: ErrInvalidRequest,
 		},
 		{
+			name:    "source type with guide whitespace",
+			request: InspectionSourceRequest{SourceType: " guide ", GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "source type with custom whitespace",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.SourceType = " custom "
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name:    "whitespace source type is not omitted",
+			request: InspectionSourceRequest{SourceType: " ", GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "custom source with whitespace guide manual",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.GuideManual = " "
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name:    "legacy guide with whitespace custom field",
+			request: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", CustomChecklistID: " "},
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name:    "explicit guide with whitespace custom field",
+			request: InspectionSourceRequest{SourceType: "guide", GuideManual: "pmcs_sbs/hmmwv/file.json", CustomChecklistName: " "},
+			wantErr: ErrInvalidRequest,
+		},
+		{
 			name: "custom checklist name exceeds grapheme limit",
 			request: func() InspectionSourceRequest {
 				request := validCustom()
