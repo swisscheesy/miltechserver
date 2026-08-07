@@ -24,16 +24,19 @@ Do not use this API to disclose Shop membership or vehicle data.
 | PUT | /pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/comments/:comment_id | Edit author-owned comment. |
 | DELETE | /pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/comments/:comment_id | Replace author-owned comment with deleted text. |
 
-Successful inspection, fault, and comment reads/saves use the standard
-{"status":200|201,"message":"...","data":...} envelope. Deletes and errors
-retain the established {"message":"..."} envelope.
+Inspection detail/list responses explicitly emit source_type. Fault and comment
+objects do not carry source provenance. Successful inspection, fault, and
+comment reads/saves use the standard {"status":200|201,"message":"...",
+"data":...} envelope, except that inspection and individual-fault deletes use
+message-only responses. Bulk fault delete also returns requested/deleted counts;
+comment delete returns the standard status/message/data envelope.
 
 ## Source contract and metadata
 
-Every response explicitly emits source_type: guide or custom. Source
-provenance is immutable after the first save for a pmcs_id. A retry with the
-same vehicle/source tuple is idempotent; changing vehicle, source type, guide
-manual, or custom provenance returns 409
+Inspection detail/list responses explicitly emit source_type: guide or custom.
+Source provenance is immutable after the first save for a pmcs_id. A retry with
+the same vehicle/source tuple is idempotent; changing vehicle, source type,
+guide manual, or custom provenance returns 409
 {"message":"pmcs sbs inspection conflict"}.
 
 Legacy guide save requests may omit source_type (meaning guide). They require
@@ -218,7 +221,8 @@ non-empty, and limited to 2,000 bytes. It returns 201 / Comment created and
 id, pmcs_id, author_id, optional author_username, text, created_at, and
 optional updated_at.
 
-PUT comment accepts the same body. DELETE comment returns Comment deleted and
+PUT comment accepts the same body. DELETE comment returns the standard
+{"status":200,"message":"Comment deleted","data":{...}} envelope containing
 the updated object with text Deleted by user; this is a visible history entry,
 not removal. Only original author may update/delete (403
 {"message":"user not authorized"}). Unknown comment is 404
@@ -249,12 +253,22 @@ not removal. Only original author may update/delete (403
 | 404 | Vehicle missing/not visible, inspection absent for vehicle, or comment absent. |
 | 409 | Existing inspection has different vehicle or immutable source tuple. |
 
-Inspection and fault saves accept exactly one JSON value: unknown fields and
-trailing JSON are rejected. Raw invalid UTF-8 is rejected before Go JSON
-decoding can replace bytes, and errors never echo authored request text.
+Inspection and fault saves accept at most 8 MiB and exactly one JSON value:
+unknown fields and trailing JSON are rejected. Oversized bodies and raw invalid
+UTF-8 are rejected with the established 400 invalid-request-body envelope
+before Go JSON decoding can replace bytes, and errors never echo authored text.
 
 There is no server queue/outbox, ETag, or conditional-write token. Persist
-mutations locally and replay causally: inspection metadata, fault upserts,
-fault delete/reset, comments, then final desired notes. User-PMCS content-sync
-cursors and ETags are unrelated to Shop inspection mutations and must never be
-reused as inspection validators.
+mutations locally in their exact causal order per inspection and fault key; do
+not globally group every fault upsert before every delete. Coalesce only when
+the final desired state is known exactly (for example, retain only the last
+operation for one unchanged fault key). Preserve comment create-before-edit
+dependencies, and save final desired notes after fault upserts because fault
+writes clear notes.
+
+Comment POST is not idempotent: it always creates a server-generated comment
+id. After a timeout or lost response, do not blindly retry. First GET inspection
+detail and reconcile by the locally persisted author, text, and approximate
+creation time; if that cannot establish the result, ask the operator before any
+duplicate-risk retry. User-PMCS content-sync cursors and ETags are unrelated to
+Shop inspection mutations and must never be reused as inspection validators.

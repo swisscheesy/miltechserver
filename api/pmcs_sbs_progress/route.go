@@ -24,6 +24,8 @@ type Handler struct {
 	service Service
 }
 
+const maxInspectionRequestBodyBytes int64 = 8 * 1024 * 1024
+
 func RegisterRoutes(deps Dependencies, group *gin.RouterGroup) {
 	repo := NewRepository(deps.DB)
 	svc := NewService(repo)
@@ -242,7 +244,10 @@ func (handler Handler) deleteComment(c *gin.Context) {
 // decodeInspectionJSON validates raw bytes before JSON decoding so malformed
 // UTF-8 cannot be replaced by encoding/json and bypass service validation.
 func decodeInspectionJSON(c *gin.Context, destination any) error {
-	payload, err := io.ReadAll(c.Request.Body)
+	body := http.MaxBytesReader(c.Writer, c.Request.Body, maxInspectionRequestBodyBytes)
+	defer body.Close()
+
+	payload, err := io.ReadAll(body)
 	if err != nil {
 		return err
 	}

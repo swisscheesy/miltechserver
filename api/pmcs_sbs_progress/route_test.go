@@ -276,6 +276,38 @@ func TestRouteRejectsInvalidRawUTF8BeforeDecoding(t *testing.T) {
 	}
 }
 
+func TestRouteRejectsOversizedInspectionAndFaultBodiesBeforeService(t *testing.T) {
+	oversizedText := strings.Repeat("a", 8*1024*1024+1)
+	cases := []struct {
+		name string
+		path string
+		body []byte
+	}{
+		{
+			name: "inspection",
+			path: "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID,
+			body: []byte(`{"guide_manual":"pmcs_sbs/hmmwv/file.json","performed_date":"2026-08-07T00:00:00Z","notes":"` + oversizedText + `"}`),
+		},
+		{
+			name: "fault",
+			path: "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID + "/faults",
+			body: []byte(`{"guide_manual":"pmcs_sbs/hmmwv/file.json","performed_date":"2026-08-07T00:00:00Z","section_id":"before","item_index":0,"item_no":"1","status":"X","fault_text":"` + oversizedText + `"}`),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &serviceStub{}
+			router := newRouteTestRouter(stub)
+			resp := doRouteRawJSON(router, http.MethodPut, tc.path, tc.body, routeUser())
+
+			require.Equal(t, http.StatusBadRequest, resp.Code)
+			require.JSONEq(t, `{"message":"invalid request body"}`, resp.Body.String())
+			require.Nil(t, stub.capturedRequest)
+		})
+	}
+}
+
 func TestRouteRejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
 	validInspection := []byte(`{"guide_manual":"pmcs_sbs/hmmwv/file.json","performed_date":"2026-08-07T00:00:00Z"}`)
 	cases := []struct {
