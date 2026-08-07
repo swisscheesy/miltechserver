@@ -46,6 +46,10 @@ type repoStub struct {
 	capturedCommentText      string
 }
 
+func stringPointer(value string) *string {
+	return &value
+}
+
 func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
 	repo.capturedUser = user
 	repo.capturedInspection = inspection
@@ -194,7 +198,7 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	stub := &repoStub{inspection: &model.PmcsSbsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
 		PerformedDate: time.Now().UTC(),
 		PerformedBy:   &performedBy,
 	}}
@@ -218,7 +222,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *t
 	stub := &repoStub{inspection: &model.PmcsSbsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
 		PerformedDate: time.Now().UTC(),
 		PerformedBy:   &performedBy,
 	}}
@@ -243,7 +247,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiff
 		inspection: &model.PmcsSbsInspections{
 			ID:            samplePmcsID(),
 			EquipmentID:   "vehicle-1",
-			GuideManual:   "pmcs_sbs/hmmwv/file.json",
+			GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
 			PerformedDate: time.Now().UTC(),
 			PerformedBy:   &performedBy,
 		},
@@ -275,7 +279,7 @@ func TestGetInspectionRejectsInvalidPmcsID(t *testing.T) {
 func TestGetInspectionMapsFaults(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &repoStub{
-		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now},
+		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now},
 		faults: []model.PmcsSbsFaults{{
 			PmcsID: samplePmcsID(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "x", FaultText: "leak", CreatedAt: now, UpdatedAt: now,
 		}},
@@ -536,7 +540,7 @@ func TestGetInspectionMapsNotesAndComments(t *testing.T) {
 	notes := "clean inspection"
 	authorUsername := "jsmith"
 	stub := &repoStub{
-		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, Notes: &notes},
+		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now, Notes: &notes},
 		comments: []CommentWithAuthor{{
 			PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: uuid.New(), PmcsID: samplePmcsID(), AuthorID: "user-1", Text: "looks good", CreatedAt: now},
 			AuthorUsername:            &authorUsername,

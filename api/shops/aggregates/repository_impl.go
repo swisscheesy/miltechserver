@@ -1189,9 +1189,13 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 
 	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
 	for _, inspection := range inspections {
+		guideManual := ""
+		if inspection.GuideManual != nil {
+			guideManual = *inspection.GuideManual
+		}
 		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
 			ID:                  inspection.ID,
-			GuideManual:         inspection.GuideManual,
+			GuideManual:         guideManual,
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          faultCountByInspectionID[inspection.ID],
 			CommentCount:        commentCountByInspectionID[inspection.ID],

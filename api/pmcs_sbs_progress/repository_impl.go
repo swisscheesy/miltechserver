@@ -173,7 +173,7 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 	for _, inspection := range inspections {
 		summaries = append(summaries, InspectionSummary{
 			ID:                  inspection.ID,
-			GuideManual:         inspection.GuideManual,
+			GuideManual:         guideManualValue(inspection.GuideManual),
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          countByID[inspection.ID],
 			CommentCount:        commentCountByID[inspection.ID],
@@ -478,6 +478,11 @@ func (repo *RepositoryImpl) LookupUsername(userID string) (*string, error) {
 // *sql.Tx (the implicit-creation path inside UpsertFault) — both satisfy
 // qrm.Queryable.
 func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
+	if inspection.GuideManual == nil {
+		return nil, ErrInvalidGuideManual
+	}
+	guideManual := *inspection.GuideManual
+
 	now := time.Now().UTC()
 	var performedByExpr Expression = NULL
 	if inspection.PerformedBy != nil {
@@ -491,6 +496,7 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 	stmt := PmcsSbsInspections.INSERT(
 		PmcsSbsInspections.ID,
 		PmcsSbsInspections.EquipmentID,
+		PmcsSbsInspections.SourceType,
 		PmcsSbsInspections.GuideManual,
 		PmcsSbsInspections.PerformedDate,
 		PmcsSbsInspections.PerformedBy,
@@ -500,7 +506,8 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 	).VALUES(
 		UUID(inspection.ID),
 		String(inspection.EquipmentID),
-		String(inspection.GuideManual),
+		String("guide"),
+		String(guideManual),
 		TimestampzT(inspection.PerformedDate),
 		performedByExpr,
 		notesExpr,
@@ -513,7 +520,7 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 			PmcsSbsInspections.UpdatedAt.SET(TimestampzT(now)),
 		).WHERE(
 			PmcsSbsInspections.EquipmentID.EQ(String(inspection.EquipmentID)).
-				AND(PmcsSbsInspections.GuideManual.EQ(String(inspection.GuideManual))),
+				AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual))),
 		),
 	).RETURNING(PmcsSbsInspections.AllColumns)
 
@@ -525,4 +532,11 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		return nil, fmt.Errorf("ensure pmcs sbs inspection: %w", err)
 	}
 	return &saved, nil
+}
+
+func guideManualValue(guideManual *string) string {
+	if guideManual == nil {
+		return ""
+	}
+	return *guideManual
 }

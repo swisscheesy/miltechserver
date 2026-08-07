@@ -128,13 +128,18 @@ func createShopVehicle(t *testing.T, db *sql.DB, shopID string, creator *bootstr
 
 func sampleInspection(equipmentID string, performedBy string) model.PmcsSbsInspections {
 	performedByCopy := performedBy
+	guideManual := "pmcs_sbs/hmmwv/file.json"
 	return model.PmcsSbsInspections{
 		ID:            uuid.New(),
 		EquipmentID:   equipmentID,
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
+		GuideManual:   &guideManual,
 		PerformedDate: time.Now().UTC(),
 		PerformedBy:   &performedByCopy,
 	}
+}
+
+func stringPointer(value string) *string {
+	return &value
 }
 
 func sampleFault(pmcsID uuid.UUID) model.PmcsSbsFaults {

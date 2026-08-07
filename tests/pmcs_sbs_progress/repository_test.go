@@ -24,9 +24,91 @@ func TestRepositoryEnsureInspectionCreatesRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, inspection.ID, saved.ID)
 	require.Equal(t, vehicleID, saved.EquipmentID)
-	require.Equal(t, "pmcs_sbs/hmmwv/file.json", saved.GuideManual)
+	require.NotNil(t, saved.GuideManual)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", *saved.GuideManual)
 	require.NotNil(t, saved.PerformedBy)
 	require.Equal(t, user.UserID, *saved.PerformedBy)
+}
+
+func TestInspectionSourceConstraint(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	defer clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-source-constraint")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "S1")
+	performedDate := time.Now().UTC()
+
+	_, err := testDB.Exec(
+		`INSERT INTO pmcs_sbs_inspections
+		  (id, equipment_id, source_type, guide_manual, performed_date, performed_by)
+		 VALUES ($1, $2, 'guide', 'pmcs_sbs/hmmwv/file.json', $3, $4)`,
+		uuid.New(), vehicleID, performedDate, user.UserID,
+	)
+	require.NoError(t, err)
+
+	customChecklistID := uuid.New()
+	customRevisionID := uuid.New()
+	_, err = testDB.Exec(
+		`INSERT INTO pmcs_sbs_inspections
+		  (id, equipment_id, source_type, guide_manual,
+		   custom_checklist_id, custom_revision_id,
+		   custom_revision_number, custom_checklist_name,
+		   performed_date, performed_by)
+		 VALUES ($1, $2, 'custom', NULL, $3, $4, 0, 'Device Checklist', $5, $6)`,
+		uuid.New(), vehicleID, customChecklistID, customRevisionID, performedDate, user.UserID,
+	)
+	require.NoError(t, err)
+
+	invalidRows := []struct {
+		name  string
+		query string
+		args  []any
+	}{
+		{
+			name: "custom source cannot include guide manual",
+			query: `INSERT INTO pmcs_sbs_inspections
+			  (id, equipment_id, source_type, guide_manual,
+			   custom_checklist_id, custom_revision_id,
+			   custom_revision_number, custom_checklist_name,
+			   performed_date, performed_by)
+			 VALUES ($1, $2, 'custom', 'pmcs_sbs/hmmwv/file.json', $3, $4, 0, 'Device Checklist', $5, $6)`,
+			args: []any{uuid.New(), vehicleID, customChecklistID, customRevisionID, performedDate, user.UserID},
+		},
+		{
+			name: "guide source cannot include custom provenance",
+			query: `INSERT INTO pmcs_sbs_inspections
+			  (id, equipment_id, source_type, guide_manual, custom_checklist_id,
+			   performed_date, performed_by)
+			 VALUES ($1, $2, 'guide', 'pmcs_sbs/hmmwv/file.json', $3, $4, $5)`,
+			args: []any{uuid.New(), vehicleID, customChecklistID, performedDate, user.UserID},
+		},
+		{
+			name: "custom source requires revision number",
+			query: `INSERT INTO pmcs_sbs_inspections
+			  (id, equipment_id, source_type, guide_manual,
+			   custom_checklist_id, custom_revision_id, custom_checklist_name,
+			   performed_date, performed_by)
+			 VALUES ($1, $2, 'custom', NULL, $3, $4, 'Device Checklist', $5, $6)`,
+			args: []any{uuid.New(), vehicleID, customChecklistID, customRevisionID, performedDate, user.UserID},
+		},
+		{
+			name: "custom source requires checklist name",
+			query: `INSERT INTO pmcs_sbs_inspections
+			  (id, equipment_id, source_type, guide_manual,
+			   custom_checklist_id, custom_revision_id, custom_revision_number,
+			   performed_date, performed_by)
+			 VALUES ($1, $2, 'custom', NULL, $3, $4, 0, $5, $6)`,
+			args: []any{uuid.New(), vehicleID, customChecklistID, customRevisionID, performedDate, user.UserID},
+		},
+	}
+
+	for _, invalidRow := range invalidRows {
+		t.Run(invalidRow.name, func(t *testing.T) {
+			_, err := testDB.Exec(invalidRow.query, invalidRow.args...)
+			require.Error(t, err)
+		})
+	}
 }
 
 func TestRepositoryEnsureInspectionIsIdempotentAndUpdatesPerformedDate(t *testing.T) {
@@ -63,7 +145,7 @@ func TestRepositoryEnsureInspectionRejectsGuideManualMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	mismatched := inspection
-	mismatched.GuideManual = "pmcs_sbs/hmmwv/other.json"
+	mismatched.GuideManual = stringPointer("pmcs_sbs/hmmwv/other.json")
 	_, err = repo.EnsureInspection(user, mismatched)
 
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
@@ -144,7 +226,7 @@ func TestRepositoryUpsertFaultRejectsGuideManualMismatch(t *testing.T) {
 	require.NoError(t, err)
 
 	mismatched := inspection
-	mismatched.GuideManual = "pmcs_sbs/hmmwv/other.json"
+	mismatched.GuideManual = stringPointer("pmcs_sbs/hmmwv/other.json")
 	_, err = repo.UpsertFault(user, mismatched, sampleFault(inspection.ID))
 
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
@@ -323,12 +405,12 @@ func TestRepositoryListInspectionsFiltersByGuideManual(t *testing.T) {
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
 	first := sampleInspection(vehicleID, user.UserID)
-	first.GuideManual = "pmcs_sbs/hmmwv/first.json"
+	first.GuideManual = stringPointer("pmcs_sbs/hmmwv/first.json")
 	_, err := repo.EnsureInspection(user, first)
 	require.NoError(t, err)
 
 	second := sampleInspection(vehicleID, user.UserID)
-	second.GuideManual = "pmcs_sbs/hmmwv/second.json"
+	second.GuideManual = stringPointer("pmcs_sbs/hmmwv/second.json")
 	_, err = repo.EnsureInspection(user, second)
 	require.NoError(t, err)
 

@@ -295,7 +295,7 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 	return model.PmcsSbsInspections{
 		ID:            parsedPmcsID,
 		EquipmentID:   trimmedEquipmentID,
-		GuideManual:   guideManual,
+		GuideManual:   &guideManual,
 		PerformedDate: req.PerformedDate.UTC(),
 		PerformedBy:   &performedBy,
 		Notes:         notes,
@@ -475,7 +475,7 @@ func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, fa
 	return InspectionResponse{
 		ID:                  row.ID,
 		EquipmentID:         row.EquipmentID,
-		GuideManual:         row.GuideManual,
+		GuideManual:         guideManualValue(row.GuideManual),
 		PerformedDate:       row.PerformedDate,
 		PerformedBy:         row.PerformedBy,
 		PerformedByUsername: performedByUsername,
