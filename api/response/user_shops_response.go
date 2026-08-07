@@ -227,13 +227,17 @@ type EquipmentWithPmcsHistory struct {
 }
 
 type PmcsHistorySummary struct {
-	ID                  uuid.UUID `json:"id"`
-	SourceType          string    `json:"source_type"`
-	GuideManual         string    `json:"guide_manual"`
-	PerformedDate       time.Time `json:"performed_date"`
-	FaultCount          int       `json:"fault_count"`
-	CommentCount        int       `json:"comment_count"`
-	CreatedAt           time.Time `json:"created_at"`
-	PerformedBy         *string   `json:"performed_by,omitempty"`
-	PerformedByUsername *string   `json:"performed_by_username,omitempty"`
+	ID                   uuid.UUID  `json:"id"`
+	SourceType           string     `json:"source_type"`
+	GuideManual          *string    `json:"guide_manual,omitempty"`
+	CustomChecklistID    *uuid.UUID `json:"custom_checklist_id,omitempty"`
+	CustomRevisionID     *uuid.UUID `json:"custom_revision_id,omitempty"`
+	CustomRevisionNumber *int32     `json:"custom_revision_number,omitempty"`
+	CustomChecklistName  *string    `json:"custom_checklist_name,omitempty"`
+	PerformedDate        time.Time  `json:"performed_date"`
+	FaultCount           int        `json:"fault_count"`
+	CommentCount         int        `json:"comment_count"`
+	CreatedAt            time.Time  `json:"created_at"`
+	PerformedBy          *string    `json:"performed_by,omitempty"`
+	PerformedByUsername  *string    `json:"performed_by_username,omitempty"`
 }

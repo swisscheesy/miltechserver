@@ -1128,10 +1128,7 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		Users.Username.AS("performed_by_username"),
 	).
 		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
-		WHERE(
-			PmcsSbsInspections.EquipmentID.IN(equipmentIDs...).
-				AND(PmcsSbsInspections.SourceType.EQ(String("guide"))),
-		).
+		WHERE(PmcsSbsInspections.EquipmentID.IN(equipmentIDs...)).
 		ORDER_BY(PmcsSbsInspections.EquipmentID.ASC(), PmcsSbsInspections.PerformedDate.DESC())
 
 	if err := inspectionsStmt.QueryContext(ctx, repo.db, &inspections); err != nil {
@@ -1193,15 +1190,19 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
 	for _, inspection := range inspections {
 		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
-			ID:                  inspection.ID,
-			SourceType:          "guide",
-			GuideManual:         *inspection.GuideManual,
-			PerformedDate:       inspection.PerformedDate,
-			FaultCount:          faultCountByInspectionID[inspection.ID],
-			CommentCount:        commentCountByInspectionID[inspection.ID],
-			CreatedAt:           inspection.CreatedAt,
-			PerformedBy:         inspection.PerformedBy,
-			PerformedByUsername: inspection.PerformedByUsername,
+			ID:                   inspection.ID,
+			SourceType:           inspection.SourceType,
+			GuideManual:          inspection.GuideManual,
+			CustomChecklistID:    inspection.CustomChecklistID,
+			CustomRevisionID:     inspection.CustomRevisionID,
+			CustomRevisionNumber: inspection.CustomRevisionNumber,
+			CustomChecklistName:  inspection.CustomChecklistName,
+			PerformedDate:        inspection.PerformedDate,
+			FaultCount:           faultCountByInspectionID[inspection.ID],
+			CommentCount:         commentCountByInspectionID[inspection.ID],
+			CreatedAt:            inspection.CreatedAt,
+			PerformedBy:          inspection.PerformedBy,
+			PerformedByUsername:  inspection.PerformedByUsername,
 		})
 	}
 

@@ -2,6 +2,7 @@ package aggregates
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -172,11 +174,12 @@ func TestGetEquipmentPmcsHistoryRequiresAuth(t *testing.T) {
 }
 
 func TestGetEquipmentPmcsHistoryReturnsRepositoryResult(t *testing.T) {
+	guideManual := "pmcs_sbs/hmmwv/file.json"
 	expected := []response.EquipmentWithPmcsHistory{
 		{
 			ShopEquipmentSummary: response.ShopEquipmentSummary{ID: "vehicle-1", Admin: "A1", Model: "M1", Serial: "S1", Niin: "N1"},
 			ShopID:               "shop-1",
-			HistoricalPmcs:       []response.PmcsHistorySummary{{GuideManual: "pmcs_sbs/hmmwv/file.json"}},
+			HistoricalPmcs:       []response.PmcsHistorySummary{{SourceType: "guide", GuideManual: &guideManual}},
 		},
 	}
 	service := NewService(repositoryStubForService{equipmentHistoryResp: expected}, authStubForService{})
@@ -186,6 +189,51 @@ func TestGetEquipmentPmcsHistoryReturnsRepositoryResult(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, result.Count)
 	require.Equal(t, expected, result.Equipment)
+}
+
+func TestPmcsHistorySummaryJSONOmitsSourceInapplicableFields(t *testing.T) {
+	guideManual := "pmcs_sbs/hmmwv/file.json"
+	guidePayload := marshalPmcsHistorySummary(t, response.PmcsHistorySummary{
+		SourceType:  "guide",
+		GuideManual: &guideManual,
+	})
+
+	require.Equal(t, "guide", guidePayload["source_type"])
+	require.Equal(t, guideManual, guidePayload["guide_manual"])
+	require.NotContains(t, guidePayload, "custom_checklist_id")
+	require.NotContains(t, guidePayload, "custom_revision_id")
+	require.NotContains(t, guidePayload, "custom_revision_number")
+	require.NotContains(t, guidePayload, "custom_checklist_name")
+
+	checklistID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	revisionID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	revisionNumber := int32(0)
+	checklistName := "Device Checklist"
+	customPayload := marshalPmcsHistorySummary(t, response.PmcsHistorySummary{
+		SourceType:           "custom",
+		CustomChecklistID:    &checklistID,
+		CustomRevisionID:     &revisionID,
+		CustomRevisionNumber: &revisionNumber,
+		CustomChecklistName:  &checklistName,
+	})
+
+	require.Equal(t, "custom", customPayload["source_type"])
+	require.NotContains(t, customPayload, "guide_manual")
+	require.Equal(t, checklistID.String(), customPayload["custom_checklist_id"])
+	require.Equal(t, revisionID.String(), customPayload["custom_revision_id"])
+	require.Equal(t, float64(0), customPayload["custom_revision_number"])
+	require.Equal(t, checklistName, customPayload["custom_checklist_name"])
+}
+
+func marshalPmcsHistorySummary(t *testing.T, summary response.PmcsHistorySummary) map[string]interface{} {
+	t.Helper()
+
+	payload, err := json.Marshal(summary)
+	require.NoError(t, err)
+
+	var decoded map[string]interface{}
+	require.NoError(t, json.Unmarshal(payload, &decoded))
+	return decoded
 }
 
 func TestGetEquipmentPmcsHistoryNormalizesNilSlices(t *testing.T) {
