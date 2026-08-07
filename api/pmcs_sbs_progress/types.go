@@ -76,6 +76,7 @@ type CommentResponse struct {
 type InspectionResponse struct {
 	ID                  uuid.UUID         `json:"id"`
 	EquipmentID         string            `json:"equipment_id"`
+	SourceType          string            `json:"source_type"`
 	GuideManual         string            `json:"guide_manual"`
 	PerformedDate       time.Time         `json:"performed_date"`
 	PerformedBy         *string           `json:"performed_by,omitempty"`
@@ -89,6 +90,7 @@ type InspectionResponse struct {
 
 type InspectionSummaryResponse struct {
 	ID                  uuid.UUID `json:"id"`
+	SourceType          string    `json:"source_type"`
 	GuideManual         string    `json:"guide_manual"`
 	PerformedDate       time.Time `json:"performed_date"`
 	FaultCount          int       `json:"fault_count"`

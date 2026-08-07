@@ -46,7 +46,8 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(
 			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
-				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
+				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))).
+				AND(PmcsSbsInspections.SourceType.EQ(String("guide"))),
 		)
 
 	if err := stmt.Query(repo.db, &row); err != nil {
@@ -98,7 +99,8 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		return nil, err
 	}
 
-	condition := PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))
+	condition := PmcsSbsInspections.EquipmentID.EQ(String(equipmentID)).
+		AND(PmcsSbsInspections.SourceType.EQ(String("guide")))
 	if guideManual != "" {
 		condition = condition.AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual)))
 	}
@@ -173,7 +175,7 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 	for _, inspection := range inspections {
 		summaries = append(summaries, InspectionSummary{
 			ID:                  inspection.ID,
-			GuideManual:         guideManualValue(inspection.GuideManual),
+			GuideManual:         *inspection.GuideManual,
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          countByID[inspection.ID],
 			CommentCount:        commentCountByID[inspection.ID],
@@ -532,11 +534,4 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		return nil, fmt.Errorf("ensure pmcs sbs inspection: %w", err)
 	}
 	return &saved, nil
-}
-
-func guideManualValue(guideManual *string) string {
-	if guideManual == nil {
-		return ""
-	}
-	return *guideManual
 }

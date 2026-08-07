@@ -19,6 +19,7 @@ $$;
 
 ALTER TABLE pmcs_sbs_inspections
   DROP CONSTRAINT pmcs_sbs_inspections_source_type_check,
+  DROP CONSTRAINT pmcs_sbs_inspections_equipment_id_nonblank_check,
   DROP CONSTRAINT pmcs_sbs_inspections_source_shape_check;
 
 ALTER TABLE pmcs_sbs_faults DROP COLUMN section_title;

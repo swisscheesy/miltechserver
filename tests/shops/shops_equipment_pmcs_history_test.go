@@ -44,6 +44,7 @@ func TestGetEquipmentPmcsHistoryRepository(t *testing.T) {
 	createPmcsComment(t, testDB, newerInspectionID, "history-user", "first comment")
 	createPmcsComment(t, testDB, newerInspectionID, "history-user", "second comment")
 	olderInspectionID := createPmcsInspection(t, testDB, vehicleWithHistoryID, "pmcs_sbs/hmmwv/hmmwv_up_armor_pmcs.json", olderTime, "history-user")
+	customInspectionID := createCustomPmcsInspection(t, testDB, vehicleWithHistoryID, newerTime.Add(time.Hour), "history-user")
 
 	repository := aggregates.NewRepository(testDB)
 	equipment, err := repository.GetEquipmentPmcsHistory(context.Background(), &bootstrap.User{UserID: "history-user"})
@@ -67,6 +68,11 @@ func TestGetEquipmentPmcsHistoryRepository(t *testing.T) {
 	require.Equal(t, olderInspectionID, withHistory.HistoricalPmcs[1].ID.String())
 	require.Equal(t, 0, withHistory.HistoricalPmcs[1].FaultCount)
 	require.Equal(t, 0, withHistory.HistoricalPmcs[1].CommentCount)
+	require.Equal(t, "guide", withHistory.HistoricalPmcs[0].SourceType)
+	require.Equal(t, "guide", withHistory.HistoricalPmcs[1].SourceType)
+	for _, inspection := range withHistory.HistoricalPmcs {
+		require.NotEqual(t, customInspectionID, inspection.ID.String())
+	}
 
 	withoutHistory := equipment[byID[vehicleWithoutHistoryID]]
 	require.Equal(t, shop2ID, withoutHistory.ShopID)

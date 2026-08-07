@@ -118,6 +118,7 @@ func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID st
 	for _, summary := range summaries {
 		responses = append(responses, InspectionSummaryResponse{
 			ID:                  summary.ID,
+			SourceType:          "guide",
 			GuideManual:         summary.GuideManual,
 			PerformedDate:       summary.PerformedDate,
 			FaultCount:          summary.FaultCount,
@@ -475,7 +476,8 @@ func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, fa
 	return InspectionResponse{
 		ID:                  row.ID,
 		EquipmentID:         row.EquipmentID,
-		GuideManual:         guideManualValue(row.GuideManual),
+		SourceType:          "guide",
+		GuideManual:         *row.GuideManual,
 		PerformedDate:       row.PerformedDate,
 		PerformedBy:         row.PerformedBy,
 		PerformedByUsername: performedByUsername,

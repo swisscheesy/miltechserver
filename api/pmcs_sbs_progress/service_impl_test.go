@@ -211,6 +211,7 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, samplePmcsID(), resp.ID)
+	require.Equal(t, "guide", resp.SourceType)
 	require.Equal(t, "vehicle-1", stub.capturedInspection.EquipmentID)
 	require.NotNil(t, stub.capturedInspection.PerformedBy)
 	require.Equal(t, "user-1", *stub.capturedInspection.PerformedBy)
@@ -326,6 +327,7 @@ func TestListInspectionsMapsSummaries(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.Count)
+	require.Equal(t, "guide", resp.Inspections[0].SourceType)
 	require.Equal(t, 2, resp.Inspections[0].FaultCount)
 	require.NotNil(t, resp.Inspections[0].PerformedBy)
 	require.Equal(t, "user-1", *resp.Inspections[0].PerformedBy)

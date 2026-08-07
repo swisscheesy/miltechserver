@@ -25,6 +25,8 @@ ALTER TABLE pmcs_sbs_inspections
 ALTER TABLE pmcs_sbs_inspections
   ADD CONSTRAINT pmcs_sbs_inspections_source_type_check
     CHECK (source_type IN ('guide', 'custom')),
+  ADD CONSTRAINT pmcs_sbs_inspections_equipment_id_nonblank_check
+    CHECK (btrim(equipment_id) <> ''),
   ADD CONSTRAINT pmcs_sbs_inspections_source_shape_check CHECK (
     (source_type = 'guide' AND guide_manual IS NOT NULL
       AND guide_manual = btrim(guide_manual)

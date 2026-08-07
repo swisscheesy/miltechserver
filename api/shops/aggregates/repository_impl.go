@@ -1128,7 +1128,10 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		Users.Username.AS("performed_by_username"),
 	).
 		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
-		WHERE(PmcsSbsInspections.EquipmentID.IN(equipmentIDs...)).
+		WHERE(
+			PmcsSbsInspections.EquipmentID.IN(equipmentIDs...).
+				AND(PmcsSbsInspections.SourceType.EQ(String("guide"))),
+		).
 		ORDER_BY(PmcsSbsInspections.EquipmentID.ASC(), PmcsSbsInspections.PerformedDate.DESC())
 
 	if err := inspectionsStmt.QueryContext(ctx, repo.db, &inspections); err != nil {
@@ -1189,13 +1192,10 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 
 	historyByEquipmentID := make(map[string][]response.PmcsHistorySummary, len(equipmentRows))
 	for _, inspection := range inspections {
-		guideManual := ""
-		if inspection.GuideManual != nil {
-			guideManual = *inspection.GuideManual
-		}
 		historyByEquipmentID[inspection.EquipmentID] = append(historyByEquipmentID[inspection.EquipmentID], response.PmcsHistorySummary{
 			ID:                  inspection.ID,
-			GuideManual:         guideManual,
+			SourceType:          "guide",
+			GuideManual:         *inspection.GuideManual,
 			PerformedDate:       inspection.PerformedDate,
 			FaultCount:          faultCountByInspectionID[inspection.ID],
 			CommentCount:        commentCountByInspectionID[inspection.ID],

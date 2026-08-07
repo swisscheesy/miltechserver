@@ -364,9 +364,26 @@ func createPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, guideMan
 	id := uuid.New().String()
 	now := time.Now().UTC()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, guide_manual, performed_date, performed_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, source_type, guide_manual, performed_date, performed_by, created_at, updated_at)
+		 VALUES ($1, $2, 'guide', $3, $4, $5, $6, $6)`,
 		id, equipmentID, guideManual, performedDate, performedBy, now,
+	)
+	require.NoError(t, err)
+	return id
+}
+
+func createCustomPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, performedDate time.Time, performedBy string) string {
+	t.Helper()
+
+	id := uuid.New().String()
+	_, err := db.Exec(
+		`INSERT INTO pmcs_sbs_inspections
+		  (id, equipment_id, source_type, guide_manual,
+		   custom_checklist_id, custom_revision_id,
+		   custom_revision_number, custom_checklist_name,
+		   performed_date, performed_by)
+		 VALUES ($1, $2, 'custom', NULL, $3, $4, 0, 'Device Checklist', $5, $6)`,
+		id, equipmentID, uuid.New().String(), uuid.New().String(), performedDate, performedBy,
 	)
 	require.NoError(t, err)
 	return id

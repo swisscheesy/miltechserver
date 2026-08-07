@@ -38,8 +38,16 @@ func TestInspectionSourceConstraint(t *testing.T) {
 	shopID := createShopWithMember(t, testDB, user, "member")
 	vehicleID := createShopVehicle(t, testDB, shopID, user, "S1")
 	performedDate := time.Now().UTC()
-
 	_, err := testDB.Exec(
+		`INSERT INTO shop_vehicle (
+			id, creator_id, niin, admin, model, serial, uoc, mileage, hours, comment,
+			save_time, last_updated, shop_id
+		) VALUES ('', $1, '', 'BLANK', 'M1152A1', 'BLANK-EQUIPMENT', 'UNK', 0, 0, '', $2, $2, $3)`,
+		user.UserID, performedDate, shopID,
+	)
+	require.NoError(t, err)
+
+	_, err = testDB.Exec(
 		`INSERT INTO pmcs_sbs_inspections
 		  (id, equipment_id, source_type, guide_manual, performed_date, performed_by)
 		 VALUES ($1, $2, 'guide', 'pmcs_sbs/hmmwv/file.json', $3, $4)`,
@@ -65,6 +73,13 @@ func TestInspectionSourceConstraint(t *testing.T) {
 		query string
 		args  []any
 	}{
+		{
+			name: "inspection equipment cannot be blank",
+			query: `INSERT INTO pmcs_sbs_inspections
+			  (id, equipment_id, source_type, guide_manual, performed_date, performed_by)
+			 VALUES ($1, '', 'guide', 'pmcs_sbs/hmmwv/file.json', $2, $3)`,
+			args: []any{uuid.New(), performedDate, user.UserID},
+		},
 		{
 			name: "custom source cannot include guide manual",
 			query: `INSERT INTO pmcs_sbs_inspections
@@ -109,6 +124,40 @@ func TestInspectionSourceConstraint(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestRepositoryGetAndListInspectionsIgnoreCustomSource(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	defer clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-guide-only-read")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "G1")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	guide := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, guide)
+	require.NoError(t, err)
+
+	customID := uuid.New()
+	_, err = testDB.Exec(
+		`INSERT INTO pmcs_sbs_inspections
+		  (id, equipment_id, source_type, guide_manual,
+		   custom_checklist_id, custom_revision_id,
+		   custom_revision_number, custom_checklist_name,
+		   performed_date, performed_by)
+		 VALUES ($1, $2, 'custom', NULL, $3, $4, 0, 'Device Checklist', $5, $6)`,
+		customID, vehicleID, uuid.New(), uuid.New(), time.Now().UTC(), user.UserID,
+	)
+	require.NoError(t, err)
+
+	_, _, _, err = repo.GetInspection(user, vehicleID, customID)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
+
+	summaries, err := repo.ListInspections(user, vehicleID, "", 10, 0)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.Equal(t, guide.ID, summaries[0].ID)
 }
 
 func TestRepositoryEnsureInspectionIsIdempotentAndUpdatesPerformedDate(t *testing.T) {

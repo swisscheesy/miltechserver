@@ -228,6 +228,7 @@ type EquipmentWithPmcsHistory struct {
 
 type PmcsHistorySummary struct {
 	ID                  uuid.UUID `json:"id"`
+	SourceType          string    `json:"source_type"`
 	GuideManual         string    `json:"guide_manual"`
 	PerformedDate       time.Time `json:"performed_date"`
 	FaultCount          int       `json:"fault_count"`
