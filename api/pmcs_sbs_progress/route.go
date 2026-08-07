@@ -1,10 +1,14 @@
 package pmcs_sbs_progress
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"unicode/utf8"
 
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
@@ -48,7 +52,7 @@ func (handler Handler) upsertInspection(c *gin.Context) {
 	}
 
 	var req InspectionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := decodeInspectionJSON(c, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
@@ -119,7 +123,7 @@ func (handler Handler) upsertFault(c *gin.Context) {
 	}
 
 	var req FaultRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := decodeInspectionJSON(c, &req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
@@ -233,6 +237,28 @@ func (handler Handler) deleteComment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Comment deleted", Data: result})
+}
+
+// decodeInspectionJSON validates raw bytes before JSON decoding so malformed
+// UTF-8 cannot be replaced by encoding/json and bypass service validation.
+func decodeInspectionJSON(c *gin.Context, destination any) error {
+	payload, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return err
+	}
+	if !utf8.Valid(payload) {
+		return ErrInvalidRequest
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return ErrInvalidRequest
+	}
+	return nil
 }
 
 func getUser(c *gin.Context) (*bootstrap.User, bool) {

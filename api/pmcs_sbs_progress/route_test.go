@@ -158,6 +158,145 @@ func TestUpsertInspectionSuccess(t *testing.T) {
 	require.Equal(t, routeTestPmcsID, stub.capturedPmcsID)
 }
 
+func TestRouteInspectionLegacyGuideRequestReachesServiceAsGuideShaped(t *testing.T) {
+	now := time.Now().UTC()
+	stub := &serviceStub{inspectionResp: &InspectionResponse{
+		ID: uuid.MustParse(routeTestPmcsID), SourceType: "guide", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now,
+	}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID, map[string]any{
+		"guide_manual":   "pmcs_sbs/hmmwv/file.json",
+		"performed_date": now.Format(time.RFC3339Nano),
+	}, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	captured, ok := stub.capturedRequest.(InspectionRequest)
+	require.True(t, ok)
+	require.Equal(t, "", captured.SourceType)
+	require.Equal(t, "pmcs_sbs/hmmwv/file.json", captured.GuideManual)
+	require.Empty(t, captured.CustomChecklistID)
+	require.Empty(t, captured.CustomRevisionID)
+	require.Nil(t, captured.CustomRevisionNumber)
+	require.Empty(t, captured.CustomChecklistName)
+}
+
+func TestRouteCustomFaultCarriesCompleteProvenanceAndSectionTitle(t *testing.T) {
+	now := time.Now().UTC()
+	revisionNumber := int32(7)
+	stub := &serviceStub{faultResp: &FaultResponse{
+		PmcsID: uuid.MustParse(routeTestPmcsID), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "x", FaultText: "leak", CreatedAt: now, UpdatedAt: now,
+	}}
+	router := newRouteTestRouter(stub)
+
+	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/faults", FaultRequest{
+		InspectionSourceRequest: InspectionSourceRequest{
+			SourceType: "custom", CustomChecklistID: "22222222-2222-2222-2222-222222222222", CustomRevisionID: "33333333-3333-3333-3333-333333333333", CustomRevisionNumber: &revisionNumber, CustomChecklistName: "Weekly Generator PMCS",
+		},
+		PerformedDate: now, SectionID: "before", SectionTitle: "Before operation", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
+	}, routeUser())
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	captured, ok := stub.capturedRequest.(FaultRequest)
+	require.True(t, ok)
+	require.Equal(t, "custom", captured.SourceType)
+	require.Equal(t, "22222222-2222-2222-2222-222222222222", captured.CustomChecklistID)
+	require.Equal(t, "33333333-3333-3333-3333-333333333333", captured.CustomRevisionID)
+	require.Equal(t, &revisionNumber, captured.CustomRevisionNumber)
+	require.Equal(t, "Weekly Generator PMCS", captured.CustomChecklistName)
+	require.Equal(t, "Before operation", captured.SectionTitle)
+}
+
+func TestRouteResponsesKeepGuideAndCustomProvenanceMutuallyExclusive(t *testing.T) {
+	now := time.Now().UTC()
+	customChecklistID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	customRevisionID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	revisionNumber := int32(7)
+
+	for _, tc := range []struct {
+		name string
+		resp *InspectionResponse
+		want []string
+		omit []string
+	}{
+		{
+			name: "custom", resp: &InspectionResponse{ID: uuid.MustParse(routeTestPmcsID), SourceType: "custom", CustomChecklistID: &customChecklistID, CustomRevisionID: &customRevisionID, CustomRevisionNumber: &revisionNumber, CustomChecklistName: stringPointer("Weekly Generator PMCS"), PerformedDate: now},
+			want: []string{"source_type", "custom_checklist_id", "custom_revision_id", "custom_revision_number", "custom_checklist_name"}, omit: []string{"guide_manual"},
+		},
+		{
+			name: "guide", resp: &InspectionResponse{ID: uuid.MustParse(routeTestPmcsID), SourceType: "guide", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now},
+			want: []string{"source_type", "guide_manual"}, omit: []string{"custom_checklist_id", "custom_revision_id", "custom_revision_number", "custom_checklist_name"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			router := newRouteTestRouter(&serviceStub{inspectionResp: tc.resp})
+			resp := doRouteJSON(router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID, nil, routeUser())
+
+			require.Equal(t, http.StatusOK, resp.Code)
+			var body struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+			for _, field := range tc.want {
+				require.Contains(t, body.Data, field)
+			}
+			for _, field := range tc.omit {
+				require.NotContains(t, body.Data, field)
+			}
+		})
+	}
+}
+
+func TestRouteSourceValidationKeepsBadRequestEnvelope(t *testing.T) {
+	stub := &serviceStub{err: ErrInvalidRequest}
+	router := newRouteTestRouter(stub)
+	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID, InspectionRequest{}, routeUser())
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, "invalid request", body["message"])
+	require.NotContains(t, body, "data")
+}
+
+func TestRouteRejectsInvalidRawUTF8BeforeDecoding(t *testing.T) {
+	paths := []string{
+		"/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID,
+		"/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID + "/faults",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			router := newRouteTestRouter(&serviceStub{})
+			resp := doRouteRawJSON(router, http.MethodPut, path, []byte{'{', '"', 's', 'o', 'u', 'r', 'c', 'e', '_', 't', 'y', 'p', 'e', '"', ':', '"', 0xff, '"', '}'}, routeUser())
+
+			require.Equal(t, http.StatusBadRequest, resp.Code)
+			require.JSONEq(t, `{"message":"invalid request body"}`, resp.Body.String())
+		})
+	}
+}
+
+func TestRouteRejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
+	validInspection := []byte(`{"guide_manual":"pmcs_sbs/hmmwv/file.json","performed_date":"2026-08-07T00:00:00Z"}`)
+	cases := []struct {
+		name string
+		body []byte
+	}{
+		{name: "unknown field", body: append(validInspection[:len(validInspection)-1], []byte(`,"unexpected":true}`)...)},
+		{name: "trailing JSON", body: append(validInspection, []byte(` {}`)...)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := newRouteTestRouter(&serviceStub{})
+			resp := doRouteRawJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID, tc.body, routeUser())
+
+			require.Equal(t, http.StatusBadRequest, resp.Code)
+			require.JSONEq(t, `{"message":"invalid request body"}`, resp.Body.String())
+		})
+	}
+}
+
 func TestGetInspectionSuccess(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &serviceStub{inspectionResp: &InspectionResponse{
@@ -373,6 +512,17 @@ func doRouteJSON(router *gin.Engine, method string, path string, body interface{
 		}
 	}
 	req := httptest.NewRequest(method, path, &payload)
+	req.Header.Set("Content-Type", "application/json")
+	if user != nil {
+		req.Header.Set("X-User-ID", user.UserID)
+	}
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	return resp
+}
+
+func doRouteRawJSON(router *gin.Engine, method string, path string, body []byte, user *bootstrap.User) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if user != nil {
 		req.Header.Set("X-User-ID", user.UserID)
