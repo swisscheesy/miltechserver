@@ -5,10 +5,12 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 
+	"github.com/clipperhouse/uax29/v2/graphemes"
 	"github.com/google/uuid"
 )
 
@@ -24,6 +26,8 @@ const maxBulkDeleteFaults = 100
 const defaultListInspectionsLimit = 1000
 const maxNotesLength = 4000
 const maxCommentTextLength = 2000
+const maxShortFieldGraphemes = 200
+const maxShortFieldBytes = 8 * 1024
 const deletedCommentText = "Deleted by user"
 
 func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
@@ -116,10 +120,11 @@ func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID st
 
 	responses := make([]InspectionSummaryResponse, 0, len(summaries))
 	for _, summary := range summaries {
+		guideManual := summary.GuideManual
 		responses = append(responses, InspectionSummaryResponse{
 			ID:                  summary.ID,
 			SourceType:          "guide",
-			GuideManual:         summary.GuideManual,
+			GuideManual:         &guideManual,
 			PerformedDate:       summary.PerformedDate,
 			FaultCount:          summary.FaultCount,
 			CreatedAt:           summary.CreatedAt,
@@ -279,7 +284,7 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 	if err != nil {
 		return model.PmcsSbsInspections{}, err
 	}
-	guideManual, err := validateGuideManual(req.GuideManual)
+	source, err := normalizeInspectionSource(req.InspectionSourceRequest)
 	if err != nil {
 		return model.PmcsSbsInspections{}, err
 	}
@@ -294,19 +299,24 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 
 	performedBy := strings.TrimSpace(userID)
 	return model.PmcsSbsInspections{
-		ID:            parsedPmcsID,
-		EquipmentID:   trimmedEquipmentID,
-		GuideManual:   &guideManual,
-		PerformedDate: req.PerformedDate.UTC(),
-		PerformedBy:   &performedBy,
-		Notes:         notes,
+		ID:                   parsedPmcsID,
+		EquipmentID:          trimmedEquipmentID,
+		SourceType:           source.SourceType,
+		GuideManual:          source.GuideManual,
+		CustomChecklistID:    source.CustomChecklistID,
+		CustomRevisionID:     source.CustomRevisionID,
+		CustomRevisionNumber: source.CustomRevisionNumber,
+		CustomChecklistName:  source.CustomChecklistName,
+		PerformedDate:        req.PerformedDate.UTC(),
+		PerformedBy:          &performedBy,
+		Notes:                notes,
 	}, nil
 }
 
 func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID string, userID string, req FaultRequest) (model.PmcsSbsInspections, model.PmcsSbsFaults, error) {
 	inspection, err := service.validateInspectionRequest(equipmentID, pmcsID, userID, InspectionRequest{
-		GuideManual:   req.GuideManual,
-		PerformedDate: req.PerformedDate,
+		InspectionSourceRequest: req.InspectionSourceRequest,
+		PerformedDate:           req.PerformedDate,
 	})
 	if err != nil {
 		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, err
@@ -322,11 +332,16 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID stri
 	if !validStatus {
 		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, ErrInvalidStatus
 	}
+	sectionTitle, err := validateOptionalShortField(req.SectionTitle)
+	if err != nil {
+		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, err
+	}
 
 	now := time.Now().UTC()
 	fault := model.PmcsSbsFaults{
 		PmcsID:           inspection.ID,
 		SectionID:        sectionID,
+		SectionTitle:     sectionTitle,
 		ItemIndex:        req.ItemIndex,
 		ItemNo:           itemNo,
 		Status:           status,
@@ -411,6 +426,116 @@ func validateGuideManual(guideManual string) (string, error) {
 	return trimmedGuideManual, nil
 }
 
+func normalizeInspectionSource(req InspectionSourceRequest) (ValidatedInspectionSource, error) {
+	if !utf8.ValidString(req.SourceType) ||
+		!utf8.ValidString(req.GuideManual) ||
+		!utf8.ValidString(req.CustomChecklistID) ||
+		!utf8.ValidString(req.CustomRevisionID) ||
+		!utf8.ValidString(req.CustomChecklistName) {
+		return ValidatedInspectionSource{}, ErrInvalidRequest
+	}
+
+	sourceType := strings.TrimSpace(req.SourceType)
+	hasCustomFields := req.CustomChecklistID != "" ||
+		req.CustomRevisionID != "" ||
+		req.CustomRevisionNumber != nil ||
+		req.CustomChecklistName != ""
+
+	switch sourceType {
+	case "":
+		if strings.TrimSpace(req.GuideManual) == "" || hasCustomFields {
+			return ValidatedInspectionSource{}, ErrInvalidRequest
+		}
+		return normalizeGuideInspectionSource(req.GuideManual)
+	case "guide":
+		if hasCustomFields {
+			return ValidatedInspectionSource{}, ErrInvalidRequest
+		}
+		return normalizeGuideInspectionSource(req.GuideManual)
+	case "custom":
+		if strings.TrimSpace(req.GuideManual) != "" {
+			return ValidatedInspectionSource{}, ErrInvalidRequest
+		}
+		return normalizeCustomInspectionSource(req)
+	default:
+		return ValidatedInspectionSource{}, ErrInvalidRequest
+	}
+}
+
+func normalizeGuideInspectionSource(guideManual string) (ValidatedInspectionSource, error) {
+	validatedGuideManual, err := validateGuideManual(guideManual)
+	if err != nil {
+		return ValidatedInspectionSource{}, err
+	}
+	return ValidatedInspectionSource{
+		SourceType:  "guide",
+		GuideManual: &validatedGuideManual,
+	}, nil
+}
+
+func normalizeCustomInspectionSource(req InspectionSourceRequest) (ValidatedInspectionSource, error) {
+	checklistID, err := uuid.Parse(strings.TrimSpace(req.CustomChecklistID))
+	if err != nil || checklistID == uuid.Nil {
+		return ValidatedInspectionSource{}, ErrInvalidRequest
+	}
+	revisionID, err := uuid.Parse(strings.TrimSpace(req.CustomRevisionID))
+	if err != nil || revisionID == uuid.Nil {
+		return ValidatedInspectionSource{}, ErrInvalidRequest
+	}
+	if req.CustomRevisionNumber == nil || *req.CustomRevisionNumber < 0 {
+		return ValidatedInspectionSource{}, ErrInvalidRequest
+	}
+	checklistName, err := validateRequiredShortField(req.CustomChecklistName)
+	if err != nil {
+		return ValidatedInspectionSource{}, err
+	}
+
+	return ValidatedInspectionSource{
+		SourceType:           "custom",
+		CustomChecklistID:    &checklistID,
+		CustomRevisionID:     &revisionID,
+		CustomRevisionNumber: req.CustomRevisionNumber,
+		CustomChecklistName:  &checklistName,
+	}, nil
+}
+
+func validateRequiredShortField(value string) (string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", ErrInvalidRequest
+	}
+	if err := validateShortField(trimmed); err != nil {
+		return "", err
+	}
+	return trimmed, nil
+}
+
+func validateOptionalShortField(value string) (*string, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, nil
+	}
+	if err := validateShortField(trimmed); err != nil {
+		return nil, err
+	}
+	return &trimmed, nil
+}
+
+func validateShortField(value string) error {
+	if !utf8.ValidString(value) || len(value) > maxShortFieldBytes {
+		return ErrInvalidRequest
+	}
+	graphemeCount := 0
+	iterator := graphemes.FromString(value)
+	for iterator.Next() {
+		graphemeCount++
+		if graphemeCount > maxShortFieldGraphemes {
+			return ErrInvalidRequest
+		}
+	}
+	return nil
+}
+
 func validateNotes(notes *string) (*string, error) {
 	if notes == nil {
 		return nil, nil
@@ -454,6 +579,7 @@ func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	return FaultResponse{
 		PmcsID:           row.PmcsID,
 		SectionID:        row.SectionID,
+		SectionTitle:     row.SectionTitle,
 		ItemIndex:        row.ItemIndex,
 		ItemNo:           row.ItemNo,
 		Status:           row.Status,
@@ -474,18 +600,22 @@ func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, fa
 		comments = append(comments, mapComment(commentRow))
 	}
 	return InspectionResponse{
-		ID:                  row.ID,
-		EquipmentID:         row.EquipmentID,
-		SourceType:          "guide",
-		GuideManual:         *row.GuideManual,
-		PerformedDate:       row.PerformedDate,
-		PerformedBy:         row.PerformedBy,
-		PerformedByUsername: performedByUsername,
-		Notes:               row.Notes,
-		CreatedAt:           row.CreatedAt,
-		UpdatedAt:           row.UpdatedAt,
-		Faults:              faults,
-		Comments:            comments,
+		ID:                   row.ID,
+		EquipmentID:          row.EquipmentID,
+		SourceType:           row.SourceType,
+		GuideManual:          row.GuideManual,
+		CustomChecklistID:    row.CustomChecklistID,
+		CustomRevisionID:     row.CustomRevisionID,
+		CustomRevisionNumber: row.CustomRevisionNumber,
+		CustomChecklistName:  row.CustomChecklistName,
+		PerformedDate:        row.PerformedDate,
+		PerformedBy:          row.PerformedBy,
+		PerformedByUsername:  performedByUsername,
+		Notes:                row.Notes,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+		Faults:               faults,
+		Comments:             comments,
 	}
 }
 

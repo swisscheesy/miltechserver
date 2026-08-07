@@ -145,12 +145,12 @@ func TestHandlersRejectInvalidAuthContext(t *testing.T) {
 func TestUpsertInspectionSuccess(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &serviceStub{inspectionResp: &InspectionResponse{
-		ID: uuid.MustParse(routeTestPmcsID), EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, Faults: []FaultResponse{},
+		ID: uuid.MustParse(routeTestPmcsID), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now, Faults: []FaultResponse{},
 	}}
 	router := newRouteTestRouter(stub)
 
 	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID, InspectionRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now,
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now,
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
@@ -161,7 +161,7 @@ func TestUpsertInspectionSuccess(t *testing.T) {
 func TestGetInspectionSuccess(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &serviceStub{inspectionResp: &InspectionResponse{
-		ID: uuid.MustParse(routeTestPmcsID), EquipmentID: "vehicle-1", GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now,
+		ID: uuid.MustParse(routeTestPmcsID), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now,
 		Faults: []FaultResponse{{PmcsID: uuid.MustParse(routeTestPmcsID), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "x", FaultText: "leak", CreatedAt: now, UpdatedAt: now}},
 	}}
 	router := newRouteTestRouter(stub)
@@ -204,7 +204,7 @@ func TestUpsertFaultSuccess(t *testing.T) {
 	router := newRouteTestRouter(stub)
 
 	resp := doRouteJSON(router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/faults", FaultRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now, SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)

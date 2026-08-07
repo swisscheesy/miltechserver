@@ -6,8 +6,26 @@ import (
 	"github.com/google/uuid"
 )
 
+type InspectionSourceRequest struct {
+	SourceType           string `json:"source_type"`
+	GuideManual          string `json:"guide_manual"`
+	CustomChecklistID    string `json:"custom_checklist_id"`
+	CustomRevisionID     string `json:"custom_revision_id"`
+	CustomRevisionNumber *int32 `json:"custom_revision_number"`
+	CustomChecklistName  string `json:"custom_checklist_name"`
+}
+
+type ValidatedInspectionSource struct {
+	SourceType           string
+	GuideManual          *string
+	CustomChecklistID    *uuid.UUID
+	CustomRevisionID     *uuid.UUID
+	CustomRevisionNumber *int32
+	CustomChecklistName  *string
+}
+
 type InspectionRequest struct {
-	GuideManual   string    `json:"guide_manual"`
+	InspectionSourceRequest
 	PerformedDate time.Time `json:"performed_date"`
 	Notes         *string   `json:"notes"`
 }
@@ -19,9 +37,10 @@ type ListInspectionsRequest struct {
 }
 
 type FaultRequest struct {
-	GuideManual      string    `json:"guide_manual"`
+	InspectionSourceRequest
 	PerformedDate    time.Time `json:"performed_date"`
 	SectionID        string    `json:"section_id"`
+	SectionTitle     string    `json:"section_title"`
 	ItemIndex        int32     `json:"item_index"`
 	ItemNo           string    `json:"item_no"`
 	Status           string    `json:"status"`
@@ -46,6 +65,7 @@ type BulkDeleteFaultItemRequest struct {
 type FaultResponse struct {
 	PmcsID           uuid.UUID `json:"pmcs_id"`
 	SectionID        string    `json:"section_id"`
+	SectionTitle     *string   `json:"section_title,omitempty"`
 	ItemIndex        int32     `json:"item_index"`
 	ItemNo           string    `json:"item_no"`
 	Status           string    `json:"status"`
@@ -74,30 +94,38 @@ type CommentResponse struct {
 }
 
 type InspectionResponse struct {
-	ID                  uuid.UUID         `json:"id"`
-	EquipmentID         string            `json:"equipment_id"`
-	SourceType          string            `json:"source_type"`
-	GuideManual         string            `json:"guide_manual"`
-	PerformedDate       time.Time         `json:"performed_date"`
-	PerformedBy         *string           `json:"performed_by,omitempty"`
-	PerformedByUsername *string           `json:"performed_by_username,omitempty"`
-	Notes               *string           `json:"notes,omitempty"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
-	Faults              []FaultResponse   `json:"faults"`
-	Comments            []CommentResponse `json:"comments"`
+	ID                   uuid.UUID         `json:"id"`
+	EquipmentID          string            `json:"equipment_id"`
+	SourceType           string            `json:"source_type"`
+	GuideManual          *string           `json:"guide_manual,omitempty"`
+	CustomChecklistID    *uuid.UUID        `json:"custom_checklist_id,omitempty"`
+	CustomRevisionID     *uuid.UUID        `json:"custom_revision_id,omitempty"`
+	CustomRevisionNumber *int32            `json:"custom_revision_number,omitempty"`
+	CustomChecklistName  *string           `json:"custom_checklist_name,omitempty"`
+	PerformedDate        time.Time         `json:"performed_date"`
+	PerformedBy          *string           `json:"performed_by,omitempty"`
+	PerformedByUsername  *string           `json:"performed_by_username,omitempty"`
+	Notes                *string           `json:"notes,omitempty"`
+	CreatedAt            time.Time         `json:"created_at"`
+	UpdatedAt            time.Time         `json:"updated_at"`
+	Faults               []FaultResponse   `json:"faults"`
+	Comments             []CommentResponse `json:"comments"`
 }
 
 type InspectionSummaryResponse struct {
-	ID                  uuid.UUID `json:"id"`
-	SourceType          string    `json:"source_type"`
-	GuideManual         string    `json:"guide_manual"`
-	PerformedDate       time.Time `json:"performed_date"`
-	FaultCount          int       `json:"fault_count"`
-	CommentCount        int       `json:"comment_count"`
-	CreatedAt           time.Time `json:"created_at"`
-	PerformedBy         *string   `json:"performed_by,omitempty"`
-	PerformedByUsername *string   `json:"performed_by_username,omitempty"`
+	ID                   uuid.UUID  `json:"id"`
+	SourceType           string     `json:"source_type"`
+	GuideManual          *string    `json:"guide_manual,omitempty"`
+	CustomChecklistID    *uuid.UUID `json:"custom_checklist_id,omitempty"`
+	CustomRevisionID     *uuid.UUID `json:"custom_revision_id,omitempty"`
+	CustomRevisionNumber *int32     `json:"custom_revision_number,omitempty"`
+	CustomChecklistName  *string    `json:"custom_checklist_name,omitempty"`
+	PerformedDate        time.Time  `json:"performed_date"`
+	FaultCount           int        `json:"fault_count"`
+	CommentCount         int        `json:"comment_count"`
+	CreatedAt            time.Time  `json:"created_at"`
+	PerformedBy          *string    `json:"performed_by,omitempty"`
+	PerformedByUsername  *string    `json:"performed_by_username,omitempty"`
 }
 
 type InspectionListResponse struct {

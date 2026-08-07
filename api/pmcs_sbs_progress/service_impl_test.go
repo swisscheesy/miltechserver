@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -162,9 +163,182 @@ func samplePmcsID() uuid.UUID {
 func TestEnsureInspectionRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.EnsureInspection(nil, "vehicle-1", samplePmcsIDStr, InspectionRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now()})
+	_, err := svc.EnsureInspection(nil, "vehicle-1", samplePmcsIDStr, InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now()})
 
 	requireServiceError(t, err, ErrUnauthorized)
+}
+
+func TestValidateInspectionSource(t *testing.T) {
+	zero := int32(0)
+	published := int32(3)
+	validCustom := func() InspectionSourceRequest {
+		return InspectionSourceRequest{
+			SourceType:           "custom",
+			CustomChecklistID:    "22222222-2222-2222-2222-222222222222",
+			CustomRevisionID:     "33333333-3333-3333-3333-333333333333",
+			CustomRevisionNumber: &zero,
+			CustomChecklistName:  "Weekly Generator PMCS",
+		}
+	}
+
+	cases := []struct {
+		name       string
+		request    InspectionSourceRequest
+		wantErr    error
+		wantSource ValidatedInspectionSource
+	}{
+		{
+			name:    "legacy guide omission",
+			request: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			wantSource: ValidatedInspectionSource{
+				SourceType:  "guide",
+				GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"),
+			},
+		},
+		{
+			name:    "explicit guide",
+			request: InspectionSourceRequest{SourceType: "guide", GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			wantSource: ValidatedInspectionSource{
+				SourceType:  "guide",
+				GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"),
+			},
+		},
+		{
+			name:       "custom revision zero",
+			request:    validCustom(),
+			wantSource: validatedCustomSource(zero),
+		},
+		{
+			name: "custom published revision",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomRevisionNumber = &published
+				return request
+			}(),
+			wantSource: validatedCustomSource(published),
+		},
+		{
+			name: "mixed guide and custom fields",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.GuideManual = "pmcs_sbs/hmmwv/file.json"
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "missing custom checklist id",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistID = ""
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "missing custom revision id",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomRevisionID = ""
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "missing custom revision number",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomRevisionNumber = nil
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "missing custom checklist name",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistName = " "
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "zero custom checklist id",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistID = uuid.Nil.String()
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "negative custom revision number",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				negative := int32(-1)
+				request.CustomRevisionNumber = &negative
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name:    "invalid source type",
+			request: InspectionSourceRequest{SourceType: "legacy", GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "custom checklist name exceeds grapheme limit",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistName = strings.Repeat("👍", maxShortFieldGraphemes+1)
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "custom checklist name exceeds byte limit",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistName = strings.Repeat("a", maxShortFieldBytes+1)
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+		{
+			name: "invalid utf8 custom checklist name",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistName = string([]byte{0xff})
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeInspectionSource(tc.request)
+			if tc.wantErr != nil {
+				requireServiceError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantSource, got)
+		})
+	}
+}
+
+func validatedCustomSource(revisionNumber int32) ValidatedInspectionSource {
+	checklistID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	revisionID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	checklistName := "Weekly Generator PMCS"
+	return ValidatedInspectionSource{
+		SourceType:           "custom",
+		CustomChecklistID:    &checklistID,
+		CustomRevisionID:     &revisionID,
+		CustomRevisionNumber: &revisionNumber,
+		CustomChecklistName:  &checklistName,
+	}
 }
 
 func TestEnsureInspectionRejectsInvalidValues(t *testing.T) {
@@ -178,11 +352,11 @@ func TestEnsureInspectionRejectsInvalidValues(t *testing.T) {
 		req         InspectionRequest
 		want        error
 	}{
-		{name: "blank equipment", equipmentID: " ", pmcsID: samplePmcsIDStr, req: InspectionRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now}, want: ErrInvalidID},
-		{name: "malformed pmcs id", equipmentID: "vehicle-1", pmcsID: "not-a-uuid", req: InspectionRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now}, want: ErrInvalidPmcsID},
-		{name: "blank pmcs id", equipmentID: "vehicle-1", pmcsID: " ", req: InspectionRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now}, want: ErrInvalidPmcsID},
-		{name: "invalid guide manual", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, req: InspectionRequest{GuideManual: "pmcs/hmmwv/file.json", PerformedDate: now}, want: ErrInvalidGuideManual},
-		{name: "zero performed date", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, req: InspectionRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, want: ErrInvalidRequest},
+		{name: "blank equipment", equipmentID: " ", pmcsID: samplePmcsIDStr, req: InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now}, want: ErrInvalidID},
+		{name: "malformed pmcs id", equipmentID: "vehicle-1", pmcsID: "not-a-uuid", req: InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now}, want: ErrInvalidPmcsID},
+		{name: "blank pmcs id", equipmentID: "vehicle-1", pmcsID: " ", req: InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now}, want: ErrInvalidPmcsID},
+		{name: "invalid guide manual", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, req: InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs/hmmwv/file.json"}, PerformedDate: now}, want: ErrInvalidGuideManual},
+		{name: "zero performed date", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, req: InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}}, want: ErrInvalidRequest},
 	}
 
 	for _, tc := range cases {
@@ -198,6 +372,7 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	stub := &repoStub{inspection: &model.PmcsSbsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
+		SourceType:    "guide",
 		GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
 		PerformedDate: time.Now().UTC(),
 		PerformedBy:   &performedBy,
@@ -205,8 +380,8 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	svc := NewService(stub)
 
 	resp, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
-		PerformedDate: time.Now(),
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+		PerformedDate:           time.Now(),
 	})
 
 	require.NoError(t, err)
@@ -216,6 +391,38 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	require.NotNil(t, stub.capturedInspection.PerformedBy)
 	require.Equal(t, "user-1", *stub.capturedInspection.PerformedBy)
 	require.Empty(t, resp.Faults)
+}
+
+func TestMapInspectionCustomSourceOmitsGuideManual(t *testing.T) {
+	checklistID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	revisionID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	revisionNumber := int32(3)
+	checklistName := "Weekly Generator PMCS"
+
+	response := mapInspection(model.PmcsSbsInspections{
+		ID:                   samplePmcsID(),
+		EquipmentID:          "vehicle-1",
+		SourceType:           "custom",
+		CustomChecklistID:    &checklistID,
+		CustomRevisionID:     &revisionID,
+		CustomRevisionNumber: &revisionNumber,
+		CustomChecklistName:  &checklistName,
+	}, nil, nil, nil)
+
+	require.Equal(t, "custom", response.SourceType)
+	require.Nil(t, response.GuideManual)
+	require.Equal(t, &checklistID, response.CustomChecklistID)
+	require.Equal(t, &revisionID, response.CustomRevisionID)
+	require.Equal(t, &revisionNumber, response.CustomRevisionNumber)
+	require.Equal(t, &checklistName, response.CustomChecklistName)
+
+	body, err := json.Marshal(response)
+	require.NoError(t, err)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(body, &payload))
+	require.Equal(t, "custom", payload["source_type"])
+	require.NotContains(t, payload, "guide_manual")
+	require.Equal(t, checklistID.String(), payload["custom_checklist_id"])
 }
 
 func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *testing.T) {
@@ -231,8 +438,8 @@ func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *t
 	user := &bootstrap.User{UserID: "user-1", Username: "jsmith"}
 
 	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
-		PerformedDate: time.Now(),
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+		PerformedDate:           time.Now(),
 	})
 
 	require.NoError(t, err)
@@ -258,8 +465,8 @@ func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiff
 	user := &bootstrap.User{UserID: "editor-user", Username: "editor"}
 
 	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual:   "pmcs_sbs/hmmwv/file.json",
-		PerformedDate: time.Now(),
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+		PerformedDate:           time.Now(),
 	})
 
 	require.NoError(t, err)
@@ -357,7 +564,7 @@ func TestDeleteInspectionPassesParsedID(t *testing.T) {
 func TestUpsertFaultRejectsInvalidValues(t *testing.T) {
 	svc := NewService(&repoStub{})
 	baseReq := func() FaultRequest {
-		return FaultRequest{GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"}
+		return FaultRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak"}
 	}
 
 	cases := []struct {
@@ -369,7 +576,10 @@ func TestUpsertFaultRejectsInvalidValues(t *testing.T) {
 	}{
 		{name: "blank equipment", equipmentID: " ", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest { return r }, want: ErrInvalidID},
 		{name: "malformed pmcs id", equipmentID: "vehicle-1", pmcsID: "bad", mutate: func(r FaultRequest) FaultRequest { return r }, want: ErrInvalidPmcsID},
-		{name: "invalid guide manual", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest { r.GuideManual = "pmcs_sbs/../file.json"; return r }, want: ErrInvalidGuideManual},
+		{name: "invalid guide manual", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest {
+			r.InspectionSourceRequest.GuideManual = "pmcs_sbs/../file.json"
+			return r
+		}, want: ErrInvalidGuideManual},
 		{name: "blank section", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest { r.SectionID = " "; return r }, want: ErrInvalidRequest},
 		{name: "negative item index", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest { r.ItemIndex = -1; return r }, want: ErrInvalidRequest},
 		{name: "blank item no", equipmentID: "vehicle-1", pmcsID: samplePmcsIDStr, mutate: func(r FaultRequest) FaultRequest { r.ItemNo = " "; return r }, want: ErrInvalidRequest},
@@ -403,12 +613,99 @@ func TestUpsertFaultAcceptsAllowedStatuses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
 			_, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
-				GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: tc.input, FaultText: "leak",
+				InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: tc.input, FaultText: "leak",
 			})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, stub.capturedFault.Status)
 		})
 	}
+}
+
+func TestUpsertFaultAcceptsCustomSource(t *testing.T) {
+	stub := &repoStub{}
+	svc := NewService(stub)
+	revisionNumber := int32(0)
+
+	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
+		InspectionSourceRequest: InspectionSourceRequest{
+			SourceType:           "custom",
+			CustomChecklistID:    "22222222-2222-2222-2222-222222222222",
+			CustomRevisionID:     "33333333-3333-3333-3333-333333333333",
+			CustomRevisionNumber: &revisionNumber,
+			CustomChecklistName:  "Weekly Generator PMCS",
+		},
+		PerformedDate: time.Now(),
+		SectionID:     "44444444-4444-4444-4444-444444444444",
+		SectionTitle:  "Before Operation",
+		ItemIndex:     0,
+		ItemNo:        "1",
+		Status:        "X",
+		FaultText:     "leak",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "custom", stub.capturedInspection.SourceType)
+	require.Nil(t, stub.capturedInspection.GuideManual)
+	require.Equal(t, uuid.MustParse("22222222-2222-2222-2222-222222222222"), *stub.capturedInspection.CustomChecklistID)
+	require.Equal(t, uuid.MustParse("33333333-3333-3333-3333-333333333333"), *stub.capturedInspection.CustomRevisionID)
+	require.Equal(t, int32(0), *stub.capturedInspection.CustomRevisionNumber)
+	require.Equal(t, "Weekly Generator PMCS", *stub.capturedInspection.CustomChecklistName)
+	require.NotNil(t, stub.capturedFault.SectionTitle)
+	require.Equal(t, "Before Operation", *stub.capturedFault.SectionTitle)
+	require.NotNil(t, resp.SectionTitle)
+	require.Equal(t, "Before Operation", *resp.SectionTitle)
+}
+
+func TestUpsertFaultValidatesSectionTitle(t *testing.T) {
+	baseRequest := func() FaultRequest {
+		return FaultRequest{
+			InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+			PerformedDate:           time.Now(),
+			SectionID:               "before",
+			ItemNo:                  "1",
+			Status:                  "x",
+			FaultText:               "leak",
+		}
+	}
+
+	cases := []struct {
+		name  string
+		title string
+		want  error
+	}{
+		{name: "omitted", title: ""},
+		{name: "at grapheme limit", title: strings.Repeat("👍", maxShortFieldGraphemes)},
+		{name: "at byte limit", title: shortFieldAtByteLimit()},
+		{name: "over grapheme limit", title: strings.Repeat("👍", maxShortFieldGraphemes+1), want: ErrInvalidRequest},
+		{name: "over byte limit", title: shortFieldAtByteLimit() + "a", want: ErrInvalidRequest},
+		{name: "invalid utf8", title: string([]byte{0xff}), want: ErrInvalidRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &repoStub{}
+			svc := NewService(stub)
+			request := baseRequest()
+			request.SectionTitle = tc.title
+
+			_, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, request)
+			if tc.want != nil {
+				requireServiceError(t, err, tc.want)
+				return
+			}
+			require.NoError(t, err)
+			if tc.title == "" {
+				require.Nil(t, stub.capturedFault.SectionTitle)
+				return
+			}
+			require.NotNil(t, stub.capturedFault.SectionTitle)
+			require.Equal(t, tc.title, *stub.capturedFault.SectionTitle)
+		})
+	}
+}
+
+func shortFieldAtByteLimit() string {
+	return strings.Repeat("a", maxShortFieldGraphemes) + strings.Repeat("\u0301", (maxShortFieldBytes-maxShortFieldGraphemes)/2)
 }
 
 func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
@@ -419,7 +716,7 @@ func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	svc := NewService(stub)
 
 	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: now, SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now, SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
 	})
 
 	require.NoError(t, err)
@@ -510,7 +807,7 @@ func TestEnsureInspectionTrimsAndClearsNotes(t *testing.T) {
 
 	blank := "   "
 	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &blank,
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &blank,
 	})
 
 	require.NoError(t, err)
@@ -518,7 +815,7 @@ func TestEnsureInspectionTrimsAndClearsNotes(t *testing.T) {
 
 	padded := "  looks fine  "
 	_, err = svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &padded,
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &padded,
 	})
 
 	require.NoError(t, err)
@@ -531,7 +828,7 @@ func TestEnsureInspectionRejectsOverlongNotes(t *testing.T) {
 	tooLong := strings.Repeat("a", maxNotesLength+1)
 
 	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
-		GuideManual: "pmcs_sbs/hmmwv/file.json", PerformedDate: time.Now(), Notes: &tooLong,
+		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &tooLong,
 	})
 
 	requireServiceError(t, err, ErrInvalidRequest)
