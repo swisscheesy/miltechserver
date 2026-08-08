@@ -13,6 +13,6 @@ type Service interface {
 	DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error)
 
 	CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error)
-	UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error)
-	DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error)
+	UpdateComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error)
+	DeleteComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error)
 }

@@ -363,7 +363,14 @@ func (repo *RepositoryImpl) CreateComment(user *bootstrap.User, equipmentID stri
 	return &CommentWithAuthor{PmcsSbsInspectionComments: created, AuthorUsername: &username}, nil
 }
 
-func (repo *RepositoryImpl) GetComment(commentID uuid.UUID) (*CommentWithAuthor, error) {
+func (repo *RepositoryImpl) GetComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, commentID uuid.UUID) (*CommentWithAuthor, error) {
+	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
+		return nil, err
+	}
+	if err := repo.requireInspectionOwnership(repo.db, equipmentID, pmcsID); err != nil {
+		return nil, err
+	}
+
 	var row struct {
 		model.PmcsSbsInspectionComments
 		AuthorUsername *string `sql:"author_username"`
@@ -373,7 +380,10 @@ func (repo *RepositoryImpl) GetComment(commentID uuid.UUID) (*CommentWithAuthor,
 		Users.Username.AS("author_username"),
 	).
 		FROM(PmcsSbsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspectionComments.AuthorID))).
-		WHERE(PmcsSbsInspectionComments.ID.EQ(UUID(commentID)))
+		WHERE(
+			PmcsSbsInspectionComments.ID.EQ(UUID(commentID)).
+				AND(PmcsSbsInspectionComments.PmcsID.EQ(UUID(pmcsID))),
+		)
 
 	if err := stmt.Query(repo.db, &row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {

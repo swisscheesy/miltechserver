@@ -21,7 +21,7 @@ type Repository interface {
 	DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, keys []FaultKey) (int64, error)
 
 	CreateComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, text string) (*CommentWithAuthor, error)
-	GetComment(commentID uuid.UUID) (*CommentWithAuthor, error)
+	GetComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, commentID uuid.UUID) (*CommentWithAuthor, error)
 	UpdateComment(commentID uuid.UUID, text string) (*CommentWithAuthor, error)
 }
 

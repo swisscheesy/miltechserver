@@ -93,15 +93,19 @@ func (s *serviceStub) CreateComment(user *bootstrap.User, equipmentID string, pm
 	return s.commentResp, s.err
 }
 
-func (s *serviceStub) UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+func (s *serviceStub) UpdateComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
 	s.capturedUser = user
+	s.capturedEquipmentID = equipmentID
+	s.capturedPmcsID = pmcsID
 	s.capturedCommentID = commentID
 	s.capturedRequest = req
 	return s.commentResp, s.err
 }
 
-func (s *serviceStub) DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error) {
+func (s *serviceStub) DeleteComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
 	s.capturedUser = user
+	s.capturedEquipmentID = equipmentID
+	s.capturedPmcsID = pmcsID
 	s.capturedCommentID = commentID
 	return s.commentResp, s.err
 }
@@ -472,6 +476,8 @@ func TestUpdateCommentSuccess(t *testing.T) {
 	}, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, routeTestPmcsID, stub.capturedPmcsID)
 	require.Equal(t, commentID, stub.capturedCommentID)
 }
 
@@ -483,6 +489,8 @@ func TestDeleteCommentSuccess(t *testing.T) {
 	resp := doRouteJSON(router, http.MethodDelete, "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/"+routeTestPmcsID+"/comments/"+commentID, nil, routeUser())
 
 	require.Equal(t, http.StatusOK, resp.Code)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, routeTestPmcsID, stub.capturedPmcsID)
 	require.Equal(t, commentID, stub.capturedCommentID)
 }
 

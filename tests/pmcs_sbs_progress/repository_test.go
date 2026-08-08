@@ -566,9 +566,15 @@ func TestRepositoryUpsertFaultRejectsGuideManualMismatch(t *testing.T) {
 
 	mismatched := inspection
 	mismatched.GuideManual = stringPointer("pmcs_sbs/hmmwv/other.json")
-	_, err = repo.UpsertFault(user, mismatched, sampleFault(inspection.ID))
+	replacement := sampleFault(inspection.ID)
+	replacement.FaultText = "must not replace original"
+	_, err = repo.UpsertFault(user, mismatched, replacement)
 
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionConflict)
+	_, faults, _, err := repo.GetInspection(user, vehicleID, inspection.ID)
+	require.NoError(t, err)
+	require.Len(t, faults, 1)
+	require.Equal(t, "leak", faults[0].FaultText)
 }
 
 func TestRepositoryGetInspectionReturnsFaultsOrderedBySectionAndItem(t *testing.T) {
@@ -920,11 +926,43 @@ func TestRepositoryUpdateCommentPersistsTextAndSetsUpdatedAt(t *testing.T) {
 
 func TestRepositoryGetCommentReturnsNotFoundForMissingID(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-comment-missing")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "N5A")
 	repo := pmcs_sbs_progress.NewRepository(testDB)
 
-	_, err := repo.GetComment(uuid.New())
+	inspection := sampleInspection(vehicleID, user.UserID)
+	_, err := repo.EnsureInspection(user, inspection)
+	require.NoError(t, err)
+
+	_, err = repo.GetComment(user, vehicleID, inspection.ID, uuid.New())
 
 	require.ErrorIs(t, err, pmcs_sbs_progress.ErrCommentNotFound)
+}
+
+func TestRepositoryGetCommentRequiresMembershipAndInspectionEquipmentScope(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	author := testUser("pmcs-comment-scoped")
+	ensureUser(t, testDB, author)
+	shopID := createShopWithMember(t, testDB, author, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, author, "N5B")
+	otherVehicleID := createShopVehicle(t, testDB, shopID, author, "N5C")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	inspection := sampleInspection(vehicleID, author.UserID)
+	_, err := repo.EnsureInspection(author, inspection)
+	require.NoError(t, err)
+	comment, err := repo.CreateComment(author, vehicleID, inspection.ID, "scoped comment")
+	require.NoError(t, err)
+
+	_, err = repo.GetComment(author, otherVehicleID, inspection.ID, comment.ID)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrInspectionNotFound)
+
+	_, err = testDB.Exec(`DELETE FROM shop_members WHERE shop_id = $1 AND user_id = $2`, shopID, author.UserID)
+	require.NoError(t, err)
+	_, err = repo.GetComment(author, vehicleID, inspection.ID, comment.ID)
+	require.ErrorIs(t, err, pmcs_sbs_progress.ErrNotFound)
 }
 
 func TestRepositoryListInspectionsIncludesCommentCount(t *testing.T) {

@@ -516,3 +516,53 @@ Based on the current project setup:
 - Final-pin unsubscribe performs additional eligibility checks and
   deterministic locking, while ordinary unsubscribe avoids lock amplification
   across historical subscription rows
+
+### ADR-020: Model Shop PMCS Inspections as a Guide-or-Custom Source Union (2026-08-07)
+
+**Context:**
+- Shop inspection history previously required every inspection to reference a
+  guide JSON path, while mobile clients can now perform user-created PMCS
+  checklists against Shop equipment
+- Fabricating a guide path for a custom checklist would make provenance
+  dishonest and could make clients attempt to load content that does not exist
+- Historical inspection records must remain useful when a private checklist is
+  device-local, retired, unsubscribed, deleted by its owner, or removed from
+  server-side revision history
+
+**Decision:**
+- Keep guide and custom inspections in `pmcs_sbs_inspections` and enforce an
+  exclusive `source_type = guide | custom` union with database CHECK
+  constraints
+- Store custom checklist ID, revision ID, revision number, and display name as
+  immutable snapshot provenance on the inspection; deliberately add no foreign
+  keys to User-PMCS checklist or revision tables
+- Continue accepting legacy guide writes that omit `source_type` only when the
+  request contains a valid `guide_manual` and no custom fields; all responses
+  explicitly return `source_type` and omit inapplicable source fields
+- Reuse the authenticated Shop equipment boundary for both source types. The
+  custom checklist name, fault data, notes, and comments are visible to every
+  current member who can access that Shop equipment, while the authored
+  checklist tree is never copied into Shop inspection storage
+- Preserve the existing write-through lifecycle: first-fault autosave and
+  explicit clean completion use the same inspection record, immutable source
+  tuple, and transactional fault persistence
+
+**Alternatives considered:**
+- Encode custom identity in a synthetic `custom/...json` guide path (rejected:
+  corrupts guide provenance and loading semantics)
+- Create separate custom inspection and fault tables/routes (rejected:
+  duplicates authorization, history, comments, deletion, and lifecycle logic)
+- Reference live User-PMCS checklist/revision rows with foreign keys (rejected:
+  device-local content may not exist on the server and historical Shop records
+  must survive content retirement or deletion)
+
+**Consequences:**
+- Existing guide request routes remain compatible, while inspection detail,
+  list, and Shops aggregate history gain additive source-discriminated fields
+- A reused inspection UUID must match equipment ID and the complete immutable
+  source tuple; mismatches return the existing inspection conflict response
+- Custom provenance and faults outlive the originating checklist content, but
+  the server cannot reconstruct the full authored checklist tree from an
+  inspection record
+- The schema migration is reversible only while no custom inspection rows
+  exist; rollback refuses to discard custom history

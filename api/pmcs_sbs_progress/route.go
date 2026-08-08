@@ -217,7 +217,7 @@ func (handler Handler) updateComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.UpdateComment(user, c.Param("comment_id"), req)
+	result, err := handler.service.UpdateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -232,7 +232,7 @@ func (handler Handler) deleteComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.DeleteComment(user, c.Param("comment_id"))
+	result, err := handler.service.DeleteComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"))
 	if err != nil {
 		respondServiceError(c, err)
 		return

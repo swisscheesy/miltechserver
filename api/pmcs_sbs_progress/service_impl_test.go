@@ -130,7 +130,10 @@ func (repo *repoStub) CreateComment(user *bootstrap.User, equipmentID string, pm
 	}}, repo.err
 }
 
-func (repo *repoStub) GetComment(commentID uuid.UUID) (*CommentWithAuthor, error) {
+func (repo *repoStub) GetComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, commentID uuid.UUID) (*CommentWithAuthor, error) {
+	repo.capturedUser = user
+	repo.capturedEquipmentID = equipmentID
+	repo.capturedPmcsID = pmcsID
 	repo.capturedCommentID = commentID
 	return repo.existingComment, repo.err
 }
@@ -959,7 +962,7 @@ func TestUpdateCommentRequiresAuthorship(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.UpdateComment(requireUser(), samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+	_, err := svc.UpdateComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
 
 	requireServiceError(t, err, ErrForbidden)
 }
@@ -970,9 +973,11 @@ func TestUpdateCommentSucceedsForAuthor(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.UpdateComment(requireUser(), samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+	_, err := svc.UpdateComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
 
 	require.NoError(t, err)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, samplePmcsID(), stub.capturedPmcsID)
 	require.Equal(t, "edited", stub.capturedCommentText)
 }
 
@@ -982,9 +987,11 @@ func TestDeleteCommentRequiresAuthorshipAndUsesSentinelText(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.DeleteComment(requireUser(), samplePmcsIDStr)
+	_, err := svc.DeleteComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
 
 	require.NoError(t, err)
+	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
+	require.Equal(t, samplePmcsID(), stub.capturedPmcsID)
 	require.Equal(t, deletedCommentText, stub.capturedCommentText)
 }
 
@@ -994,7 +1001,7 @@ func TestDeleteCommentRejectsNonAuthor(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.DeleteComment(requireUser(), samplePmcsIDStr)
+	_, err := svc.DeleteComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
 
 	requireServiceError(t, err, ErrForbidden)
 }

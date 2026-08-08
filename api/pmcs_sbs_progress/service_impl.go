@@ -225,9 +225,17 @@ func (service *ServiceImpl) CreateComment(user *bootstrap.User, equipmentID stri
 	return &resp, nil
 }
 
-func (service *ServiceImpl) UpdateComment(user *bootstrap.User, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+func (service *ServiceImpl) UpdateComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
+	}
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
+	parsedPmcsID, err := validatePmcsID(pmcsID)
+	if err != nil {
+		return nil, err
 	}
 	parsedCommentID, err := uuid.Parse(strings.TrimSpace(commentID))
 	if err != nil {
@@ -238,7 +246,7 @@ func (service *ServiceImpl) UpdateComment(user *bootstrap.User, commentID string
 		return nil, err
 	}
 
-	existing, err := service.repository.GetComment(parsedCommentID)
+	existing, err := service.repository.GetComment(user, trimmedEquipmentID, parsedPmcsID, parsedCommentID)
 	if err != nil {
 		return nil, err
 	}
@@ -254,16 +262,24 @@ func (service *ServiceImpl) UpdateComment(user *bootstrap.User, commentID string
 	return &resp, nil
 }
 
-func (service *ServiceImpl) DeleteComment(user *bootstrap.User, commentID string) (*CommentResponse, error) {
+func (service *ServiceImpl) DeleteComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
+	}
+	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
+	if err != nil {
+		return nil, err
+	}
+	parsedPmcsID, err := validatePmcsID(pmcsID)
+	if err != nil {
+		return nil, err
 	}
 	parsedCommentID, err := uuid.Parse(strings.TrimSpace(commentID))
 	if err != nil {
 		return nil, ErrCommentNotFound
 	}
 
-	existing, err := service.repository.GetComment(parsedCommentID)
+	existing, err := service.repository.GetComment(user, trimmedEquipmentID, parsedPmcsID, parsedCommentID)
 	if err != nil {
 		return nil, err
 	}
