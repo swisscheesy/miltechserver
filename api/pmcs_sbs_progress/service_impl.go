@@ -542,7 +542,7 @@ func validateOptionalShortField(value string) (*string, error) {
 }
 
 func validateShortField(value string) error {
-	if !utf8.ValidString(value) || len(value) > maxShortFieldBytes {
+	if !utf8.ValidString(value) || strings.IndexByte(value, 0) >= 0 || len(value) > maxShortFieldBytes {
 		return ErrInvalidRequest
 	}
 	graphemeCount := 0

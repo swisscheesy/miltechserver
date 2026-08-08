@@ -354,6 +354,15 @@ func TestValidateInspectionSource(t *testing.T) {
 			}(),
 			wantErr: ErrInvalidRequest,
 		},
+		{
+			name: "custom checklist name contains nul",
+			request: func() InspectionSourceRequest {
+				request := validCustom()
+				request.CustomChecklistName = "Weekly\x00Generator PMCS"
+				return request
+			}(),
+			wantErr: ErrInvalidRequest,
+		},
 	}
 
 	for _, tc := range cases {
@@ -738,6 +747,7 @@ func TestUpsertFaultValidatesSectionTitle(t *testing.T) {
 		{name: "over grapheme limit", title: strings.Repeat("👍", maxShortFieldGraphemes+1), want: ErrInvalidRequest},
 		{name: "over byte limit", title: shortFieldAtByteLimit() + "a", want: ErrInvalidRequest},
 		{name: "invalid utf8", title: string([]byte{0xff}), want: ErrInvalidRequest},
+		{name: "contains nul", title: "Before\x00Operation", want: ErrInvalidRequest},
 	}
 
 	for _, tc := range cases {

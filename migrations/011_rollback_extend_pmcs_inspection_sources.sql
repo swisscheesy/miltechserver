@@ -5,6 +5,8 @@
 
 BEGIN;
 
+LOCK TABLE pmcs_sbs_inspections IN ACCESS EXCLUSIVE MODE;
+
 DO $$
 BEGIN
   IF EXISTS (

@@ -263,6 +263,53 @@ func TestRouteSourceValidationKeepsBadRequestEnvelope(t *testing.T) {
 	require.NotContains(t, body, "data")
 }
 
+func TestRouteRejectsNULInInspectionShortFields(t *testing.T) {
+	revisionNumber := int32(0)
+	cases := []struct {
+		name string
+		path string
+		body any
+	}{
+		{
+			name: "custom checklist name",
+			path: "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID,
+			body: InspectionRequest{
+				InspectionSourceRequest: InspectionSourceRequest{
+					SourceType:           "custom",
+					CustomChecklistID:    "22222222-2222-2222-2222-222222222222",
+					CustomRevisionID:     "33333333-3333-3333-3333-333333333333",
+					CustomRevisionNumber: &revisionNumber,
+					CustomChecklistName:  "Weekly\x00Generator PMCS",
+				},
+				PerformedDate: time.Now().UTC(),
+			},
+		},
+		{
+			name: "section title",
+			path: "/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID + "/faults",
+			body: FaultRequest{
+				InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
+				PerformedDate:           time.Now().UTC(),
+				SectionID:               "before",
+				SectionTitle:            "Before\x00Operation",
+				ItemNo:                  "1",
+				Status:                  "X",
+				FaultText:               "leak",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := newRouteTestRouter(NewService(&repoStub{}))
+			resp := doRouteJSON(router, http.MethodPut, tc.path, tc.body, routeUser())
+
+			require.Equal(t, http.StatusBadRequest, resp.Code)
+			require.JSONEq(t, `{"message":"invalid request"}`, resp.Body.String())
+		})
+	}
+}
+
 func TestRouteRejectsInvalidRawUTF8BeforeDecoding(t *testing.T) {
 	paths := []string{
 		"/api/v1/auth/pmcs-sbs/equipment/vehicle-1/pmcs/" + routeTestPmcsID,
