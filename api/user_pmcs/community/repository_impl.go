@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -342,6 +343,15 @@ func (repository *RepositoryImpl) Browse(
 	return page, nil
 }
 
+func containsModelPattern(normalizedModel string) string {
+	escaped := strings.NewReplacer(
+		"!", "!!",
+		"%", "!%",
+		"_", "!_",
+	).Replace(normalizedModel)
+	return "%" + escaped + "%"
+}
+
 func communityBrowseQuery(
 	filter shared.CommunityBrowseFilter,
 ) (string, []any) {
@@ -383,12 +393,15 @@ func communityBrowseQuery(
 		)
 	}
 	if filter.NormalizedModel != "" {
-		arguments = append(arguments, filter.NormalizedModel)
+		arguments = append(
+			arguments,
+			containsModelPattern(filter.NormalizedModel),
+		)
 		query += fmt.Sprintf(
 			` AND EXISTS (
 			      SELECT 1
 			      FROM user_pmcs_revision_models AS model
-			      WHERE model.normalized_text = $%d
+			      WHERE model.normalized_text LIKE $%d ESCAPE '!'
 			        AND model.revision_id =
 			            source.current_release_revision_id
 			  )`,
