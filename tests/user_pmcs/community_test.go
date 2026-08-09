@@ -347,8 +347,10 @@ func TestReleaseConcurrentHigherRevisionsSerialize(t *testing.T) {
 
 func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	baseTime := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
-	normalizedModel := "task10-" + uuid.NewString()
-	historicalModel := "task10-historical-" + uuid.NewString()
+	storedModel := "task10-m1165a1-" + uuid.NewString()
+	modelSearch := "task10-m1165"
+	historicalModel := "task10-historical-m1165a1-" + uuid.NewString()
+	historicalSearch := "task10-historical-m1165"
 	fixtures := []*releasedChecklistFixture{
 		newReleasedChecklistFixture(t, 1),
 		newReleasedChecklistFixture(t, 2),
@@ -368,25 +370,19 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 			),
 		)
 		require.NoError(t, err)
-		_, err = testDB.ExecContext(
-			context.Background(),
-			`UPDATE user_pmcs_revision_models
-			 SET display_text = $1, normalized_text = $1
-			 WHERE revision_id = $2`,
-			normalizedModel,
+		setRevisionModel(
+			t,
 			fixture.revisions[revisionIndex].Input.ID,
+			storedModel,
+			storedModel,
 		)
-		require.NoError(t, err)
 		if len(fixture.revisions) > 1 {
-			_, err = testDB.ExecContext(
-				context.Background(),
-				`UPDATE user_pmcs_revision_models
-				 SET display_text = $1, normalized_text = $1
-				 WHERE revision_id = $2`,
-				historicalModel,
+			setRevisionModel(
+				t,
 				fixture.revisions[0].Input.ID,
+				historicalModel,
+				historicalModel,
 			)
-			require.NoError(t, err)
 		}
 		updatedAt := baseTime.Add(-time.Duration(index/2) * time.Hour)
 		_, err = testDB.ExecContext(
@@ -408,6 +404,16 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	}
 	_, err := testDB.ExecContext(
 		context.Background(),
+		`INSERT INTO user_pmcs_revision_models
+		     (revision_id, display_text, normalized_text)
+		 VALUES ($1, $2, $3)`,
+		fixtures[0].revisions[0].Input.ID,
+		"Task 10 alternate M1165",
+		modelSearch+"-alternate",
+	)
+	require.NoError(t, err)
+	_, err = testDB.ExecContext(
+		context.Background(),
 		`UPDATE users SET username = NULL WHERE uid = $1`,
 		fixtures[2].ownerUID,
 	)
@@ -426,11 +432,54 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	repository := fixtures[0].repository
+	deletedFixture := newReleasedChecklistFixture(t, 1)
+	deletedRelease, err := deletedFixture.repository.Release(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		deletedFixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedFixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		deletedFixture.revisions[0].Input.ID,
+		storedModel,
+		storedModel,
+	)
+	_, err = deletedFixture.owned.DeleteChecklist(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedRelease.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	afterDelete, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           50,
+			NormalizedModel: modelSearch,
+		},
+	)
+	require.NoError(t, err)
+	require.NotContains(
+		t,
+		communityChecklistIDs(afterDelete.Items),
+		deletedFixture.checklist,
+	)
+
 	firstPage, err := repository.Browse(
 		context.Background(),
 		shared.CommunityBrowseFilter{
 			Limit:           2,
-			NormalizedModel: normalizedModel,
+			NormalizedModel: modelSearch,
 		},
 	)
 	require.NoError(t, err)
@@ -445,7 +494,7 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		shared.CommunityBrowseFilter{
 			After:           &firstCursor,
 			Limit:           2,
-			NormalizedModel: normalizedModel,
+			NormalizedModel: modelSearch,
 		},
 	)
 	require.NoError(t, err)
@@ -494,7 +543,7 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		context.Background(),
 		shared.CommunityBrowseFilter{
 			Limit:           50,
-			NormalizedModel: normalizedModel,
+			NormalizedModel: modelSearch,
 		},
 	)
 	require.NoError(t, err)
@@ -503,7 +552,7 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		context.Background(),
 		shared.CommunityBrowseFilter{
 			Limit:           50,
-			NormalizedModel: normalizedModel + "-other",
+			NormalizedModel: modelSearch + "-other",
 		},
 	)
 	require.NoError(t, err)
@@ -512,11 +561,127 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		context.Background(),
 		shared.CommunityBrowseFilter{
 			Limit:           50,
-			NormalizedModel: historicalModel,
+			NormalizedModel: historicalSearch,
 		},
 	)
 	require.NoError(t, err)
 	require.Empty(t, historicalOnly.Items)
+}
+
+func TestCommunityBrowseModelFilterUsesLiteralCaseAgnosticContains(t *testing.T) {
+	models := []struct {
+		displayText    string
+		normalizedText string
+	}{
+		{displayText: "M1165", normalizedText: "m1165"},
+		{displayText: "M1165A1", normalizedText: "m1165a1"},
+		{displayText: "M1165A2", normalizedText: "m1165a2"},
+		{displayText: "XM1165A1-R2", normalizedText: "xm1165a1-r2"},
+		{displayText: "M_1165%!", normalizedText: "m_1165%!"},
+		{displayText: "M1200", normalizedText: "m1200"},
+	}
+
+	fixtures := make([]*releasedChecklistFixture, len(models))
+	for index, model := range models {
+		fixture := newReleasedChecklistFixture(t, 1)
+		_, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		setRevisionModel(
+			t,
+			fixture.revisions[0].Input.ID,
+			model.displayText,
+			model.normalizedText,
+		)
+		fixtures[index] = fixture
+	}
+
+	_, err := testDB.ExecContext(
+		context.Background(),
+		`INSERT INTO user_pmcs_revision_models
+		     (revision_id, display_text, normalized_text)
+		 VALUES ($1, $2, $3)`,
+		fixtures[1].revisions[0].Input.ID,
+		"Alternate M1165A1",
+		"alternate m1165a1",
+	)
+	require.NoError(t, err)
+
+	service := community.NewService(
+		fixtures[0].repository,
+		shared.DefaultConfig(),
+	)
+	tests := []struct {
+		name   string
+		search string
+		want   []uuid.UUID
+	}{
+		{
+			name:   "partial family",
+			search: "m1165",
+			want: []uuid.UUID{
+				fixtures[0].checklist,
+				fixtures[1].checklist,
+				fixtures[2].checklist,
+				fixtures[3].checklist,
+			},
+		},
+		{
+			name:   "mixed case exact text remains contains",
+			search: "M1165A1",
+			want: []uuid.UUID{
+				fixtures[1].checklist,
+				fixtures[3].checklist,
+			},
+		},
+		{
+			name:   "middle substring",
+			search: "1165a",
+			want: []uuid.UUID{
+				fixtures[1].checklist,
+				fixtures[2].checklist,
+				fixtures[3].checklist,
+			},
+		},
+		{
+			name:   "normalized surrounding whitespace",
+			search: "  M1165A1\u00a0 ",
+			want: []uuid.UUID{
+				fixtures[1].checklist,
+				fixtures[3].checklist,
+			},
+		},
+		{name: "suffix", search: "r2", want: []uuid.UUID{fixtures[3].checklist}},
+		{name: "literal underscore", search: "_", want: []uuid.UUID{fixtures[4].checklist}},
+		{name: "literal percent", search: "%", want: []uuid.UUID{fixtures[4].checklist}},
+		{name: "literal escape", search: "!", want: []uuid.UUID{fixtures[4].checklist}},
+		{name: "no match", search: "m1165a9", want: []uuid.UUID{}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			page, browseErr := service.Browse(
+				context.Background(),
+				"",
+				"50",
+				test.search,
+			)
+			require.NoError(t, browseErr)
+			require.ElementsMatch(
+				t,
+				test.want,
+				communityChecklistIDs(page.Items),
+			)
+		})
+	}
 }
 
 func TestCommunityDetailLoadsCompleteCurrentReleaseAndVisibility(t *testing.T) {
@@ -839,6 +1004,33 @@ func summaryRevision(
 	}
 	t.Fatalf("summary for checklist %s was not returned", checklistID)
 	return uuid.Nil
+}
+
+func setRevisionModel(
+	t *testing.T,
+	revisionID uuid.UUID,
+	displayText string,
+	normalizedText string,
+) {
+	t.Helper()
+	_, err := testDB.ExecContext(
+		context.Background(),
+		`UPDATE user_pmcs_revision_models
+		 SET display_text = $1, normalized_text = $2
+		 WHERE revision_id = $3`,
+		displayText,
+		normalizedText,
+		revisionID,
+	)
+	require.NoError(t, err)
+}
+
+func communityChecklistIDs(items []shared.PublicCommunitySummary) []uuid.UUID {
+	checklistIDs := make([]uuid.UUID, len(items))
+	for index, item := range items {
+		checklistIDs[index] = item.ChecklistID
+	}
+	return checklistIDs
 }
 
 func summaryCreator(
