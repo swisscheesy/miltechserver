@@ -402,6 +402,39 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		)
 		require.NoError(t, err)
 	}
+	activeNonmatchingFixtures := []*releasedChecklistFixture{
+		newReleasedChecklistFixture(t, 1),
+		newReleasedChecklistFixture(t, 1),
+	}
+	for index, fixture := range activeNonmatchingFixtures {
+		_, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		nonmatchingModel := "task10-m1200-" + uuid.NewString()
+		setRevisionModel(
+			t,
+			fixture.revisions[0].Input.ID,
+			nonmatchingModel,
+			nonmatchingModel,
+		)
+		_, err = testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			baseTime.Add(-time.Duration(index+1)*15*time.Minute),
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+	}
 	_, err := testDB.ExecContext(
 		context.Background(),
 		`INSERT INTO user_pmcs_revision_models
@@ -410,6 +443,18 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		fixtures[0].revisions[0].Input.ID,
 		"Task 10 alternate M1165",
 		modelSearch+"-alternate",
+	)
+	require.NoError(t, err)
+	nonmatchingDisplayText := "Task 10 nonmatching M1200"
+	nonmatchingNormalizedText := "task10-m1200-" + uuid.NewString()
+	_, err = testDB.ExecContext(
+		context.Background(),
+		`INSERT INTO user_pmcs_revision_models
+		     (revision_id, display_text, normalized_text)
+		 VALUES ($1, $2, $3)`,
+		fixtures[0].revisions[0].Input.ID,
+		nonmatchingDisplayText,
+		nonmatchingNormalizedText,
 	)
 	require.NoError(t, err)
 	_, err = testDB.ExecContext(
@@ -501,12 +546,27 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	require.Len(t, secondPage.Items, 1)
 	require.False(t, secondPage.HasMore)
 	require.Nil(t, secondPage.NextCursor)
+	require.ElementsMatch(
+		t,
+		[]uuid.UUID{fixtures[0].checklist, fixtures[1].checklist},
+		communityChecklistIDs(firstPage.Items),
+	)
+	require.Equal(t, fixtures[2].checklist, secondPage.Items[0].ChecklistID)
 
 	allItems := append(
 		append([]shared.PublicCommunitySummary{}, firstPage.Items...),
 		secondPage.Items...,
 	)
 	require.Len(t, allItems, 3)
+	require.ElementsMatch(
+		t,
+		[]uuid.UUID{
+			fixtures[0].checklist,
+			fixtures[1].checklist,
+			fixtures[2].checklist,
+		},
+		communityChecklistIDs(allItems),
+	)
 	seen := make(map[uuid.UUID]struct{}, len(allItems))
 	for _, item := range allItems {
 		_, duplicate := seen[item.ChecklistID]
@@ -520,6 +580,21 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 		t,
 		"Creator 0",
 		summaryCreator(t, allItems, fixtures[0].checklist),
+	)
+	require.ElementsMatch(
+		t,
+		[]shared.ModelValue{
+			{DisplayText: storedModel, NormalizedText: storedModel},
+			{
+				DisplayText:    "Task 10 alternate M1165",
+				NormalizedText: modelSearch + "-alternate",
+			},
+			{
+				DisplayText:    nonmatchingDisplayText,
+				NormalizedText: nonmatchingNormalizedText,
+			},
+		},
+		summaryModels(t, allItems, fixtures[0].checklist),
 	)
 	require.Equal(
 		t,
@@ -1046,6 +1121,21 @@ func summaryCreator(
 	}
 	t.Fatalf("summary for checklist %s was not returned", checklistID)
 	return ""
+}
+
+func summaryModels(
+	t *testing.T,
+	items []shared.PublicCommunitySummary,
+	checklistID uuid.UUID,
+) []shared.ModelValue {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item.Models
+		}
+	}
+	t.Fatalf("summary for checklist %s was not returned", checklistID)
+	return nil
 }
 
 func newReleasedChecklistFixture(
