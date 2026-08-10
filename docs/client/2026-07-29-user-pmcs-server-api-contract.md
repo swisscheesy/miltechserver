@@ -606,7 +606,10 @@ tombstoned or owner-deleted source cannot reactivate.
 
 - Auth: none.
 - Query: optional opaque `after`; optional `limit` `1..50`, default `20`;
-  optional `model`, normalized by the server and matched exactly.
+  optional `model`, normalized by the server and matched as a literal,
+  case-agnostic substring against revision-level models on each active current
+  release. `%`, `_`, and `!` are literal search characters. Start again
+  without `after` whenever `model` changes.
 - Body/conditional: none.
 - Response: `200`; `Cache-Control: public, no-cache`;
   `Vary: Accept-Encoding`; gzip supported.

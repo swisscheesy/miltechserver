@@ -1167,7 +1167,7 @@ tombstoned source can never reactivate.
 `GET /api/v1/user-pmcs/community`
 
 **What it is used for:** Populate the public community library with recent
-current releases and optional exact model filtering.
+current releases and optional literal, case-agnostic model substring filtering.
 
 **Why it exists:** The list carries lightweight metadata only, which keeps
 browsing fast. The mobile client downloads the complete tree only when the user
@@ -1178,9 +1178,19 @@ opens a result.
 - Authentication: none.
 - Query `after`: optional opaque cursor from the preceding page.
 - Query `limit`: `1..50`; defaults to `20`.
-- Query `model`: optional model text. The server normalizes it and requires an
-  exact normalized match.
+- Query `model`: optional revision-level model text. The server normalizes the
+  value and returns active current releases containing that literal normalized
+  substring. Matching is case agnostic; `%`, `_`, and `!` have no wildcard
+  behavior. Discard `after` and restart from page one whenever the search text
+  changes.
 - Body/conditional header: none.
+
+Both requests below can return a current release whose model is `M1165A1`:
+
+```http
+GET /api/v1/user-pmcs/community?limit=20&model=m1165
+GET /api/v1/user-pmcs/community?limit=20&model=M1165A1
+```
 
 Example request, first page: `GET /api/v1/user-pmcs/community?limit=20&model=M998%20HMMWV`
 
