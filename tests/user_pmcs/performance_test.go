@@ -52,14 +52,15 @@ type performanceEvidence struct {
 }
 
 type performanceSubscriptionFixture struct {
-	ownerUID       string
-	subscriberUID  string
-	checklistIDs   []uuid.UUID
-	installedIDs   []uuid.UUID
-	currentIDs     []uuid.UUID
-	noiseUserUIDs  []string
-	normalizedName string
-	cleanup        performanceSubscriptionFixtureCleanup
+	ownerUID            string
+	subscriberUID       string
+	checklistIDs        []uuid.UUID
+	installedIDs        []uuid.UUID
+	currentIDs          []uuid.UUID
+	noiseUserUIDs       []string
+	normalizedName      string
+	containsModelSearch string
+	cleanup             performanceSubscriptionFixtureCleanup
 }
 
 type performanceSubscriptionFixtureCleanup struct {
@@ -1022,7 +1023,7 @@ func TestPerformanceScenarios(t *testing.T) {
 			ctx,
 			shared.CommunityBrowseFilter{
 				Limit:           50,
-				NormalizedModel: fixture.normalizedName,
+				NormalizedModel: fixture.containsModelSearch,
 			},
 		)
 		filteredDuration := time.Since(filteredStarted)
@@ -1044,7 +1045,7 @@ func TestPerformanceScenarios(t *testing.T) {
 				queries,
 				"WHERE source.status = 'active'",
 			)
-		capturedProductionQueries["exact model browse"] =
+		capturedProductionQueries["contains model browse"] =
 			requireObservedQuery(t, queries, "EXISTS")
 		logPerformanceEvidence(t, performanceEvidence{
 			scenario: "community_browse_filtered_unfiltered",
@@ -1809,12 +1810,13 @@ func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
 	defer cancel()
 
 	fixture := performanceSubscriptionFixture{
-		ownerUID:       "perf-owner-" + uuid.NewString(),
-		subscriberUID:  "perf-subscriber-" + uuid.NewString(),
-		checklistIDs:   make([]uuid.UUID, count),
-		installedIDs:   make([]uuid.UUID, count),
-		currentIDs:     make([]uuid.UUID, count),
-		normalizedName: "exact-performance-model",
+		ownerUID:            "perf-owner-" + uuid.NewString(),
+		subscriberUID:       "perf-subscriber-" + uuid.NewString(),
+		checklistIDs:        make([]uuid.UUID, count),
+		installedIDs:        make([]uuid.UUID, count),
+		currentIDs:          make([]uuid.UUID, count),
+		normalizedName:      "m1165a1-performance-model",
+		containsModelSearch: "m1165a1",
 	}
 	for index := 0; index < noiseSubscriberCount; index++ {
 		fixture.noiseUserUIDs = append(
@@ -2321,7 +2323,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		shared.CommunityBrowseFilter{
 			Limit:           50,
-			NormalizedModel: fixture.normalizedName,
+			NormalizedModel: fixture.containsModelSearch,
 		},
 	)
 	require.NoError(t, err)
@@ -2331,7 +2333,7 @@ func captureUserPmcsQueryPlans(
 		browseQueries,
 		"WHERE source.status = 'active'",
 	)
-	captured["exact model browse"] = requireObservedQuery(
+	captured["contains model browse"] = requireObservedQuery(
 		t,
 		browseQueries,
 		"EXISTS",
@@ -2355,10 +2357,11 @@ func captureUserPmcsQueryPlans(
 		approvedIndexes []string
 	}
 	plans := []struct {
-		name         string
-		observation  observedQuery
-		args         []any
-		expectations []relationPlanExpectation
+		name                     string
+		observation              observedQuery
+		args                     []any
+		isolateContainsModelPlan bool
+		expectations             []relationPlanExpectation
 	}{
 		{
 			name:        "owner delta branch",
@@ -2426,13 +2429,16 @@ func captureUserPmcsQueryPlans(
 			},
 		},
 		{
-			name:        "exact model browse",
-			observation: captured["exact model browse"],
+			name:                     "contains model browse",
+			observation:              captured["contains model browse"],
+			isolateContainsModelPlan: true,
 			expectations: []relationPlanExpectation{
 				{
 					relation: "user_pmcs_revision_models",
 					approvedIndexes: []string{
+						"user_pmcs_revision_models_pkey",
 						"user_pmcs_revision_models_lookup_idx",
+						"user_pmcs_revision_models_search_trgm_idx",
 					},
 				},
 			},
@@ -2487,18 +2493,35 @@ func captureUserPmcsQueryPlans(
 		if planCase.args != nil {
 			args = planCase.args
 		}
-		plan := explainAnalyzePlan(
-			t,
-			ctx,
-			planCase.observation.query,
-			args...,
-		)
-		t.Logf(
-			"EXPLAIN (ANALYZE, BUFFERS) %s "+
-				"[driver-captured production SQL]:\n%s",
-			planCase.name,
-			plan,
-		)
+		var plan string
+		if planCase.isolateContainsModelPlan {
+			plan = explainAnalyzeIsolatedContainsModelPlan(
+				t,
+				ctx,
+				planCase.observation.query,
+				args...,
+			)
+			t.Logf(
+				"EXPLAIN (ANALYZE, BUFFERS) %s "+
+					"[driver-captured production SQL; "+
+					"isolated full-schema shadow fixture]:\n%s",
+				planCase.name,
+				plan,
+			)
+		} else {
+			plan = explainAnalyzePlan(
+				t,
+				ctx,
+				planCase.observation.query,
+				args...,
+			)
+			t.Logf(
+				"EXPLAIN (ANALYZE, BUFFERS) %s "+
+					"[driver-captured production SQL]:\n%s",
+				planCase.name,
+				plan,
+			)
+		}
 		require.Contains(t, plan, "Buffers:")
 		require.Contains(t, plan, "Execution Time:")
 		for _, expectation := range planCase.expectations {
@@ -2518,8 +2541,336 @@ func explainAnalyzePlan(
 	query string,
 	args ...any,
 ) string {
+	return explainAnalyzePlanWithQueryer(
+		t,
+		ctx,
+		testDB,
+		query,
+		args...,
+	)
+}
+
+type performancePlanQueryer interface {
+	QueryContext(
+		context.Context,
+		string,
+		...any,
+	) (*sql.Rows, error)
+}
+
+func explainAnalyzeIsolatedContainsModelPlan(
+	t *testing.T,
+	ctx context.Context,
+	query string,
+	args ...any,
+) string {
 	t.Helper()
-	rows, err := testDB.QueryContext(
+	connection, err := testDB.Conn(ctx)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, connection.Close())
+	}()
+
+	tx, err := connection.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	var databaseName string
+	err = tx.QueryRowContext(ctx, `SELECT current_database()`).Scan(&databaseName)
+	require.NoError(t, err)
+	require.Equal(t, "miltech_ng_test", databaseName)
+	t.Logf(
+		"isolated contains-model plan safety proof: current_database()=%s",
+		databaseName,
+	)
+
+	seedIsolatedContainsModelPlanFixture(t, ctx, tx)
+	return explainAnalyzePlanWithQueryer(t, ctx, tx, query, args...)
+}
+
+func seedIsolatedContainsModelPlanFixture(
+	t *testing.T,
+	ctx context.Context,
+	tx *sql.Tx,
+) {
+	t.Helper()
+	tables := [...]string{
+		"users",
+		"user_pmcs_checklists",
+		"user_pmcs_revisions",
+		"user_pmcs_revision_models",
+		"user_pmcs_community_releases",
+		"user_pmcs_community_sources",
+	}
+	for _, table := range tables {
+		_, err := tx.ExecContext(
+			ctx,
+			fmt.Sprintf(
+				"CREATE TEMP TABLE %s "+
+					"(LIKE public.%s INCLUDING ALL)",
+				pq.QuoteIdentifier(table),
+				pq.QuoteIdentifier(table),
+			),
+		)
+		require.NoError(t, err)
+	}
+
+	statements := [...]string{
+		`INSERT INTO users (uid, email, username, created_at, is_enabled)
+		 SELECT
+		     'task3-plan-user-' || ordinal,
+		     'task3-plan-user-' || ordinal || '@example.invalid',
+		     'task3-user-' || ordinal,
+		     now(),
+		     TRUE
+		 FROM generate_series(0, 5) AS ordinal`,
+		`INSERT INTO user_pmcs_checklists
+		     (id, owner_uid, sync_version, account_change_version)
+		 SELECT
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid,
+		     'task3-plan-user-0',
+		     1,
+		     ordinal
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_checklists
+		     (id, owner_uid, sync_version, account_change_version)
+		 SELECT
+		     md5('task3-plan-retired-checklist-' || ordinal)::uuid,
+		     'task3-plan-user-0',
+		     1,
+		     500 + ordinal
+		 FROM generate_series(1, 5000) AS ordinal`,
+		`INSERT INTO user_pmcs_revisions
+		     (id, checklist_id, state, revision_number, name, description,
+		      content_hash, published_at)
+		 SELECT
+		     md5('task3-plan-current-' || ordinal)::uuid,
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid,
+		     'published',
+		     2,
+		     'n',
+		     'd',
+		     decode(repeat('00', 32), 'hex'),
+		     now()
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_revisions
+		     (id, checklist_id, state, revision_number, name, description,
+		      content_hash, published_at)
+		 SELECT
+		     md5('task3-plan-installed-' || ordinal)::uuid,
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid,
+		     'superseded',
+		     1,
+		     'n',
+		     'd',
+		     decode(repeat('00', 32), 'hex'),
+		     now() - interval '16 days'
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_revisions
+		     (id, checklist_id, state, revision_number, name, description,
+		      content_hash, published_at)
+		 SELECT
+		     md5('task3-plan-retired-draft-' || ordinal)::uuid,
+		     md5('task3-plan-retired-checklist-' || ordinal)::uuid,
+		     'draft',
+		     NULL,
+		     'n',
+		     'd',
+		     decode(repeat('00', 32), 'hex'),
+		     NULL
+		 FROM generate_series(1, 5000) AS ordinal`,
+		`INSERT INTO user_pmcs_community_releases
+		     (revision_id, checklist_id)
+		 SELECT
+		     md5('task3-plan-current-' || ordinal)::uuid,
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_community_releases
+		     (revision_id, checklist_id)
+		 SELECT
+		     md5('task3-plan-installed-' || ordinal)::uuid,
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_community_sources
+		     (checklist_id, status, current_release_revision_id,
+		      latest_release_revision_number, first_released_at, updated_at)
+		 SELECT
+		     md5('task3-plan-active-checklist-' || ordinal)::uuid,
+		     'active',
+		     md5('task3-plan-current-' || ordinal)::uuid,
+		     2,
+		     now() - (ordinal * interval '1 second'),
+		     now()
+		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_community_sources
+		     (checklist_id, status, current_release_revision_id,
+		      latest_release_revision_number, first_released_at, updated_at,
+		      retired_at)
+		 SELECT
+		     md5('task3-plan-retired-checklist-' || ordinal)::uuid,
+		     'retired',
+		     NULL,
+		     1,
+		     now(),
+		     now(),
+		     now()
+		 FROM generate_series(1, 5000) AS ordinal`,
+		`INSERT INTO user_pmcs_revision_models
+		     (revision_id, display_text, normalized_text)
+		 SELECT
+		     md5('task3-plan-current-' || ordinal)::uuid,
+		     CASE
+		         WHEN ordinal = 1 THEN 'm1165a1-performance-model'
+		         ELSE 'performance-model-' || (ordinal - 1)
+		     END,
+		     CASE
+		         WHEN ordinal = 1 THEN 'm1165a1-performance-model'
+		         ELSE 'performance-model-' || (ordinal - 1)
+		     END
+		 FROM generate_series(1, 500) AS ordinal`,
+		`WITH historical_revisions AS (
+		     SELECT
+		         md5('task3-plan-history-' || sequence)::uuid AS id,
+		         md5(
+		             'task3-plan-active-checklist-' ||
+		             (((sequence - 1) % 500) + 1)
+		         )::uuid AS checklist_id,
+		         (((sequence - 1) / 500) + 1)::integer AS history_ordinal
+		     FROM generate_series(1, 7500) AS sequence
+		 ), inserted_revisions AS (
+		     INSERT INTO user_pmcs_revisions
+		         (id, checklist_id, state, revision_number, name, description,
+		          content_hash, published_at)
+		     SELECT
+		         id,
+		         checklist_id,
+		         'superseded',
+		         history_ordinal + 2,
+		         'historical',
+		         'historical',
+		         decode(repeat('00', 32), 'hex'),
+		         now() - ((16 - history_ordinal) * interval '1 day')
+		     FROM historical_revisions
+		     RETURNING id
+		 )
+		 INSERT INTO user_pmcs_revision_models
+		     (revision_id, display_text, normalized_text)
+		 SELECT
+		     id,
+		     'historical-performance-model-' || id,
+		     'historical-performance-model-' || id
+		 FROM inserted_revisions`,
+	}
+	for _, statement := range statements {
+		_, err := tx.ExecContext(ctx, statement)
+		require.NoError(t, err)
+	}
+
+	requireIsolatedContainsModelPlanCardinality(t, ctx, tx)
+	for _, table := range tables {
+		_, err := tx.ExecContext(
+			ctx,
+			"ANALYZE "+pq.QuoteIdentifier(table),
+		)
+		require.NoError(t, err)
+	}
+}
+
+func requireIsolatedContainsModelPlanCardinality(
+	t *testing.T,
+	ctx context.Context,
+	tx *sql.Tx,
+) {
+	t.Helper()
+	var (
+		userCount               int
+		checklistCount          int
+		revisionCount           int
+		historicalRevisionCount int
+		releaseCount            int
+		activeSourceCount       int
+		retiredSourceCount      int
+		modelCount              int
+		matchingModelCount      int
+	)
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT
+		     (SELECT count(*) FROM users),
+		     (SELECT count(*) FROM user_pmcs_checklists),
+		     (SELECT count(*) FROM user_pmcs_revisions),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_revisions
+		         WHERE state = 'superseded'
+		           AND revision_number BETWEEN 3 AND 17
+		     ),
+		     (SELECT count(*) FROM user_pmcs_community_releases),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_community_sources
+		         WHERE status = 'active'
+		     ),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_community_sources
+		         WHERE status = 'retired'
+		     ),
+		     (SELECT count(*) FROM user_pmcs_revision_models),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_revision_models
+		         WHERE normalized_text LIKE '%m1165a1%' ESCAPE '!'
+		     )`,
+	).Scan(
+		&userCount,
+		&checklistCount,
+		&revisionCount,
+		&historicalRevisionCount,
+		&releaseCount,
+		&activeSourceCount,
+		&retiredSourceCount,
+		&modelCount,
+		&matchingModelCount,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 6, userCount)
+	require.Equal(t, 5500, checklistCount)
+	require.Equal(t, 13500, revisionCount)
+	require.Equal(t, 7500, historicalRevisionCount)
+	require.Equal(t, 1000, releaseCount)
+	require.Equal(t, 500, activeSourceCount)
+	require.Equal(t, 5000, retiredSourceCount)
+	require.Equal(t, 8000, modelCount)
+	require.Equal(t, 1, matchingModelCount)
+	t.Logf(
+		"isolated contains-model fixture cardinality users=%d "+
+			"checklists=%d revisions=%d historical_revisions=%d "+
+			"releases=%d active_sources=%d retired_sources=%d "+
+			"model_rows=%d matching_models=%d",
+		userCount,
+		checklistCount,
+		revisionCount,
+		historicalRevisionCount,
+		releaseCount,
+		activeSourceCount,
+		retiredSourceCount,
+		modelCount,
+		matchingModelCount,
+	)
+}
+
+func explainAnalyzePlanWithQueryer(
+	t *testing.T,
+	ctx context.Context,
+	queryer performancePlanQueryer,
+	query string,
+	args ...any,
+) string {
+	t.Helper()
+	rows, err := queryer.QueryContext(
 		ctx,
 		"EXPLAIN (ANALYZE, BUFFERS) "+query,
 		args...,

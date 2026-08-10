@@ -243,3 +243,25 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 		"every user PMCS child foreign key must have a non-partial leading index",
 	)
 }
+
+func TestUserPmcsModelContainsSearchIndex(t *testing.T) {
+	requireUserPmcsTestDatabase(t, testDB)
+
+	var indexDefinition string
+	err := testDB.QueryRow(`
+		SELECT pg_get_indexdef(index_class.oid)
+		FROM pg_class AS index_class
+		JOIN pg_namespace AS index_schema
+			ON index_schema.oid = index_class.relnamespace
+		WHERE index_schema.nspname = 'public'
+			AND index_class.relname =
+				'user_pmcs_revision_models_search_trgm_idx'`,
+	).Scan(&indexDefinition)
+	require.NoError(t, err)
+	require.Contains(t, indexDefinition, "USING gin")
+	require.Contains(
+		t,
+		indexDefinition,
+		"normalized_text gin_trgm_ops",
+	)
+}
