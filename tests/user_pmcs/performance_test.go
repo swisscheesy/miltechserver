@@ -2568,13 +2568,34 @@ func explainAnalyzeIsolatedContainsModelPlan(
 	connection, err := testDB.Conn(ctx)
 	require.NoError(t, err)
 	defer func() {
-		require.NoError(t, connection.Close())
+		closeErr := connection.Close()
+		if closeErr != nil && !errors.Is(closeErr, sql.ErrConnDone) {
+			t.Errorf("close isolated contains-model connection: %v", closeErr)
+		}
 	}()
 
 	tx, err := connection.BeginTx(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
-		_ = tx.Rollback()
+		rollbackErr := tx.Rollback()
+		if rollbackErr == nil || errors.Is(rollbackErr, sql.ErrTxDone) {
+			return
+		}
+		discardErr := connection.Raw(func(any) error {
+			return driver.ErrBadConn
+		})
+		if discardErr != nil &&
+			!errors.Is(discardErr, driver.ErrBadConn) &&
+			!errors.Is(discardErr, sql.ErrConnDone) {
+			t.Errorf(
+				"discard isolated contains-model connection: %v",
+				discardErr,
+			)
+		}
+		t.Errorf(
+			"rollback isolated contains-model transaction: %v",
+			rollbackErr,
+		)
 	}()
 
 	var databaseName string

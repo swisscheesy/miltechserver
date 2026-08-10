@@ -247,21 +247,38 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 func TestUserPmcsModelContainsSearchIndex(t *testing.T) {
 	requireUserPmcsTestDatabase(t, testDB)
 
-	var indexDefinition string
+	var (
+		indexDefinition string
+		isValid         bool
+		isReady         bool
+	)
 	err := testDB.QueryRow(`
-		SELECT pg_get_indexdef(index_class.oid)
+		SELECT pg_get_indexdef(index_class.oid),
+		       indexed.indisvalid,
+		       indexed.indisready
 		FROM pg_class AS index_class
 		JOIN pg_namespace AS index_schema
 			ON index_schema.oid = index_class.relnamespace
+		JOIN pg_index AS indexed
+			ON indexed.indexrelid = index_class.oid
+		JOIN pg_class AS table_class
+			ON table_class.oid = indexed.indrelid
+		JOIN pg_namespace AS table_schema
+			ON table_schema.oid = table_class.relnamespace
 		WHERE index_schema.nspname = 'public'
 			AND index_class.relname =
-				'user_pmcs_revision_models_search_trgm_idx'`,
-	).Scan(&indexDefinition)
+				'user_pmcs_revision_models_search_trgm_idx'
+			AND table_schema.nspname = 'public'
+			AND table_class.relname = 'user_pmcs_revision_models'`,
+	).Scan(&indexDefinition, &isValid, &isReady)
 	require.NoError(t, err)
-	require.Contains(t, indexDefinition, "USING gin")
-	require.Contains(
+	require.Equal(
 		t,
+		"CREATE INDEX user_pmcs_revision_models_search_trgm_idx "+
+			"ON public.user_pmcs_revision_models USING gin "+
+			"(normalized_text gin_trgm_ops)",
 		indexDefinition,
-		"normalized_text gin_trgm_ops",
 	)
+	require.True(t, isValid)
+	require.True(t, isReady)
 }
