@@ -741,6 +741,41 @@ func TestRepositoryListInspectionsOrdersByPerformedDateDescWithFaultCounts(t *te
 	require.Equal(t, 0, summaries[1].FaultCount)
 }
 
+func TestRepositoryListInspectionsUsesIDAsStableTieBreaker(t *testing.T) {
+	clearPmcsSbsTables(t, testDB)
+	user := testUser("pmcs-list-tie-breaker")
+	ensureUser(t, testDB, user)
+	shopID := createShopWithMember(t, testDB, user, "member")
+	vehicleID := createShopVehicle(t, testDB, shopID, user, "B12-TIE")
+	repo := pmcs_sbs_progress.NewRepository(testDB)
+
+	performedDate := time.Date(2026, time.August, 14, 12, 0, 0, 0, time.UTC)
+	expectedIDs := []uuid.UUID{
+		uuid.MustParse("00000000-0000-0000-0000-000000000003"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+	}
+	insertedIDs := []uuid.UUID{expectedIDs[2], expectedIDs[1], expectedIDs[0]}
+	for _, id := range insertedIDs {
+		inspection := sampleInspection(vehicleID, user.UserID)
+		inspection.ID = id
+		inspection.PerformedDate = performedDate
+		_, err := repo.EnsureInspection(user, inspection)
+		require.NoError(t, err)
+	}
+
+	pageOne, err := repo.ListInspections(user, vehicleID, "", 2, 0)
+	require.NoError(t, err)
+	pageTwo, err := repo.ListInspections(user, vehicleID, "", 2, 2)
+	require.NoError(t, err)
+
+	var actualIDs []uuid.UUID
+	for _, summary := range append(pageOne, pageTwo...) {
+		actualIDs = append(actualIDs, summary.ID)
+	}
+	require.Equal(t, expectedIDs, actualIDs)
+}
+
 func TestRepositoryListInspectionsFiltersByGuideManual(t *testing.T) {
 	clearPmcsSbsTables(t, testDB)
 	user := testUser("pmcs-list-filter")

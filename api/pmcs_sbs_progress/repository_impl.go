@@ -115,7 +115,10 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 	).
 		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
 		WHERE(condition).
-		ORDER_BY(PmcsSbsInspections.PerformedDate.DESC()).
+		ORDER_BY(
+			PmcsSbsInspections.PerformedDate.DESC(),
+			PmcsSbsInspections.ID.DESC(),
+		).
 		LIMIT(int64(limit)).
 		OFFSET(int64(offset))
 
