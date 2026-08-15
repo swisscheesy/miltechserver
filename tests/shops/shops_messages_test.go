@@ -40,6 +40,30 @@ func TestMessagesCreateAndGet(t *testing.T) {
 	messages := decodeStandardResponse(t, getMessagesResp.Body)
 	messagesList := decodeSlice(t, messages.Data)
 	require.Len(t, messagesList, 1)
+	requireAuthorUsername(t, messagesList[0].(map[string]interface{}), "test-user")
+}
+
+func TestMessagesReturnNullForBlankAuthorUsername(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+
+	router := newTestRouter(t)
+	shopID := createShop(t, router, "user-1", "Blank Author Shop")
+	_, err := testDB.Exec(`UPDATE users SET username = '   ' WHERE uid = $1`, "user-1")
+	require.NoError(t, err)
+
+	messageBody := map[string]interface{}{
+		"shop_id": shopID,
+		"message": "No display name",
+	}
+	createResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/messages", messageBody, "user-1")
+	require.Equal(t, http.StatusCreated, createResp.Code)
+
+	getResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/messages", nil, "user-1")
+	require.Equal(t, http.StatusOK, getResp.Code)
+	messages := decodeSlice(t, decodeStandardResponse(t, getResp.Body).Data)
+	require.Len(t, messages, 1)
+	requireAuthorUsername(t, messages[0].(map[string]interface{}), nil)
 }
 
 func TestCreateMessageReply(t *testing.T) {

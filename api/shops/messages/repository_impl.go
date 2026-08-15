@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 	"net/http"
 	"regexp"
@@ -21,6 +22,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func shopMessageAuthorUsernameProjection() Projection {
+	return NULLIF(BTRIM(Users.Username), String("")).AS("author_username")
+}
+
 const (
 	shopMessageImagesContainer = "shop-message-images"
 	blobOperationTimeout       = 30 * time.Second
@@ -31,6 +36,24 @@ type RepositoryImpl struct {
 	db         *sql.DB
 	blobClient *azblob.Client
 	env        *bootstrap.Env
+}
+
+// Keep this as an alias to an anonymous struct. Jet's qrm mapper uses the
+// anonymous embedded-model shape when matching aliased projections.
+type shopMessageResponseRow = struct {
+	model.ShopMessages
+	AuthorUsername *string `sql:"author_username"`
+}
+
+func mapShopMessageResponseRows(rows []shopMessageResponseRow) []response.ShopMessageResponse {
+	messages := make([]response.ShopMessageResponse, len(rows))
+	for i, row := range rows {
+		messages[i] = response.ShopMessageResponse{
+			ShopMessages:   row.ShopMessages,
+			AuthorUsername: row.AuthorUsername,
+		}
+	}
+	return messages
 }
 
 func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *RepositoryImpl {
@@ -62,46 +85,55 @@ func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message mode
 	return &createdMessage, nil
 }
 
-func (repo *RepositoryImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error) {
-	stmt := SELECT(ShopMessages.AllColumns).
-		FROM(ShopMessages).
+func (repo *RepositoryImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error) {
+	stmt := SELECT(ShopMessages.AllColumns, shopMessageAuthorUsernameProjection()).
+		FROM(
+			ShopMessages.
+				LEFT_JOIN(Users, Users.UID.EQ(ShopMessages.UserID)),
+		).
 		WHERE(ShopMessages.ShopID.EQ(String(shopID))).
 		ORDER_BY(ShopMessages.CreatedAt.ASC())
 
-	var messages []model.ShopMessages
-	err := stmt.Query(repo.db, &messages)
+	var rows []shopMessageResponseRow
+	err := stmt.Query(repo.db, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop messages: %w", err)
 	}
 
-	return messages, nil
+	return mapShopMessageResponseRows(rows), nil
 }
 
-func (repo *RepositoryImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, offset int, limit int) ([]model.ShopMessages, error) {
-	stmt := SELECT(ShopMessages.AllColumns).
-		FROM(ShopMessages).
+func (repo *RepositoryImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, offset int, limit int) ([]response.ShopMessageResponse, error) {
+	stmt := SELECT(ShopMessages.AllColumns, shopMessageAuthorUsernameProjection()).
+		FROM(
+			ShopMessages.
+				LEFT_JOIN(Users, Users.UID.EQ(ShopMessages.UserID)),
+		).
 		WHERE(ShopMessages.ShopID.EQ(String(shopID))).
 		ORDER_BY(ShopMessages.CreatedAt.DESC()).
 		LIMIT(int64(limit)).
 		OFFSET(int64(offset))
 
-	var messages []model.ShopMessages
-	err := stmt.Query(repo.db, &messages)
+	var rows []shopMessageResponseRow
+	err := stmt.Query(repo.db, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
 	}
 
-	return messages, nil
+	return mapShopMessageResponseRows(rows), nil
 }
 
-func (repo *RepositoryImpl) GetShopMessagesByCursor(user *bootstrap.User, shopID string, cursorTime time.Time, isBefore bool, limit int) ([]model.ShopMessages, error) {
+func (repo *RepositoryImpl) GetShopMessagesByCursor(user *bootstrap.User, shopID string, cursorTime time.Time, isBefore bool, limit int) ([]response.ShopMessageResponse, error) {
 	condition := ShopMessages.CreatedAt.LT(TimestampzT(cursorTime))
 	if !isBefore {
 		condition = ShopMessages.CreatedAt.GT(TimestampzT(cursorTime))
 	}
 
-	stmt := SELECT(ShopMessages.AllColumns).
-		FROM(ShopMessages).
+	stmt := SELECT(ShopMessages.AllColumns, shopMessageAuthorUsernameProjection()).
+		FROM(
+			ShopMessages.
+				LEFT_JOIN(Users, Users.UID.EQ(ShopMessages.UserID)),
+		).
 		WHERE(
 			ShopMessages.ShopID.EQ(String(shopID)).
 				AND(condition),
@@ -109,13 +141,13 @@ func (repo *RepositoryImpl) GetShopMessagesByCursor(user *bootstrap.User, shopID
 		ORDER_BY(ShopMessages.CreatedAt.DESC()).
 		LIMIT(int64(limit))
 
-	var messages []model.ShopMessages
-	err := stmt.Query(repo.db, &messages)
+	var rows []shopMessageResponseRow
+	err := stmt.Query(repo.db, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cursor-based shop messages: %w", err)
 	}
 
-	return messages, nil
+	return mapShopMessageResponseRows(rows), nil
 }
 
 func (repo *RepositoryImpl) GetShopMessagesCount(user *bootstrap.User, shopID string) (int64, error) {

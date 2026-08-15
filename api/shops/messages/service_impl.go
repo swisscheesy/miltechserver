@@ -67,7 +67,7 @@ func (service *ServiceImpl) CreateShopMessage(user *bootstrap.User, message mode
 	return createdMessage, nil
 }
 
-func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]model.ShopMessages, error) {
+func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -87,7 +87,7 @@ func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string)
 	}
 
 	if messages == nil {
-		return []model.ShopMessages{}, nil
+		return []response.ShopMessageResponse{}, nil
 	}
 
 	return messages, nil
@@ -148,7 +148,7 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 		}
 
 		if messages == nil {
-			messages = []model.ShopMessages{}
+			messages = []response.ShopMessageResponse{}
 		}
 
 		var nextCursor *string
@@ -190,7 +190,7 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 	}
 
 	if messages == nil {
-		messages = []model.ShopMessages{}
+		messages = []response.ShopMessageResponse{}
 	}
 
 	paginatedResponse := &response.PaginatedShopMessagesResponse{

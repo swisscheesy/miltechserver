@@ -62,10 +62,15 @@ type PaginationMetadata struct {
 	HasPrev    bool `json:"has_prev"`
 }
 
+type ShopMessageResponse struct {
+	model.ShopMessages
+	AuthorUsername *string `sql:"author_username" json:"author_username"`
+}
+
 type PaginatedShopMessagesResponse struct {
-	Messages   []model.ShopMessages `json:"messages"`
-	Pagination *PaginationMetadata  `json:"pagination,omitempty"`
-	NextCursor *string              `json:"next_cursor,omitempty"`
+	Messages   []ShopMessageResponse `json:"messages"`
+	Pagination *PaginationMetadata   `json:"pagination,omitempty"`
+	NextCursor *string               `json:"next_cursor,omitempty"`
 }
 
 // ShopDetailResponse includes shop data with calculated statistics

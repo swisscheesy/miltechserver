@@ -19,6 +19,10 @@ func TestMessagesPaginatedUpdateDelete(t *testing.T) {
 
 	getPagedResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/messages/paginated?page=1&limit=1", nil, "user-1")
 	require.Equal(t, http.StatusOK, getPagedResp.Code)
+	pagedData := decodeMap(t, decodeStandardResponse(t, getPagedResp.Body).Data)
+	pagedMessages := pagedData["messages"].([]interface{})
+	require.Len(t, pagedMessages, 1)
+	requireAuthorUsername(t, pagedMessages[0].(map[string]interface{}), "test-user")
 
 	updateBody := map[string]interface{}{
 		"message_id": messageID,

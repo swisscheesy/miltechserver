@@ -126,6 +126,14 @@ func decodeSlice(t *testing.T, data json.RawMessage) []interface{} {
 	return result
 }
 
+func requireAuthorUsername(t *testing.T, message map[string]interface{}, expected interface{}) {
+	t.Helper()
+
+	authorUsername, exists := message["author_username"]
+	require.True(t, exists, "message response must include author_username")
+	require.Equal(t, expected, authorUsername)
+}
+
 func ensureUser(t *testing.T, db *sql.DB, userID string) {
 	t.Helper()
 
@@ -133,7 +141,10 @@ func ensureUser(t *testing.T, db *sql.DB, userID string) {
 	_, err := db.Exec(
 		`INSERT INTO users (uid, email, username, created_at, is_enabled)
 		 VALUES ($1, $2, $3, $4, $5)
-		 ON CONFLICT (uid) DO NOTHING`,
+		 ON CONFLICT (uid) DO UPDATE SET
+			email = EXCLUDED.email,
+			username = EXCLUDED.username,
+			is_enabled = EXCLUDED.is_enabled`,
 		userID,
 		userID+"@example.com",
 		"test-user",
