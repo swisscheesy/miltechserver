@@ -8,7 +8,7 @@ import (
 )
 
 type Repository interface {
-	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
+	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error)
 	GetShopMessagesPaginated(user *bootstrap.User, shopID string, offset int, limit int) ([]response.ShopMessageResponse, error)
 	GetShopMessagesByCursor(user *bootstrap.User, shopID string, cursorTime time.Time, isBefore bool, limit int) ([]response.ShopMessageResponse, error)

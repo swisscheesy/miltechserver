@@ -19,6 +19,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	. "github.com/go-jet/jet/v2/postgres"
+	"github.com/go-jet/jet/v2/qrm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -64,7 +65,15 @@ func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *R
 	}
 }
 
-func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error) {
+func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
+	tx, err := repo.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin shop message transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
 	stmt := ShopMessages.INSERT(
 		ShopMessages.ID,
 		ShopMessages.ShopID,
@@ -74,15 +83,42 @@ func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message mode
 		ShopMessages.UpdatedAt,
 		ShopMessages.IsEdited,
 		ShopMessages.ParentID,
-	).MODEL(message).RETURNING(ShopMessages.AllColumns)
+	).MODEL(message)
 
-	var createdMessage model.ShopMessages
-	err := stmt.Query(repo.db, &createdMessage)
+	_, err = stmt.Exec(tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop message: %w", err)
 	}
 
+	createdMessage, err := getShopMessageResponseByID(tx, message.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get created shop message: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit shop message transaction: %w", err)
+	}
+
 	return &createdMessage, nil
+}
+
+func getShopMessageResponseByID(queryable qrm.Queryable, messageID string) (response.ShopMessageResponse, error) {
+	stmt := SELECT(ShopMessages.AllColumns, shopMessageAuthorUsernameProjection()).
+		FROM(
+			ShopMessages.
+				LEFT_JOIN(Users, Users.UID.EQ(ShopMessages.UserID)),
+		).
+		WHERE(ShopMessages.ID.EQ(String(messageID)))
+
+	var row shopMessageResponseRow
+	if err := stmt.Query(queryable, &row); err != nil {
+		return response.ShopMessageResponse{}, err
+	}
+
+	return response.ShopMessageResponse{
+		ShopMessages:   row.ShopMessages,
+		AuthorUsername: row.AuthorUsername,
+	}, nil
 }
 
 func (repo *RepositoryImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error) {

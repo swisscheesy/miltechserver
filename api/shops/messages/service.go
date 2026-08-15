@@ -8,7 +8,7 @@ import (
 )
 
 type Service interface {
-	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error)
+	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error)
 	GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error)
 	GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
 	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error

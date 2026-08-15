@@ -33,6 +33,8 @@ func TestMessagesCreateAndGet(t *testing.T) {
 
 	createMessageResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/messages", messageBody, "user-1")
 	require.Equal(t, http.StatusCreated, createMessageResp.Code)
+	createdMessage := decodeMap(t, decodeStandardResponse(t, createMessageResp.Body).Data)
+	requireAuthorUsername(t, createdMessage, "test-user")
 
 	getMessagesResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/messages", nil, "user-1")
 	require.Equal(t, http.StatusOK, getMessagesResp.Code)
@@ -58,6 +60,7 @@ func TestMessagesReturnNullForBlankAuthorUsername(t *testing.T) {
 	}
 	createResp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/messages", messageBody, "user-1")
 	require.Equal(t, http.StatusCreated, createResp.Code)
+	requireAuthorUsername(t, decodeMap(t, decodeStandardResponse(t, createResp.Body).Data), nil)
 
 	getResp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/messages", nil, "user-1")
 	require.Equal(t, http.StatusOK, getResp.Code)

@@ -37,7 +37,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*model.ShopMessages, error) {
+func (service *ServiceImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
