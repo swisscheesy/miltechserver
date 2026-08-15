@@ -252,7 +252,7 @@ func normalizeShopSnapshot(result *response.ShopSnapshotResponse) {
 		result.Notifications = []response.VehicleNotificationWithItems{}
 	}
 	if result.Messages == nil {
-		result.Messages = []model.ShopMessages{}
+		result.Messages = []response.ShopMessageResponse{}
 	}
 	if result.Services == nil {
 		result.Services = []response.EquipmentServiceResponse{}

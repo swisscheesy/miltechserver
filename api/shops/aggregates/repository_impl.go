@@ -508,7 +508,7 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 		Vehicles:      []model.ShopVehicle{},
 		Lists:         []response.ShopListWithItems{},
 		Notifications: []response.VehicleNotificationWithItems{},
-		Messages:      []model.ShopMessages{},
+		Messages:      []response.ShopMessageResponse{},
 		Services:      []response.EquipmentServiceResponse{},
 		RecentChanges: []response.NotificationChangeWithUsername{},
 	}
@@ -878,11 +878,13 @@ func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, us
 	return notifications, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotMessages(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopMessages, error) {
+func (repo *RepositoryImpl) getShopSnapshotMessages(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.ShopMessageResponse, error) {
 	const query = `
-SELECT msg.id, msg.shop_id, msg.user_id, msg.message, msg.created_at, msg.updated_at, msg.is_edited, msg.parent_id
+SELECT msg.id, msg.shop_id, msg.user_id, msg.message, msg.created_at, msg.updated_at, msg.is_edited, msg.parent_id,
+       NULLIF(BTRIM(u.username), '') AS author_username
 FROM shop_messages msg
 INNER JOIN shop_members sm ON sm.shop_id = msg.shop_id AND sm.user_id = $2
+LEFT JOIN users u ON u.uid = msg.user_id
 WHERE msg.shop_id = $1
 ORDER BY msg.created_at DESC, msg.id ASC
 LIMIT NULLIF($3, 0)`
@@ -893,13 +895,14 @@ LIMIT NULLIF($3, 0)`
 	}
 	defer rows.Close()
 
-	messages := []model.ShopMessages{}
+	messages := []response.ShopMessageResponse{}
 	for rows.Next() {
-		var message model.ShopMessages
+		var message response.ShopMessageResponse
 		var createdAt sql.NullTime
 		var updatedAt sql.NullTime
 		var isEdited sql.NullBool
 		var parentID sql.NullString
+		var authorUsername sql.NullString
 		err := rows.Scan(
 			&message.ID,
 			&message.ShopID,
@@ -909,6 +912,7 @@ LIMIT NULLIF($3, 0)`
 			&updatedAt,
 			&isEdited,
 			&parentID,
+			&authorUsername,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan shop snapshot message: %w", err)
@@ -917,6 +921,7 @@ LIMIT NULLIF($3, 0)`
 		message.UpdatedAt = nullTimePtr(updatedAt)
 		message.IsEdited = nullBoolPtr(isEdited)
 		message.ParentID = nullStringPtr(parentID)
+		message.AuthorUsername = nullStringPtr(authorUsername)
 		messages = append(messages, message)
 	}
 	if err := rows.Err(); err != nil {

@@ -108,8 +108,28 @@ func TestShopSnapshotIncludeMessages(t *testing.T) {
 	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/snapshot?include=messages&message_limit=1", nil, "user-1")
 	require.Equal(t, http.StatusOK, resp.Code)
 	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
-	require.Len(t, payload["messages"].([]interface{}), 1)
+	messages := payload["messages"].([]interface{})
+	require.Len(t, messages, 1)
+	requireAuthorUsername(t, messages[0].(map[string]interface{}), "test-user")
 	require.Empty(t, payload["vehicles"].([]interface{}))
+}
+
+func TestShopSnapshotMessageIncludesNullBlankAuthorUsername(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouter(t)
+
+	shopID := createShop(t, router, "user-1", "Blank Author Snapshot")
+	_, err := testDB.Exec(`UPDATE users SET username = NULL WHERE uid = $1`, "user-1")
+	require.NoError(t, err)
+	_ = createMessage(t, router, "user-1", shopID, "hello")
+
+	resp := doJSONRequest(t, router, http.MethodGet, "/api/v1/auth/shops/"+shopID+"/snapshot?include=messages", nil, "user-1")
+	require.Equal(t, http.StatusOK, resp.Code)
+	payload := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	messages := payload["messages"].([]interface{})
+	require.Len(t, messages, 1)
+	requireAuthorUsername(t, messages[0].(map[string]interface{}), nil)
 }
 
 func TestShopSnapshotReturnsAllNotificationItemsWhenLimitOmitted(t *testing.T) {

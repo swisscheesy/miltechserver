@@ -8,7 +8,7 @@
 
 ## Overview
 
-The shop messages API now supports direct message replies. A message can reference another message in the same shop by including a `parent_id` in the create request. All message responses — across every existing endpoint — now include a `parent_id` field. It is `null` for top-level messages and a message ID string for replies.
+The shop messages API supports direct message replies. A message can reference another message in the same shop by including a `parent_id` in the create request. All message responses — across every existing endpoint — include a `parent_id` field and an `author_username` field. `parent_id` is `null` for top-level messages and a message ID string for replies. `author_username` is always present and is either the author's current display name or `null`.
 
 No new endpoints were added. Only `POST /shops/messages` has a changed request shape. All GET endpoints return `parent_id` automatically with no query parameter required.
 
@@ -66,6 +66,7 @@ The response data is the newly created message object. It includes the `parent_i
     "id": "11223344-5566-7788-99aa-bbccddeeff00",
     "shop_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "uid-user-123",
+    "author_username": "Garcia",
     "message": "I have it, returning it in 10 minutes.",
     "created_at": "2026-04-06T14:30:00Z",
     "updated_at": "2026-04-06T14:30:00Z",
@@ -84,6 +85,7 @@ The response data is the newly created message object. It includes the `parent_i
     "id": "aabbccdd-eeff-0011-2233-445566778899",
     "shop_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "user_id": "uid-user-123",
+    "author_username": "Garcia",
     "message": "Who has the torque wrench?",
     "created_at": "2026-04-06T14:29:00Z",
     "updated_at": "2026-04-06T14:29:00Z",
@@ -115,6 +117,7 @@ Returns all messages for a shop in ascending chronological order.
       "id": "aabbccdd-eeff-0011-2233-445566778899",
       "shop_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "user_id": "uid-user-123",
+      "author_username": "Garcia",
       "message": "Who has the torque wrench?",
       "created_at": "2026-04-06T14:29:00Z",
       "updated_at": "2026-04-06T14:29:00Z",
@@ -125,6 +128,7 @@ Returns all messages for a shop in ascending chronological order.
       "id": "11223344-5566-7788-99aa-bbccddeeff00",
       "shop_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       "user_id": "uid-user-456",
+      "author_username": null,
       "message": "I have it, returning it in 10 minutes.",
       "created_at": "2026-04-06T14:30:00Z",
       "updated_at": "2026-04-06T14:30:00Z",
@@ -152,6 +156,7 @@ Returns paginated messages. Supports both offset-based (`page`, `limit`) and cur
         "id": "11223344-5566-7788-99aa-bbccddeeff00",
         "shop_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
         "user_id": "uid-user-456",
+        "author_username": null,
         "message": "I have it, returning it in 10 minutes.",
         "created_at": "2026-04-06T14:30:00Z",
         "updated_at": "2026-04-06T14:30:00Z",
@@ -175,6 +180,7 @@ All endpoints return messages using this shape:
 | `id` | string | Unique message ID (UUID) |
 | `shop_id` | string | ID of the shop this message belongs to |
 | `user_id` | string | ID of the user who posted the message |
+| `author_username` | string \| null | Current display name for `user_id`; the key is always present and blank/unavailable names are `null` |
 | `message` | string | Message text content |
 | `created_at` | string (ISO 8601) | When the message was created |
 | `updated_at` | string (ISO 8601) | When the message was last updated |
@@ -185,6 +191,8 @@ All endpoints return messages using this shape:
 
 ## Implementation Notes
 
+- **`author_username` is current account data, not a message-time snapshot.** A later load reflects a changed display name. `user_id` remains the stable identity for ownership and permissions.
+- **The response change is additive for released clients.** Existing clients may ignore the unknown key. Clients that require `author_username` must be released only after the enriched server is deployed, and server rollback must preserve the field after that point.
 - **`parent_id` is optional on create.** Omitting the field and sending `"parent_id": null` are equivalent — both result in a top-level message.
 - **The server does not validate that `parent_id` refers to an existing message.** If an invalid ID is sent, the server will return a `500` error. The mobile app should only send `parent_id` values obtained from previously fetched messages.
 - **There is no depth limit.** A reply can itself be a reply. The API returns a flat list — threading structure must be assembled client-side using `id` and `parent_id`.

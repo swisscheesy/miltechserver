@@ -396,7 +396,7 @@ Message: `Shop snapshot retrieved successfully`
 | `data.vehicles` | array | Vehicles if included; otherwise `[]`. |
 | `data.lists` | array | Lists with items if included; otherwise `[]`. |
 | `data.notifications` | array | Notifications with items if included; otherwise `[]`. |
-| `data.messages` | array | Messages if included; otherwise `[]`. Messages are not part of the default include set. |
+| `data.messages` | array | Messages if included; otherwise `[]`. Every message contains always-present nullable `author_username`. Messages are not part of the default include set. |
 | `data.services` | array | Services if included; otherwise `[]`. |
 | `data.recent_changes` | array | Recent changes if included; otherwise `[]`. Changes are not part of the default include set. |
 | `data.limits` | object | Applied limits after optional omission and max-cap clamping. `null` means no cap was supplied for that section. |
@@ -406,6 +406,18 @@ Message: `Shop snapshot retrieved successfully`
 | Field | Type | Description |
 |-------|------|-------------|
 | `attached_shop_list` | string or null | Optional id of the `shop_lists` row attached to this notification. |
+
+### Message Object
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `user_id` | string | Stable author identity used for ownership and permissions. |
+| `author_username` | string or null | Author's current display name. The key is always present; unavailable or blank names are `null`. |
+
+`author_username` is joined when the snapshot is read and is not a historical
+snapshot. Released clients may ignore this additive key. A client that requires
+the key must be released only after the enriched server is deployed; subsequent
+server rollbacks must preserve it.
 
 ### `shop.counts` Shape
 
@@ -585,6 +597,7 @@ These counts are shop-wide counts, not bounded section lengths.
         "id": "message-123",
         "shop_id": "shop-123",
         "user_id": "firebase-user-1",
+        "author_username": "Garcia",
         "message": "Parts are staged.",
         "created_at": "2026-07-03T15:30:00Z",
         "updated_at": "2026-07-03T15:30:00Z",

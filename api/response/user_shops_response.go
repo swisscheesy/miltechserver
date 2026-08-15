@@ -162,7 +162,7 @@ type ShopSnapshotResponse struct {
 	Vehicles      []model.ShopVehicle              `json:"vehicles"`
 	Lists         []ShopListWithItems              `json:"lists"`
 	Notifications []VehicleNotificationWithItems   `json:"notifications"`
-	Messages      []model.ShopMessages             `json:"messages"`
+	Messages      []ShopMessageResponse            `json:"messages"`
 	Services      []EquipmentServiceResponse       `json:"services"`
 	RecentChanges []NotificationChangeWithUsername `json:"recent_changes"`
 	Limits        ShopSnapshotLimits               `json:"limits"`
