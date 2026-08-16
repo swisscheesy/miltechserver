@@ -577,6 +577,201 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 	}
 }
 
+func TestCommunityTopPaginationToleratesConcurrentScoreMovement(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	fixtures := make([]*releasedChecklistFixture, 4)
+	for index := range fixtures {
+		fixture := newReleasedChecklistFixture(t, 1)
+		_, err := fixture.repository.Release(
+			ctx,
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+		)
+		require.NoError(t, err)
+		_, err = testDB.ExecContext(
+			ctx,
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			time.Date(2026, time.August, 16, 12, 0, index, 0, time.UTC),
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+		fixtures[index] = fixture
+	}
+	for index, fixture := range fixtures {
+		for range index + 1 {
+			insertCommunityVote(
+				t,
+				fixture.checklist,
+				newUserPmcsTestUser(t),
+				1,
+			)
+		}
+	}
+
+	firstPage, err := fixtures[0].repository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortTop},
+	)
+	require.NoError(t, err)
+	require.True(t, firstPage.HasMore)
+	require.NotNil(t, firstPage.NextCursor)
+	requireCommunityTopPageOrdered(t, firstPage.Items)
+	firstIDs := communityChecklistIDs(firstPage.Items)
+	require.Len(t, map[uuid.UUID]struct{}{
+		firstIDs[0]: {}, firstIDs[1]: {},
+	}, len(firstIDs))
+
+	for range 5 {
+		insertCommunityVote(
+			t,
+			fixtures[0].checklist,
+			newUserPmcsTestUser(t),
+			1,
+		)
+	}
+	cursor, err := shared.DecodeCommunityCursor(*firstPage.NextCursor)
+	require.NoError(t, err)
+	secondPage, err := fixtures[0].repository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{
+			After: &cursor,
+			Limit: 2,
+			Sort:  shared.CommunitySortTop,
+		},
+	)
+	require.NoError(t, err)
+	requireCommunityTopPageOrdered(t, secondPage.Items)
+	secondIDs := communityChecklistIDs(secondPage.Items)
+	secondSeen := make(map[uuid.UUID]struct{}, len(secondIDs))
+	for _, checklistID := range secondIDs {
+		_, duplicate := secondSeen[checklistID]
+		require.False(t, duplicate)
+		secondSeen[checklistID] = struct{}{}
+	}
+}
+
+func TestCommunityVotesAllowIndependentConcurrentVoters(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+
+	const voterCount = 12
+	start := make(chan struct{})
+	errs := make(chan error, voterCount)
+	var workers sync.WaitGroup
+	for index := range voterCount {
+		voterUID := newUserPmcsTestUser(t)
+		direction := int16(1)
+		if index%2 != 0 {
+			direction = -1
+		}
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			_, voteErr := fixture.repository.PutVote(
+				ctx,
+				voterUID,
+				fixture.checklist,
+				direction,
+			)
+			errs <- voteErr
+		}()
+	}
+	close(start)
+	waitForWorkers(t, &workers, 10*time.Second)
+	close(errs)
+	for voteErr := range errs {
+		require.NoError(t, voteErr)
+	}
+	require.Equal(t, voterCount, communityVoteTotalCount(t, fixture.checklist))
+	page, err := fixture.repository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), communitySummary(t, page.Items, fixture.checklist).Score)
+}
+
+func TestCommunityVotesSerializeSameVoterPutDelete(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	voterUID := newUserPmcsTestUser(t)
+
+	const operationCount = 20
+	start := make(chan struct{})
+	errs := make(chan error, operationCount)
+	var workers sync.WaitGroup
+	for index := range operationCount {
+		index := index
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			if index%3 == 0 {
+				_, voteErr := fixture.repository.DeleteVote(
+					ctx,
+					voterUID,
+					fixture.checklist,
+				)
+				errs <- voteErr
+				return
+			}
+			direction := int16(1)
+			if index%2 == 0 {
+				direction = -1
+			}
+			_, voteErr := fixture.repository.PutVote(
+				ctx,
+				voterUID,
+				fixture.checklist,
+				direction,
+			)
+			errs <- voteErr
+		}()
+	}
+	close(start)
+	waitForWorkers(t, &workers, 10*time.Second)
+	close(errs)
+	for voteErr := range errs {
+		require.NoError(t, voteErr)
+	}
+
+	rowCount, liveScore := communityVoteRowAndScore(t, fixture.checklist, voterUID)
+	require.LessOrEqual(t, rowCount, 1)
+	if rowCount == 1 {
+		require.Contains(t, []int64{-1, 1}, liveScore)
+	}
+	page, err := fixture.repository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+	)
+	require.NoError(t, err)
+	require.Equal(t, liveScore, communitySummary(t, page.Items, fixture.checklist).Score)
+}
+
 func TestConcurrencyDeadlockClassificationAndBoundedRetryExhaustion(
 	t *testing.T,
 ) {
@@ -613,6 +808,56 @@ func TestConcurrencyDeadlockClassificationAndBoundedRetryExhaustion(
 	)
 	require.Error(t, err)
 	require.Equal(t, 3, attempts)
+}
+
+func requireCommunityTopPageOrdered(
+	t *testing.T,
+	items []shared.CommunitySummary,
+) {
+	t.Helper()
+	for index := 1; index < len(items); index++ {
+		previous := items[index-1]
+		current := items[index]
+		if previous.Score != current.Score {
+			require.GreaterOrEqual(t, previous.Score, current.Score)
+			continue
+		}
+		if !previous.UpdatedAt.Equal(current.UpdatedAt) {
+			require.True(t, previous.UpdatedAt.After(current.UpdatedAt))
+			continue
+		}
+		require.Less(t, previous.ChecklistID.String(), current.ChecklistID.String())
+	}
+}
+
+func communityVoteTotalCount(t *testing.T, checklistID uuid.UUID) int {
+	t.Helper()
+	var count int
+	require.NoError(t, testDB.QueryRowContext(
+		context.Background(),
+		`SELECT count(*) FROM user_pmcs_community_votes WHERE checklist_id = $1`,
+		checklistID,
+	).Scan(&count))
+	return count
+}
+
+func communityVoteRowAndScore(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+) (int, int64) {
+	t.Helper()
+	var count int
+	var score int64
+	require.NoError(t, testDB.QueryRowContext(
+		context.Background(),
+		`SELECT count(*), COALESCE(SUM(direction), 0)::BIGINT
+		 FROM user_pmcs_community_votes
+		 WHERE checklist_id = $1 AND voter_uid = $2`,
+		checklistID,
+		voterUID,
+	).Scan(&count, &score))
+	return count, score
 }
 
 func TestConcurrencyLaterMutationAppearsOnNextDeltaPageOnly(t *testing.T) {

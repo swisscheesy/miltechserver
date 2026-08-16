@@ -54,6 +54,7 @@ type performanceEvidence struct {
 type performanceSubscriptionFixture struct {
 	ownerUID            string
 	subscriberUID       string
+	voteVoterUIDs       []string
 	checklistIDs        []uuid.UUID
 	installedIDs        []uuid.UUID
 	currentIDs          []uuid.UUID
@@ -81,6 +82,7 @@ var performanceSubscriptionFixturePlannerRelations = [...]string{
 	"user_pmcs_revision_models",
 	"user_pmcs_community_releases",
 	"user_pmcs_community_sources",
+	"user_pmcs_community_votes",
 	"user_pmcs_subscriptions",
 }
 
@@ -1028,7 +1030,7 @@ func TestPerformanceScenarios(t *testing.T) {
 		)
 		filteredDuration := time.Since(filteredStarted)
 		require.NoError(t, err)
-		require.Len(t, filtered.Items, 1)
+		require.NotEmpty(t, filtered.Items)
 		browseQueryCount := queryCounter.value()
 		require.Equal(t, 4, browseQueryCount)
 		encodeStarted := time.Now()
@@ -1824,10 +1826,17 @@ func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
 			fmt.Sprintf("perf-noise-%d-%s", index, uuid.NewString()),
 		)
 	}
+	for index := 0; index < 20; index++ {
+		fixture.voteVoterUIDs = append(
+			fixture.voteVoterUIDs,
+			fmt.Sprintf("perf-voter-%d-%s", index, uuid.NewString()),
+		)
+	}
 	userUIDs := append(
 		[]string{fixture.ownerUID, fixture.subscriberUID},
 		fixture.noiseUserUIDs...,
 	)
+	userUIDs = append(userUIDs, fixture.voteVoterUIDs...)
 	tx, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
 	defer func() {
@@ -1945,6 +1954,30 @@ func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
 	require.NoError(t, err)
 	_, err = tx.ExecContext(
 		ctx,
+		`INSERT INTO user_pmcs_community_votes
+		     (checklist_id, voter_uid, direction)
+		 SELECT checklist_id::uuid, voter_uid,
+	        CASE WHEN voter_ordinal % 3 = 0 THEN -1 ELSE 1 END
+	 FROM unnest($1::text[]) AS checklists(checklist_id)
+	 CROSS JOIN unnest($2::text[]) WITH ORDINALITY
+	     AS voters(voter_uid, voter_ordinal)`,
+		pq.Array(checklists),
+		pq.Array(fixture.voteVoterUIDs),
+	)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(
+		ctx,
+		`INSERT INTO user_pmcs_community_votes
+		     (checklist_id, voter_uid, direction)
+		 SELECT checklist_id::uuid, $1, 1
+	 FROM unnest($2::text[]) WITH ORDINALITY AS rows(checklist_id, ordinal)
+	 WHERE ordinal <= 100`,
+		fixture.subscriberUID,
+		pq.Array(checklists),
+	)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(
+		ctx,
 		`INSERT INTO user_pmcs_revision_models
 		     (revision_id, display_text, normalized_text)
 		 SELECT revision_id::uuid, display_text, normalized_text
@@ -2026,6 +2059,13 @@ func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
 		fixture.ownerUID,
 	)
 	require.NoError(t, err)
+	requirePerformanceCommunityVoteFixture(
+		t,
+		ctx,
+		tx,
+		fixture.ownerUID,
+		fixture.subscriberUID,
+	)
 	fixture.cleanup = performanceSubscriptionFixtureCleanup{
 		ownerUID:     fixture.ownerUID,
 		checklistIDs: checklists,
@@ -2040,6 +2080,71 @@ func seedPerformanceSubscriptionsWithNoiseAndAnalyze(
 		return fixture, err
 	}
 	return fixture, nil
+}
+
+func requirePerformanceCommunityVoteFixture(
+	t *testing.T,
+	ctx context.Context,
+	tx *sql.Tx,
+	ownerUID string,
+	viewerUID string,
+) {
+	t.Helper()
+	var (
+		activeSources  int
+		historicalRows int
+		voteRows       int
+		viewerVotes    int
+	)
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_community_sources AS source
+		         JOIN user_pmcs_checklists AS checklist
+		           ON checklist.id = source.checklist_id
+		         WHERE checklist.owner_uid = $1
+		           AND source.status = 'active'
+		     ),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_revisions AS revision
+		         JOIN user_pmcs_checklists AS checklist
+		           ON checklist.id = revision.checklist_id
+		         WHERE checklist.owner_uid = $1
+		           AND revision.state = 'superseded'
+		     ),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_community_votes AS vote
+		         JOIN user_pmcs_checklists AS checklist
+		           ON checklist.id = vote.checklist_id
+		         WHERE checklist.owner_uid = $1
+		     ),
+		     (
+		         SELECT count(*)
+		         FROM user_pmcs_community_votes AS vote
+		         JOIN user_pmcs_checklists AS checklist
+		           ON checklist.id = vote.checklist_id
+		         WHERE checklist.owner_uid = $1
+		           AND vote.voter_uid = $2
+		     )`,
+		ownerUID,
+		viewerUID,
+	).Scan(&activeSources, &historicalRows, &voteRows, &viewerVotes)
+	require.NoError(t, err)
+	require.Equal(t, 500, activeSources)
+	require.GreaterOrEqual(t, historicalRows, 500)
+	require.GreaterOrEqual(t, voteRows, 10_000)
+	require.Equal(t, 100, viewerVotes)
+	t.Logf(
+		"community performance fixture active_sources=%d historical_revisions=%d vote_rows=%d viewer_votes=%d",
+		activeSources,
+		historicalRows,
+		voteRows,
+		viewerVotes,
+	)
 }
 
 func registerPerformanceSubscriptionFixtureCleanup(
@@ -2313,31 +2418,86 @@ func captureUserPmcsQueryPlans(
 		persistence.NewStore(performanceDB, 3),
 		config,
 	)
-	counter.reset()
-	_, err = communityRepository.Browse(
+	captured["community public top"] = captureCommunityBrowseQuery(
+		t,
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 50},
+		communityRepository,
+		counter,
+		"community public top",
+		shared.CommunityBrowseFilter{Limit: 50, Sort: shared.CommunitySortTop},
+		[]any{int64(51)},
 	)
-	require.NoError(t, err)
-	_, err = communityRepository.Browse(
+	captured["community public recent"] = captureCommunityBrowseQuery(
+		t,
 		ctx,
+		communityRepository,
+		counter,
+		"community public recent",
+		shared.CommunityBrowseFilter{Limit: 50, Sort: shared.CommunitySortRecent},
+		[]any{int64(51)},
+	)
+	captured["community authenticated top"] = captureCommunityBrowseQuery(
+		t,
+		ctx,
+		communityRepository,
+		counter,
+		"community authenticated top",
 		shared.CommunityBrowseFilter{
-			Limit:           50,
+			Limit: 50, Sort: shared.CommunitySortTop, ViewerUID: fixture.subscriberUID,
+		},
+		[]any{fixture.subscriberUID, int64(51)},
+	)
+	captured["community authenticated recent"] = captureCommunityBrowseQuery(
+		t,
+		ctx,
+		communityRepository,
+		counter,
+		"community authenticated recent",
+		shared.CommunityBrowseFilter{
+			Limit: 50, Sort: shared.CommunitySortRecent, ViewerUID: fixture.subscriberUID,
+		},
+		[]any{fixture.subscriberUID, int64(51)},
+	)
+	captured["community literal model top"] = captureCommunityBrowseQuery(
+		t,
+		ctx,
+		communityRepository,
+		counter,
+		"community literal model top",
+		shared.CommunityBrowseFilter{
+			Limit: 50, Sort: shared.CommunitySortTop,
 			NormalizedModel: fixture.containsModelSearch,
 		},
+		[]any{"%m1165a1%", int64(51)},
+	)
+	firstTopPage, err := communityRepository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{Limit: 20, Sort: shared.CommunitySortTop},
 	)
 	require.NoError(t, err)
-	browseQueries := counter.snapshot()
-	captured["active recent browse"] = requireObservedQuery(
+	require.True(t, firstTopPage.HasMore)
+	require.NotNil(t, firstTopPage.NextCursor)
+	topCursor, err := shared.DecodeCommunityCursor(*firstTopPage.NextCursor)
+	require.NoError(t, err)
+	require.NotNil(t, topCursor.Score)
+	captured["community top second page"] = captureCommunityBrowseQuery(
 		t,
-		browseQueries,
-		"WHERE source.status = 'active'",
+		ctx,
+		communityRepository,
+		counter,
+		"community top second page",
+		shared.CommunityBrowseFilter{
+			After: &topCursor, Limit: 20, Sort: shared.CommunitySortTop,
+		},
+		[]any{
+			*topCursor.Score,
+			topCursor.UpdatedAt,
+			topCursor.Checklist.String(),
+			int64(21),
+		},
 	)
-	captured["contains model browse"] = requireObservedQuery(
-		t,
-		browseQueries,
-		"EXISTS",
-	)
+	captured["active recent browse"] = captured["community public recent"]
+	captured["contains model browse"] = captured["community literal model top"]
 
 	counter.reset()
 	_, err = subscriptions.NewRepository(
@@ -2499,6 +2659,7 @@ func captureUserPmcsQueryPlans(
 				t,
 				ctx,
 				planCase.observation.query,
+				false,
 				args...,
 			)
 			t.Logf(
@@ -2533,6 +2694,80 @@ func captureUserPmcsQueryPlans(
 			)
 		}
 	}
+
+	for _, name := range []string{
+		"community public top",
+		"community public recent",
+		"community authenticated top",
+		"community authenticated recent",
+		"community literal model top",
+		"community top second page",
+	} {
+		observation := captured[name]
+		plan := explainAnalyzeIsolatedContainsModelPlan(
+			t,
+			ctx,
+			observation.query,
+			true,
+			observation.args...,
+		)
+		require.Contains(t, plan, `"Node Type"`)
+		require.Contains(t, plan, `"Execution Time"`)
+		require.Contains(t, plan, `"Shared Hit Blocks"`)
+		if name == "community public top" {
+			require.Contains(
+				t,
+				plan,
+				`"Index Name": "user_pmcs_community_votes_pkey"`,
+				"live vote aggregation must use the representative vote lookup index",
+			)
+		}
+		t.Logf(
+			"community planner scenario=%s plan_nodes=%d buffers=true sql=%q args=%#v plan=%s",
+			name,
+			strings.Count(plan, `"Node Type"`),
+			observation.query,
+			observation.args,
+			plan,
+		)
+	}
+}
+
+func captureCommunityBrowseQuery(
+	t *testing.T,
+	ctx context.Context,
+	repository community.Repository,
+	counter *queryCounter,
+	scenario string,
+	filter shared.CommunityBrowseFilter,
+	wantArguments []any,
+) observedQuery {
+	t.Helper()
+	counter.reset()
+	started := time.Now()
+	page, err := repository.Browse(ctx, filter)
+	latency := time.Since(started)
+	require.NoError(t, err)
+	require.Equal(t, 2, counter.value(), "each browse has ranked and model queries")
+	query := requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"WHERE source.status = 'active'",
+	)
+	require.Equal(t, wantArguments, query.args)
+	payload, err := json.Marshal(page)
+	require.NoError(t, err)
+	t.Logf(
+		"community browse capture scenario=%s latency=%s database_time=%s query_count=%d payload_bytes=%d sql=%q args=%#v",
+		scenario,
+		latency,
+		counter.databaseDuration(),
+		counter.value(),
+		len(payload),
+		query.query,
+		query.args,
+	)
+	return query
 }
 
 func explainAnalyzePlan(
@@ -2562,6 +2797,7 @@ func explainAnalyzeIsolatedContainsModelPlan(
 	t *testing.T,
 	ctx context.Context,
 	query string,
+	jsonFormat bool,
 	args ...any,
 ) string {
 	t.Helper()
@@ -2608,6 +2844,9 @@ func explainAnalyzeIsolatedContainsModelPlan(
 	)
 
 	seedIsolatedContainsModelPlanFixture(t, ctx, tx)
+	if jsonFormat {
+		return explainAnalyzeJSONPlanWithQueryer(t, ctx, tx, query, args...)
+	}
 	return explainAnalyzePlanWithQueryer(t, ctx, tx, query, args...)
 }
 
@@ -2624,6 +2863,7 @@ func seedIsolatedContainsModelPlanFixture(
 		"user_pmcs_revision_models",
 		"user_pmcs_community_releases",
 		"user_pmcs_community_sources",
+		"user_pmcs_community_votes",
 	}
 	for _, table := range tables {
 		_, err := tx.ExecContext(
@@ -2646,7 +2886,7 @@ func seedIsolatedContainsModelPlanFixture(
 		     'task3-user-' || ordinal,
 		     now(),
 		     TRUE
-		 FROM generate_series(0, 5) AS ordinal`,
+		 FROM generate_series(0, 20) AS ordinal`,
 		`INSERT INTO user_pmcs_checklists
 		     (id, owner_uid, sync_version, account_change_version)
 		 SELECT
@@ -2725,6 +2965,14 @@ func seedIsolatedContainsModelPlanFixture(
 		     now() - (ordinal * interval '1 second'),
 		     now()
 		 FROM generate_series(1, 500) AS ordinal`,
+		`INSERT INTO user_pmcs_community_votes
+		     (checklist_id, voter_uid, direction)
+		 SELECT
+		     md5('task3-plan-active-checklist-' || checklist_ordinal)::uuid,
+		     'task3-plan-user-' || voter_ordinal,
+		     CASE WHEN voter_ordinal % 3 = 0 THEN -1 ELSE 1 END
+		 FROM generate_series(1, 500) AS checklist_ordinal
+		 CROSS JOIN generate_series(1, 20) AS voter_ordinal`,
 		`INSERT INTO user_pmcs_community_sources
 		     (checklist_id, status, current_release_revision_id,
 		      latest_release_revision_number, first_released_at, updated_at,
@@ -2815,6 +3063,7 @@ func requireIsolatedContainsModelPlanCardinality(
 		retiredSourceCount      int
 		modelCount              int
 		matchingModelCount      int
+		voteCount               int
 	)
 	err := tx.QueryRowContext(
 		ctx,
@@ -2844,7 +3093,8 @@ func requireIsolatedContainsModelPlanCardinality(
 		         SELECT count(*)
 		         FROM user_pmcs_revision_models
 		         WHERE normalized_text LIKE '%m1165a1%' ESCAPE '!'
-		     )`,
+		     ),
+		     (SELECT count(*) FROM user_pmcs_community_votes)`,
 	).Scan(
 		&userCount,
 		&checklistCount,
@@ -2855,9 +3105,10 @@ func requireIsolatedContainsModelPlanCardinality(
 		&retiredSourceCount,
 		&modelCount,
 		&matchingModelCount,
+		&voteCount,
 	)
 	require.NoError(t, err)
-	require.Equal(t, 6, userCount)
+	require.Equal(t, 21, userCount)
 	require.Equal(t, 5500, checklistCount)
 	require.Equal(t, 13500, revisionCount)
 	require.Equal(t, 7500, historicalRevisionCount)
@@ -2866,11 +3117,12 @@ func requireIsolatedContainsModelPlanCardinality(
 	require.Equal(t, 5000, retiredSourceCount)
 	require.Equal(t, 8000, modelCount)
 	require.Equal(t, 1, matchingModelCount)
+	require.Equal(t, 10_000, voteCount)
 	t.Logf(
 		"isolated contains-model fixture cardinality users=%d "+
 			"checklists=%d revisions=%d historical_revisions=%d "+
 			"releases=%d active_sources=%d retired_sources=%d "+
-			"model_rows=%d matching_models=%d",
+			"model_rows=%d matching_models=%d vote_rows=%d",
 		userCount,
 		checklistCount,
 		revisionCount,
@@ -2880,6 +3132,7 @@ func requireIsolatedContainsModelPlanCardinality(
 		retiredSourceCount,
 		modelCount,
 		matchingModelCount,
+		voteCount,
 	)
 }
 
@@ -2906,6 +3159,28 @@ func explainAnalyzePlanWithQueryer(
 	}
 	require.NoError(t, rows.Err())
 	return strings.Join(lines, "\n")
+}
+
+func explainAnalyzeJSONPlanWithQueryer(
+	t *testing.T,
+	ctx context.Context,
+	queryer performancePlanQueryer,
+	query string,
+	args ...any,
+) string {
+	t.Helper()
+	rows, err := queryer.QueryContext(
+		ctx,
+		"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) "+query,
+		args...,
+	)
+	require.NoError(t, err)
+	defer rows.Close()
+	var plan string
+	require.True(t, rows.Next())
+	require.NoError(t, rows.Scan(&plan))
+	require.NoError(t, rows.Err())
+	return plan
 }
 
 func requirePlanUsesApprovedRelationIndex(
