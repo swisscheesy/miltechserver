@@ -72,6 +72,23 @@ func (stub *publicRepositoryStub) Retire(
 	return nil, nil
 }
 
+func (stub *publicRepositoryStub) PutVote(
+	context.Context,
+	string,
+	uuid.UUID,
+	int16,
+) (*shared.CommunityVoteMutation, error) {
+	return nil, nil
+}
+
+func (stub *publicRepositoryStub) DeleteVote(
+	context.Context,
+	string,
+	uuid.UUID,
+) (*shared.CommunityVoteMutation, error) {
+	return nil, nil
+}
+
 func (stub *publicRepositoryStub) Browse(
 	_ context.Context,
 	filter shared.CommunityBrowseFilter,

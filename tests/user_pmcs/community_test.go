@@ -1153,6 +1153,260 @@ func TestCommunityBrowseRanksLiveVoteScoresAndProjectsViewerState(t *testing.T) 
 	require.NotEmpty(t, filtered.Items[0].Models)
 }
 
+func TestCommunityVoteLifecycleIsIdempotentAndSwitchesDirectly(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	voterUID := newUserPmcsTestUser(t)
+	beforeAccountVersion := accountVersion(t, voterUID)
+
+	first, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, fixture.checklist, first.ChecklistID)
+	require.Equal(t, int64(1), first.Score)
+	require.NotNil(t, first.MyVote)
+	require.Equal(t, int16(1), *first.MyVote)
+	createdAt := communityVoteCreatedAt(t, fixture.checklist, voterUID)
+
+	same, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), same.Score)
+	require.NotNil(t, same.MyVote)
+	require.Equal(t, int16(1), *same.MyVote)
+	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
+	require.Equal(
+		t,
+		createdAt,
+		communityVoteCreatedAt(t, fixture.checklist, voterUID),
+	)
+
+	toDownvote, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		-1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(-1), toDownvote.Score)
+	require.NotNil(t, toDownvote.MyVote)
+	require.Equal(t, int16(-1), *toDownvote.MyVote)
+	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
+	require.Equal(
+		t,
+		createdAt,
+		communityVoteCreatedAt(t, fixture.checklist, voterUID),
+	)
+
+	toUpvote, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), toUpvote.Score)
+	require.NotNil(t, toUpvote.MyVote)
+	require.Equal(t, int16(1), *toUpvote.MyVote)
+	require.Equal(t, beforeAccountVersion, accountVersion(t, voterUID))
+
+	deleted, err := fixture.repository.DeleteVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), deleted.Score)
+	require.Nil(t, deleted.MyVote)
+	require.Equal(t, 0, communityVoteCount(t, fixture.checklist, voterUID))
+
+	absent, err := fixture.repository.DeleteVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), absent.Score)
+	require.Nil(t, absent.MyVote)
+	require.Equal(t, beforeAccountVersion, accountVersion(t, voterUID))
+}
+
+func TestCommunityVoteStartsWithDownvote(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	mutation, err := fixture.repository.PutVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		fixture.checklist,
+		-1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(-1), mutation.Score)
+	require.NotNil(t, mutation.MyVote)
+	require.Equal(t, int16(-1), *mutation.MyVote)
+}
+
+func TestCommunityVoteRejectsInvalidDirectionWithoutWriting(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	voterUID := newUserPmcsTestUser(t)
+	_, err = fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		0,
+	)
+	requireAPIIntegrationError(t, err, 400, "invalid_request")
+	require.Equal(t, 0, communityVoteCount(t, fixture.checklist, voterUID))
+}
+
+func TestCommunityVoteRejectsOwnerAndMissingAccount(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	_, err = fixture.repository.PutVote(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusForbidden, "forbidden")
+
+	_, err = fixture.repository.DeleteVote(
+		context.Background(),
+		"missing-voter-"+uuid.NewString(),
+		fixture.checklist,
+	)
+	requireAPIIntegrationError(
+		t,
+		err,
+		http.StatusConflict,
+		"account_not_initialized",
+	)
+}
+
+func TestCommunityVoteHidesUnavailableSources(t *testing.T) {
+	unknownFixture := newReleasedChecklistFixture(t, 1)
+	unknownUID := newUserPmcsTestUser(t)
+	_, err := unknownFixture.repository.PutVote(
+		context.Background(),
+		unknownUID,
+		uuid.New(),
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+
+	deletedFixture := newReleasedChecklistFixture(t, 1)
+	deletedRelease, err := deletedFixture.repository.Release(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		deletedFixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedFixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = deletedFixture.owned.DeleteChecklist(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedRelease.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = deletedFixture.repository.DeleteVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		deletedFixture.checklist,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+
+	retiredFixture := newReleasedChecklistFixture(t, 1)
+	retiredRelease, err := retiredFixture.repository.Release(
+		context.Background(),
+		retiredFixture.ownerUID,
+		retiredFixture.checklist,
+		retiredFixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			retiredFixture.checklist,
+			retiredFixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = retiredFixture.repository.Retire(
+		context.Background(),
+		retiredFixture.ownerUID,
+		retiredFixture.checklist,
+		checklistPrecondition(
+			retiredFixture.checklist,
+			retiredRelease.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = retiredFixture.repository.PutVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		retiredFixture.checklist,
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+}
+
 func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-24 * time.Hour)
 	normalizedModel := "task10-moving-" + uuid.NewString()
@@ -1309,6 +1563,44 @@ func insertCommunityVote(
 		direction,
 	)
 	require.NoError(t, err)
+}
+
+func communityVoteCount(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+) int {
+	t.Helper()
+	var count int
+	err := testDB.QueryRowContext(
+		context.Background(),
+		`SELECT count(*)
+		 FROM user_pmcs_community_votes
+		 WHERE checklist_id = $1 AND voter_uid = $2`,
+		checklistID,
+		voterUID,
+	).Scan(&count)
+	require.NoError(t, err)
+	return count
+}
+
+func communityVoteCreatedAt(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+) time.Time {
+	t.Helper()
+	var createdAt time.Time
+	err := testDB.QueryRowContext(
+		context.Background(),
+		`SELECT created_at
+		 FROM user_pmcs_community_votes
+		 WHERE checklist_id = $1 AND voter_uid = $2`,
+		checklistID,
+		voterUID,
+	).Scan(&createdAt)
+	require.NoError(t, err)
+	return createdAt
 }
 
 func summaryCreator(

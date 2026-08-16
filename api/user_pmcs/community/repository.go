@@ -37,6 +37,17 @@ type Repository interface {
 		ctx context.Context,
 		checklistID uuid.UUID,
 	) (*shared.PublicChecklistRelease, error)
+	PutVote(
+		ctx context.Context,
+		voterUID string,
+		checklistID uuid.UUID,
+		direction int16,
+	) (*shared.CommunityVoteMutation, error)
+	DeleteVote(
+		ctx context.Context,
+		voterUID string,
+		checklistID uuid.UUID,
+	) (*shared.CommunityVoteMutation, error)
 }
 
 type ReleaseMutationResult struct {

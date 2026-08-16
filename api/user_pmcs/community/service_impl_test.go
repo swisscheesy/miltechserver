@@ -54,6 +54,23 @@ func (stub *repositoryStub) Retire(
 	return stub.retireResult, stub.retireError
 }
 
+func (stub *repositoryStub) PutVote(
+	context.Context,
+	string,
+	uuid.UUID,
+	int16,
+) (*shared.CommunityVoteMutation, error) {
+	return nil, nil
+}
+
+func (stub *repositoryStub) DeleteVote(
+	context.Context,
+	string,
+	uuid.UUID,
+) (*shared.CommunityVoteMutation, error) {
+	return nil, nil
+}
+
 type browseRepositoryStub struct {
 	repositoryStub
 	browseResult *shared.CommunityPage

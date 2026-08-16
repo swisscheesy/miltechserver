@@ -35,6 +35,14 @@ func TestContainsModelPatternEscapesLikeMetacharacters(t *testing.T) {
 	}
 }
 
+func TestIsCommunityVoteDirection(t *testing.T) {
+	require.True(t, isCommunityVoteDirection(1))
+	require.True(t, isCommunityVoteDirection(-1))
+	require.False(t, isCommunityVoteDirection(0))
+	require.False(t, isCommunityVoteDirection(2))
+	require.False(t, isCommunityVoteDirection(-2))
+}
+
 func TestCommunityBrowseQueryRanksAndBindsEveryFilterCombination(t *testing.T) {
 	updatedAt := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
 	checklistID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
