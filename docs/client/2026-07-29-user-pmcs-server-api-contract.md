@@ -6,7 +6,7 @@
 
 **Audience:** mobile sync and community-library clients
 
-**Implementation baseline:** `ffe7b8295dfc7633335adceb209f0da460314217`
+**Implementation baseline:** community voting contract (20 User PMCS routes)
 
 ## Scope
 
@@ -111,10 +111,11 @@ safe `404 resource_not_found` envelope.
 
 ### JSON request rules
 
-The three body-bearing routes accept only an uncompressed
+Checklist creation, draft replacement, publication, and vote `PUT` accept only an uncompressed
 `Content-Type: application/json` request. The uncompressed body ceiling is
-8,388,608 bytes. Unknown fields, a second JSON value, malformed JSON, and
-invalid UTF-8 are rejected. The other mutation routes have no request JSON.
+8,388,608 bytes for complete revisions and 1,024 bytes for a vote. Unknown
+fields, a second JSON value, malformed JSON, and invalid UTF-8 are rejected.
+All other mutation routes have no request JSON.
 
 UUID inputs must parse as nonzero UUIDs. The server accepts the textual forms
 supported by `github.com/google/uuid.Parse`; clients should send, and will
@@ -133,6 +134,8 @@ construct them from `sync_version`.
   deletion mutations all use the parent checklist ETag.
 - Subscription unsubscribe, resubscribe, and update acceptance use the
   subscription ETag.
+- Community vote mutations use no conditional header and return no ETag. They
+  are independent of checklist/subscription ETags and account-delta changes.
 - Supplying both `If-None-Match` and `If-Match` to subscription installation is
   invalid.
 - A proven idempotent retry returns `200`, the canonical current data, and the
@@ -605,11 +608,12 @@ tombstoned or owner-deleted source cannot reactivate.
 `GET /api/v1/user-pmcs/community`
 
 - Auth: none.
-- Query: optional opaque `after`; optional `limit` `1..50`, default `20`;
-  optional `model`, normalized by the server and matched as a literal,
-  case-agnostic substring against revision-level models on each active current
-  release. `%`, `_`, and `!` are literal search characters. Start again
-  without `after` whenever `model` changes.
+- Query: optional `sort` is `top` or `recent`, default `top`; optional opaque
+  `after`; optional `limit` `1..50`, default `20`; optional `model`, normalized
+  by the server and matched as a literal case-agnostic substring against
+  revision-level models on each active current release. `%`, `_`, and `!` are
+  literal search characters. Start again without `after` whenever `sort` or
+  `model` changes.
 - Body/conditional: none.
 - Response: `200`; `Cache-Control: public, no-cache`;
   `Vary: Accept-Encoding`; gzip supported.
@@ -631,23 +635,138 @@ tombstoned or owner-deleted source cannot reactivate.
         "models": [],
         "creator_display_name": "Maintainer",
         "released_at": "2026-07-30T12:00:00Z",
-        "updated_at": "2026-07-30T12:00:00Z"
+        "updated_at": "2026-07-30T12:00:00Z",
+        "score": 12
       }
     ]
   }
 }
 ```
 
-`next_cursor` is omitted when absent. The opaque cursor internally anchors
-version `1`, `updated_at`, and `checklist_id`; clients must not decode or
-construct it. Active sources sort by `updated_at DESC`, then checklist UUID.
-Because this is a mutable recency feed, a concurrent release can move an item
-ahead of an in-progress cursor; restart at the first page to refresh.
+`next_cursor` is omitted when absent. The opaque cursor records its format
+version, sort, `updated_at`, checklist UUID, and Score for `top`; clients must
+not decode or construct it. A cursor for one sort is rejected for the other.
+Top order is `score DESC`, `updated_at DESC`, then checklist UUID ascending.
+Recent order is `updated_at DESC`, then checklist UUID ascending. A vote does
+not change `updated_at`.
+
+Both feeds are mutable. Concurrent votes can move a source across an in-flight
+Top cursor boundary, and concurrent releases can do the same for Recent. A
+duplicate or omission across pages is therefore possible. The server guarantees
+deterministic order for one observed query state, not a cross-request snapshot;
+clients merge by checklist ID and restart from the first page on refresh.
 
 Public output contains current `creator_display_name`, never UID or email.
 After retained-owner account deletion it is `"Deleted user"`.
 
-### 12. Get current public release
+### 12. Browse authenticated community
+
+`GET /api/v1/auth/user-pmcs/community`
+
+- Auth: required.
+- Query and cursor rules: exactly the public browse rules above.
+- Body/conditional: none.
+- Response: `200`; `Cache-Control: private, no-cache`;
+  `Vary: Accept-Encoding`; gzip supported.
+
+The page and its shared summary fields are the same as public browse, but each
+item additionally always includes personalized fields:
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "next_cursor": "opaque-value",
+    "has_more": true,
+    "items": [
+      {
+        "checklist_id": "60000000-0000-4000-8000-000000000001",
+        "revision_id": "10000000-0000-4000-8000-000000000001",
+        "revision_number": 1,
+        "name": "M998 Preventive Maintenance",
+        "description": "Operator-authored checklist",
+        "models": [],
+        "creator_display_name": "Maintainer",
+        "released_at": "2026-08-16T12:00:00Z",
+        "updated_at": "2026-08-16T12:00:00Z",
+        "score": 12,
+        "my_vote": 1,
+        "can_vote": true
+      }
+    ]
+  }
+}
+```
+
+`my_vote` is exactly `1`, `-1`, or `null`. `can_vote` is false for the source
+owner and true for another authenticated user on an active returned source.
+Public responses never contain either personalized field and no response
+exposes voter IDs, owner UIDs, or email.
+
+### 13. Cast or switch a community vote
+
+`PUT /api/v1/auth/user-pmcs/community/{checklist_id}/vote`
+
+- Auth: required.
+- Path: nonzero source checklist UUID.
+- Header: no ETag or conditional header.
+- Body: exactly the following strict JSON; `direction` must be the JSON integer
+  `1` or `-1`.
+- Response: `200`; `Cache-Control: private, no-cache`; no ETag.
+
+```json
+{
+  "direction": 1
+}
+```
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "checklist_id": "60000000-0000-4000-8000-000000000001",
+    "score": 12,
+    "my_vote": 1
+  }
+}
+```
+
+The same-direction `PUT` is idempotent. An opposite-direction `PUT` switches
+the vote in one request. Missing, fractional, string, zero, or other direction
+values are `400 invalid_request`.
+
+### 14. Remove a community vote
+
+`DELETE /api/v1/auth/user-pmcs/community/{checklist_id}/vote`
+
+- Auth: required.
+- Path: nonzero source checklist UUID.
+- Body/query/conditional: none.
+- Response: `200`; `Cache-Control: private, no-cache`; no ETag.
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "checklist_id": "60000000-0000-4000-8000-000000000001",
+    "score": 11,
+    "my_vote": null
+  }
+}
+```
+
+Removing an absent vote succeeds idempotently. Owner self-vote is `403
+forbidden`; an unknown, deleted, retired, or otherwise unavailable source is
+safe `404 resource_not_found`; missing or malformed authentication is `401
+authentication_required`; an uninitialized account is `409
+account_not_initialized`; and authenticated mutation throttling is `429
+rate_limited`. Votes are remote-only: they create no account-delta entry,
+Drift row, outbox operation, or checklist/subscription ETag change.
+
+### 15. Get current public release
 
 `GET /api/v1/user-pmcs/community/{checklist_id}`
 
@@ -661,7 +780,7 @@ After retained-owner account deletion it is `"Deleted user"`.
 Retired, deleted, never-released, and superseded-unreleased resources return
 safe `404`.
 
-### 13. Install or resubscribe
+### 16. Install or resubscribe
 
 `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}`
 
@@ -679,7 +798,7 @@ source cannot be newly installed. A create-style attempt against a retained
 subscription tombstone returns `412`; resubscription must mutate that
 tombstone with its ETag.
 
-### 14. Unsubscribe
+### 17. Unsubscribe
 
 `DELETE /api/v1/auth/user-pmcs/subscriptions/{checklist_id}`
 
@@ -699,7 +818,7 @@ When this is the final pin for an already owner-null, checklist-tombstoned,
 retired source, unsubscribe also removes the otherwise unreachable retained
 release/tree. It does not reclaim active or owned checklist history.
 
-### 15. Discover subscription updates
+### 18. Discover subscription updates
 
 `GET /api/v1/auth/user-pmcs/subscriptions/updates`
 
@@ -736,7 +855,7 @@ order. Retired sources have `source_status: "retired"`, omit both current
 release fields, and report `update_available: false`. Tombstoned subscriptions
 are omitted. This read does not mutate versions or fan out release writes.
 
-### 16. Accept current higher release
+### 19. Accept current higher release
 
 `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}`
 
@@ -752,7 +871,7 @@ installed revision. A missing or deleted subscription returns safe `404`
 before source transition state is evaluated. An existing subscription whose
 source cannot transition returns `409 invalid_transition`.
 
-### 17. Redownload exact pinned release
+### 20. Redownload exact pinned release
 
 `GET /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}`
 

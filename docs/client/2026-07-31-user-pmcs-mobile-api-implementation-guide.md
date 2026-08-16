@@ -6,8 +6,8 @@
 
 **Audience:** mobile engineers implementing private synchronization, community browsing, and linked community installations
 
-**Verified server contract:** the Git revision containing this guide; the prior
-17-route audit baseline was `517c7c1fd95edc4bd22ed17b4056a8fc69958c92`
+**Verified server contract:** the Git revision containing this guide; the
+implemented route inventory is 20 endpoints, including community voting.
 
 ## Purpose and scope
 
@@ -37,13 +37,16 @@ payloads.
 | 8 | `DELETE /api/v1/auth/user-pmcs/checklists/{checklist_id}` | Owner | Permanently delete an owned checklist and retain a lightweight tombstone. |
 | 9 | `PUT /api/v1/auth/user-pmcs/checklists/{checklist_id}/community-releases/{revision_id}` | Owner | Make an immutable publication the current public release. |
 | 10 | `DELETE /api/v1/auth/user-pmcs/checklists/{checklist_id}/community-source` | Owner | Retire the checklist from new community discovery and installation. |
-| 11 | `GET /api/v1/user-pmcs/community` | Public | Browse recent active community releases, optionally filtered by model. |
-| 12 | `GET /api/v1/user-pmcs/community/{checklist_id}` | Public | Fetch the complete current public release before preview or installation. |
-| 13 | `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}` | Required | Install a linked release or explicitly resubscribe after unsubscribe. |
-| 14 | `DELETE /api/v1/auth/user-pmcs/subscriptions/{checklist_id}` | Subscriber | Unsubscribe and retain a per-account tombstone. |
-| 15 | `GET /api/v1/auth/user-pmcs/subscriptions/updates` | Required | Check lightweight update availability without downloading full trees. |
-| 16 | `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}` | Subscriber | Accept the current higher community release and advance the pin. |
-| 17 | `GET /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}` | Subscriber | Redownload the exact pinned immutable release, including after retirement. |
+| 11 | `GET /api/v1/user-pmcs/community` | Public | Browse Top/Recent active releases with Score. |
+| 12 | `GET /api/v1/auth/user-pmcs/community` | Required | Browse personalized Top/Recent releases with Score, `my_vote`, and `can_vote`. |
+| 13 | `PUT /api/v1/auth/user-pmcs/community/{checklist_id}/vote` | Required | Cast or directly switch the caller's vote. |
+| 14 | `DELETE /api/v1/auth/user-pmcs/community/{checklist_id}/vote` | Required | Remove the caller's vote. |
+| 15 | `GET /api/v1/user-pmcs/community/{checklist_id}` | Public | Fetch the complete current public release before preview or installation. |
+| 16 | `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}` | Required | Install a linked release or explicitly resubscribe after unsubscribe. |
+| 17 | `DELETE /api/v1/auth/user-pmcs/subscriptions/{checklist_id}` | Subscriber | Unsubscribe and retain a per-account tombstone. |
+| 18 | `GET /api/v1/auth/user-pmcs/subscriptions/updates` | Required | Check lightweight update availability without downloading full trees. |
+| 19 | `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}` | Subscriber | Accept the current higher community release and advance the pin. |
+| 20 | `GET /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}` | Subscriber | Redownload the exact pinned immutable release, including after retirement. |
 
 Before implementing the route DTOs, read the cross-cutting sections on
 [success and error envelopes](#success-and-error-envelopes),
@@ -741,7 +744,8 @@ structured envelope above.
 
 ## JSON request rules
 
-Only checklist creation, draft replacement, and publication accept a JSON
+Only checklist creation, draft replacement, publication, and community-vote
+`PUT` accept a JSON
 body. For those three routes:
 
 - send uncompressed UTF-8 JSON;
@@ -750,7 +754,8 @@ body. For those three routes:
 - do not send unknown fields; and
 - keep the uncompressed body at or below 8,388,608 bytes.
 
-Every other mutation has no request JSON. Do not send `{}` merely to satisfy a
+Vote `PUT` has a 1,024-byte body limit and accepts exactly `{"direction":1}`
+or `{"direction":-1}`. Every other mutation has no request JSON. Do not send `{}` merely to satisfy a
 generic networking wrapper.
 
 All IDs should be canonical lowercase hyphenated nonzero UUIDs. Mobile creates
@@ -769,6 +774,9 @@ including quotes, and replay it verbatim. Never calculate an ETag from
   strong `If-Match` header.
 - Existing subscription mutations use the latest subscription `ETag` in one
   strong `If-Match` header.
+- Community vote mutations have no ETag or conditional header. They do not
+  change an account-delta cursor, a Drift row, an outbox operation, or either
+  root ETag.
 - Subscription installation must send either `If-None-Match` or `If-Match`,
   never both.
 - A `304 Not Modified` response has no JSON body; retain the cached body.
@@ -786,7 +794,8 @@ The client may request gzip. Full-tree and listing responses can be large, so
 the networking layer should transparently decompress before decoding JSON.
 Respect response `Cache-Control` and `ETag` headers:
 
-- current private resources use `private, no-cache`;
+- current private resources (including authenticated Community browse and vote
+  mutations) use `private, no-cache`;
 - immutable owned history uses `private, max-age=31536000, immutable`;
 - public resources use `public, no-cache`; and
 - deleted checklist tombstones use a private immutable cache policy.
@@ -1160,14 +1169,15 @@ redownload their exact installed release. A voluntarily retired owned source
 may later release only a strictly higher revision. An owner-deleted or
 tombstoned source can never reactivate.
 
-## Public community discovery endpoints
+## Community discovery and voting endpoints
 
 ### 11. Browse active community releases
 
 `GET /api/v1/user-pmcs/community`
 
-**What it is used for:** Populate the public community library with recent
-current releases and optional literal, case-agnostic model substring filtering.
+**What it is used for:** Populate the public community library with Top
+(default) or Recent current releases, their live net Score, and optional
+literal, case-agnostic model substring filtering.
 
 **Why it exists:** The list carries lightweight metadata only, which keeps
 browsing fast. The mobile client downloads the complete tree only when the user
@@ -1176,13 +1186,14 @@ opens a result.
 **Request**
 
 - Authentication: none.
+- Query `sort`: `top` or `recent`; omitted means `top`.
 - Query `after`: optional opaque cursor from the preceding page.
 - Query `limit`: `1..50`; defaults to `20`.
 - Query `model`: optional revision-level model text. The server normalizes the
   value and returns active current releases containing that literal normalized
   substring. Matching is case agnostic; `%`, `_`, and `!` have no wildcard
-  behavior. Discard `after` and restart from page one whenever the search text
-  changes.
+  behavior. Discard `after` and restart from page one whenever `sort` or the
+  search text changes.
 - Body/conditional header: none.
 
 Both requests below can return a current release whose model is `M1165A1`:
@@ -1192,9 +1203,9 @@ GET /api/v1/user-pmcs/community?limit=20&model=m1165
 GET /api/v1/user-pmcs/community?limit=20&model=M1165A1
 ```
 
-Example request, first page: `GET /api/v1/user-pmcs/community?limit=20&model=M998%20HMMWV`
+Example Top request, first page: `GET /api/v1/user-pmcs/community?sort=top&limit=20&model=M998%20HMMWV`
 
-Example request, next page: `GET /api/v1/user-pmcs/community?after=opaque-value&limit=20&model=M998%20HMMWV`
+Example Recent request, next page: `GET /api/v1/user-pmcs/community?sort=recent&after=opaque-value&limit=20&model=M998%20HMMWV`
 
 **Response**
 
@@ -1220,25 +1231,136 @@ Example request, next page: `GET /api/v1/user-pmcs/community?after=opaque-value&
         ],
         "creator_display_name": "Maintainer",
         "released_at": "2026-07-31T13:00:00Z",
-        "updated_at": "2026-07-31T13:00:00Z"
+        "updated_at": "2026-07-31T13:00:00Z",
+        "score": 12
       }
     ]
   }
 }
 ```
 
-`next_cursor` is omitted on the final page. Active sources sort by
-`updated_at` descending and then checklist UUID. This is a mutable recency
-feed: a concurrent release can move an item ahead of the current cursor. Pull
-to refresh must discard the pagination chain and start again without `after`.
-Do not merge a refreshed first page into an old cursor chain.
+`next_cursor` is omitted on the final page. A cursor is opaque and scoped to
+its sort and model-filter chain; it contains its version, sort, `updated_at`,
+checklist UUID, and Score only for Top. It must never be decoded, edited, or
+reused under another sort. The server rejects a cross-sort cursor.
+
+Top order is Score descending, then `updated_at` descending, then checklist
+UUID ascending. Recent order is `updated_at` descending, then checklist UUID
+ascending. A vote does not change `updated_at`. This is a mutable feed: a
+concurrent vote can move a Top item and a concurrent release can move a Recent
+item across a cursor boundary. Duplicate or omitted cards across pages are
+therefore possible. Merge cards by checklist ID, retain the tapped card's
+visual position, and pull-to-refresh by starting a new first-page chain.
 
 The displayed creator name is current at read time. It is never a UID or
 email. Retained content whose owner account was deleted displays
 `"Deleted user"`. A filter that yields no results is a normal `200` with an
 empty `items` array and `has_more: false`.
 
-### 12. Fetch the current public release
+### 12. Browse authenticated community
+
+`GET /api/v1/auth/user-pmcs/community`
+
+Use this endpoint instead of public browse whenever a verified application
+account is available. Its query, default, filter, cursor, ordering, and
+mutable-feed rules exactly match endpoint 11. It returns `Cache-Control:
+private, no-cache` and gzip `Vary: Accept-Encoding`; public browse remains
+`public, no-cache` and must never include personalized fields.
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "next_cursor": "opaque-value",
+    "has_more": true,
+    "items": [
+      {
+        "checklist_id": "60000000-0000-4000-8000-000000000001",
+        "revision_id": "10000000-0000-4000-8000-000000000002",
+        "revision_number": 2,
+        "name": "M998 Preventive Maintenance",
+        "description": "Updated publication",
+        "models": [],
+        "creator_display_name": "Maintainer",
+        "released_at": "2026-08-16T13:00:00Z",
+        "updated_at": "2026-08-16T13:00:00Z",
+        "score": 12,
+        "my_vote": 1,
+        "can_vote": true
+      }
+    ]
+  }
+}
+```
+
+`my_vote` is always present and is `1`, `-1`, or `null`. `can_vote` is false
+for the creator and true for another authenticated user on an active result.
+Never infer either field on a public response; public JSON omits them.
+
+### 13. Cast or switch a community vote
+
+`PUT /api/v1/auth/user-pmcs/community/{checklist_id}/vote`
+
+Send no ETag or conditional header. The strict request body is exactly:
+
+```json
+{
+  "direction": 1
+}
+```
+
+Only integer `1` and `-1` are accepted. The authoritative result is:
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "checklist_id": "60000000-0000-4000-8000-000000000001",
+    "score": 12,
+    "my_vote": 1
+  }
+}
+```
+
+The same direction is idempotent; the opposite direction switches directly in
+one request. Optimistically update just that card's Score and `my_vote`, guard
+that checklist against a second in-flight vote, keep its list position, and
+replace the optimistic values with this response. Roll back exactly the prior
+card state when the request fails; do not enqueue, persist, or retry it after
+process death.
+
+### 14. Remove a community vote
+
+`DELETE /api/v1/auth/user-pmcs/community/{checklist_id}/vote`
+
+This has no body, ETag, account-delta, Drift, or outbox effect. It is
+idempotent and returns the same response shape with `"my_vote": null`:
+
+```json
+{
+  "status": 200,
+  "message": "",
+  "data": {
+    "checklist_id": "60000000-0000-4000-8000-000000000001",
+    "score": 11,
+    "my_vote": null
+  }
+}
+```
+
+The source owner receives `403 forbidden`. Unknown, deleted, retired, and
+otherwise unavailable sources deliberately return safe `404
+resource_not_found`; malformed UUID/direction is `400 invalid_request`; a
+missing account is `409 account_not_initialized`; and generic mutation
+throttling is `429 rate_limited`. Treat these as failed optimistic operations
+and roll back. Do not send an automatic vote after login: a guest tap shows the
+**Sign in to vote** dialog with **Cancel** and **Log in**; Log in opens the
+existing login flow, then personalized browse reloads and the user must tap
+again.
+
+### 15. Fetch the current public release
 
 `GET /api/v1/user-pmcs/community/{checklist_id}`
 
@@ -1298,7 +1420,7 @@ stale browse card and let the user refresh.
 
 ## Linked subscription endpoints
 
-### 13. Install a community checklist or resubscribe
+### 16. Install a community checklist or resubscribe
 
 `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}`
 
@@ -1374,7 +1496,7 @@ release is current when the installation transaction succeeds; always display
 the canonical returned `Installed` tree rather than assuming it matches the
 preview.
 
-### 14. Unsubscribe from an installed checklist
+### 17. Unsubscribe from an installed checklist
 
 `DELETE /api/v1/auth/user-pmcs/subscriptions/{checklist_id}`
 
@@ -1417,7 +1539,7 @@ then remove the installed tree from active local views. A repeated delete with
 the current tombstone ETag is idempotent. A tombstoned subscription cannot read
 its former pin or accept an update.
 
-### 15. Discover available subscription updates
+### 18. Discover available subscription updates
 
 `GET /api/v1/auth/user-pmcs/subscriptions/updates`
 
@@ -1479,7 +1601,7 @@ Refresh from the first page when the app needs a new snapshot. The client may
 cache these rows as presentation metadata, but the subscription object and
 installed release remain authoritative.
 
-### 16. Accept the current higher release
+### 19. Accept the current higher release
 
 `PUT /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}`
 
@@ -1550,7 +1672,7 @@ update discovery. A stale subscription ETag returns `412`; reconcile the
 subscription first. Missing or deleted subscriptions return safe `404` before
 source state is evaluated.
 
-### 17. Redownload the exact pinned release
+### 20. Redownload the exact pinned release
 
 `GET /api/v1/auth/user-pmcs/subscriptions/{checklist_id}/installed-releases/{revision_id}`
 
@@ -1703,10 +1825,11 @@ release must use refreshed checklist state when the failure is `412`.
 
 ### Browsing, previewing, and installing community content
 
-1. Use endpoint 11 for recent cards. Restart at page one for pull-to-refresh.
-2. Use endpoint 12 to fetch a selected card's current full tree and preview it.
-3. If the user installs, call endpoint 13 with `If-None-Match: *`.
-4. Treat endpoint 13's returned `Installed` object as authoritative, because a
+1. Use endpoint 11 for public cards or endpoint 12 when signed in; both default
+   to Top. Restart at page one whenever sort/model changes or on refresh.
+2. Use endpoint 15 to fetch a selected card's current full tree and preview it.
+3. If the user installs, call endpoint 16 with `If-None-Match: *`.
+4. Treat endpoint 16's returned `Installed` object as authoritative, because a
    newer release may have become current after preview.
 5. Persist the subscription, installed release, and ETag in one transaction.
 6. Display the installed checklist as linked and read-only. Do not expose it as
@@ -1716,13 +1839,26 @@ If install returns `412` because a tombstone exists, load that tombstone and
 require an explicit resubscribe action using its ETag. Do not silently turn a
 create attempt into resubscription.
 
+### Voting on community cards
+
+1. Keep Score visible for guests and signed-in users. Fetch endpoint 12 after
+   authentication so `my_vote` and `can_vote` are authoritative.
+2. On an eligible tap, optimistically apply an upvote, downvote, removal, or
+   direct switch to the in-memory card only. Do not reorder the current list.
+3. Call endpoint 13 for up/down/switch or endpoint 14 for a selected-direction
+   removal. On success, replace the optimistic Score and `my_vote` from the
+   mutation response; on failure, restore the exact prior card state.
+4. Owners keep disabled controls and must not call a vote endpoint. Guests see
+   the sign-in dialog and, after login, reload personalized browse without
+   replaying the attempted vote.
+
 ### Discovering and accepting a community update
 
-1. Page through endpoint 15 from the beginning to build a fresh lightweight
+1. Page through endpoint 18 from the beginning to build a fresh lightweight
    snapshot.
 2. Display update UI only when `source_status` is `active` and
    `update_available` is `true`.
-3. When the user accepts, call endpoint 16 with the advertised current release
+3. When the user accepts, call endpoint 19 with the advertised current release
    UUID and the latest subscription ETag.
 4. On `200`, atomically replace the subscription, full installed release, and
    ETag from the capitalized response wrapper.
@@ -1732,7 +1868,7 @@ create attempt into resubscription.
    still active and still pinned to the expected older revision.
 
 Never change local installed content merely because update discovery reports a
-higher number. The pin advances only after endpoint 16 succeeds and its full
+higher number. The pin advances only after endpoint 19 succeeds and its full
 canonical response is durable.
 
 ### Retirement, redownload, unsubscribe, and resubscribe
@@ -1809,6 +1945,7 @@ on the defaults.
 | `429 rate_limited` | Retry later with exponential backoff and jitter; do not spin. |
 | `500 internal_error` | Preserve local work and retry exact idempotent operations with bounded exponential backoff. |
 | `304 Not Modified` | Keep the cached body and metadata; there is no JSON response to decode. |
+| Community-vote failure | Restore the exact pre-tap card state; do not create an outbox retry. |
 
 ## Mobile implementation checklist
 
@@ -1832,6 +1969,11 @@ on the defaults.
 - Keep linked installed content read-only and pinned until explicit update
   acceptance succeeds.
 - Make public browse refresh restart from the first page.
+- Scope Community cursors to sort and model as well as the browse endpoint.
+- Keep public and authenticated Community DTOs distinct; never cache or infer
+  `my_vote`/`can_vote` from public JSON.
+- Apply Community votes optimistically only in memory, roll back failures, and
+  never auto-vote after the guest sign-in flow.
 - Handle `304` before attempting JSON decoding.
 - Allow gzip and test decoding of large full-tree responses.
 - Never log Firebase tokens, authored checklist bodies, or private ETags in
