@@ -580,6 +580,7 @@ func TestConcurrencyDifferentUsersDoNotGloballySerialize(t *testing.T) {
 func TestCommunityTopPaginationToleratesConcurrentScoreMovement(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	modelSearch := "task6-moving-score-" + uuid.NewString()
 	fixtures := make([]*releasedChecklistFixture, 4)
 	for index := range fixtures {
 		fixture := newReleasedChecklistFixture(t, 1)
@@ -591,6 +592,12 @@ func TestCommunityTopPaginationToleratesConcurrentScoreMovement(t *testing.T) {
 			checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 		)
 		require.NoError(t, err)
+		setRevisionModel(
+			t,
+			fixture.revisions[0].Input.ID,
+			modelSearch,
+			modelSearch,
+		)
 		_, err = testDB.ExecContext(
 			ctx,
 			`UPDATE user_pmcs_community_sources
@@ -615,37 +622,45 @@ func TestCommunityTopPaginationToleratesConcurrentScoreMovement(t *testing.T) {
 
 	firstPage, err := fixtures[0].repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortTop},
+		shared.CommunityBrowseFilter{
+			Limit: 2, Sort: shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	require.True(t, firstPage.HasMore)
 	require.NotNil(t, firstPage.NextCursor)
 	requireCommunityTopPageOrdered(t, firstPage.Items)
+	cursor, err := shared.DecodeCommunityCursor(*firstPage.NextCursor)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), *cursor.Score)
+	require.Equal(t, fixtures[2].checklist, cursor.Checklist)
 	firstIDs := communityChecklistIDs(firstPage.Items)
 	require.Len(t, map[uuid.UUID]struct{}{
 		firstIDs[0]: {}, firstIDs[1]: {},
 	}, len(firstIDs))
 
-	for range 5 {
-		insertCommunityVote(
-			t,
-			fixtures[0].checklist,
-			newUserPmcsTestUser(t),
-			1,
-		)
-	}
-	cursor, err := shared.DecodeCommunityCursor(*firstPage.NextCursor)
-	require.NoError(t, err)
+	insertCommunityVote(
+		t,
+		fixtures[0].checklist,
+		newUserPmcsTestUser(t),
+		1,
+	)
 	secondPage, err := fixtures[0].repository.Browse(
 		ctx,
 		shared.CommunityBrowseFilter{
-			After: &cursor,
-			Limit: 2,
-			Sort:  shared.CommunitySortTop,
+			After:           &cursor,
+			Limit:           2,
+			Sort:            shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
 		},
 	)
 	require.NoError(t, err)
 	requireCommunityTopPageOrdered(t, secondPage.Items)
+	require.Len(t, secondPage.Items, 2)
+	movedSummary := communitySummary(t, secondPage.Items, fixtures[0].checklist)
+	require.Equal(t, int64(2), movedSummary.Score)
+	requireCommunityTopPageFollowsCursor(t, secondPage.Items, cursor)
 	secondIDs := communityChecklistIDs(secondPage.Items)
 	secondSeen := make(map[uuid.UUID]struct{}, len(secondIDs))
 	for _, checklistID := range secondIDs {
@@ -659,6 +674,7 @@ func TestCommunityVotesAllowIndependentConcurrentVoters(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	fixture := newReleasedChecklistFixture(t, 1)
+	modelSearch := "task6-independent-voters-" + uuid.NewString()
 	_, err := fixture.repository.Release(
 		ctx,
 		fixture.ownerUID,
@@ -667,6 +683,12 @@ func TestCommunityVotesAllowIndependentConcurrentVoters(t *testing.T) {
 		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 
 	const voterCount = 12
 	start := make(chan struct{})
@@ -700,7 +722,10 @@ func TestCommunityVotesAllowIndependentConcurrentVoters(t *testing.T) {
 	require.Equal(t, voterCount, communityVoteTotalCount(t, fixture.checklist))
 	page, err := fixture.repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	require.Equal(t, int64(0), communitySummary(t, page.Items, fixture.checklist).Score)
@@ -710,6 +735,7 @@ func TestCommunityVotesSerializeSameVoterPutDelete(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	fixture := newReleasedChecklistFixture(t, 1)
+	modelSearch := "task6-same-voter-" + uuid.NewString()
 	_, err := fixture.repository.Release(
 		ctx,
 		fixture.ownerUID,
@@ -718,6 +744,12 @@ func TestCommunityVotesSerializeSameVoterPutDelete(t *testing.T) {
 		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 	voterUID := newUserPmcsTestUser(t)
 
 	const operationCount = 20
@@ -766,7 +798,10 @@ func TestCommunityVotesSerializeSameVoterPutDelete(t *testing.T) {
 	}
 	page, err := fixture.repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	require.Equal(t, liveScore, communitySummary(t, page.Items, fixture.checklist).Score)
@@ -827,6 +862,26 @@ func requireCommunityTopPageOrdered(
 			continue
 		}
 		require.Less(t, previous.ChecklistID.String(), current.ChecklistID.String())
+	}
+}
+
+func requireCommunityTopPageFollowsCursor(
+	t *testing.T,
+	items []shared.CommunitySummary,
+	cursor shared.CommunityCursor,
+) {
+	t.Helper()
+	require.NotNil(t, cursor.Score)
+	for _, item := range items {
+		if item.Score != *cursor.Score {
+			require.Less(t, item.Score, *cursor.Score)
+			continue
+		}
+		if !item.UpdatedAt.Equal(cursor.UpdatedAt) {
+			require.True(t, item.UpdatedAt.Before(cursor.UpdatedAt))
+			continue
+		}
+		require.Greater(t, item.ChecklistID.String(), cursor.Checklist.String())
 	}
 }
 

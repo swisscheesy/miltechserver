@@ -1255,6 +1255,7 @@ func TestCommunityVoteLifecycleIsIdempotentAndSwitchesDirectly(t *testing.T) {
 func TestCommunityVotesSurviveRetirementAndHigherRerelease(t *testing.T) {
 	ctx := context.Background()
 	fixture := newReleasedChecklistFixture(t, 2)
+	modelSearch := "task6-retirement-" + uuid.NewString()
 	first, err := fixture.repository.Release(
 		ctx,
 		fixture.ownerUID,
@@ -1263,6 +1264,12 @@ func TestCommunityVotesSurviveRetirementAndHigherRerelease(t *testing.T) {
 		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 	voterUID := newUserPmcsTestUser(t)
 	_, err = fixture.repository.PutVote(ctx, voterUID, fixture.checklist, 1)
 	require.NoError(t, err)
@@ -1275,7 +1282,9 @@ func TestCommunityVotesSurviveRetirementAndHigherRerelease(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
-	page, err := fixture.repository.Browse(ctx, shared.CommunityBrowseFilter{Limit: 10})
+	page, err := fixture.repository.Browse(ctx, shared.CommunityBrowseFilter{
+		Limit: 10, NormalizedModel: modelSearch,
+	})
 	require.NoError(t, err)
 	require.NotContains(t, communityChecklistIDs(page.Items), fixture.checklist)
 
@@ -1287,9 +1296,18 @@ func TestCommunityVotesSurviveRetirementAndHigherRerelease(t *testing.T) {
 		checklistPrecondition(fixture.checklist, retired.Aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[1].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 	rereleased, err := fixture.repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop, ViewerUID: voterUID},
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop, ViewerUID: voterUID,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	summary := communitySummary(t, rereleased.Items, fixture.checklist)
@@ -1356,6 +1374,7 @@ func TestCommunityVoteDoesNotAdvanceAccountVersionOrChecklistETag(t *testing.T) 
 func TestCommunityBrowseOmitsIdentityAndMarksOwnerEligibility(t *testing.T) {
 	ctx := context.Background()
 	fixture := newReleasedChecklistFixture(t, 1)
+	modelSearch := "task6-identity-" + uuid.NewString()
 	_, err := fixture.repository.Release(
 		ctx,
 		fixture.ownerUID,
@@ -1364,12 +1383,18 @@ func TestCommunityBrowseOmitsIdentityAndMarksOwnerEligibility(t *testing.T) {
 		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 	voterUID := newUserPmcsTestUser(t)
 	_, err = fixture.repository.PutVote(ctx, voterUID, fixture.checklist, 1)
 	require.NoError(t, err)
 	service := community.NewService(fixture.repository, shared.DefaultConfig())
 
-	publicPage, err := service.BrowsePublic(ctx, "", "10", "", "top")
+	publicPage, err := service.BrowsePublic(ctx, "", "10", modelSearch, "top")
 	require.NoError(t, err)
 	publicPayload, err := json.Marshal(publicPage)
 	require.NoError(t, err)
@@ -1381,7 +1406,7 @@ func TestCommunityBrowseOmitsIdentityAndMarksOwnerEligibility(t *testing.T) {
 		&bootstrap.User{UserID: fixture.ownerUID},
 		"",
 		"10",
-		"",
+		modelSearch,
 		"top",
 	)
 	require.NoError(t, err)
@@ -1394,7 +1419,7 @@ func TestCommunityBrowseOmitsIdentityAndMarksOwnerEligibility(t *testing.T) {
 		&bootstrap.User{UserID: voterUID},
 		"",
 		"10",
-		"",
+		modelSearch,
 		"top",
 	)
 	require.NoError(t, err)

@@ -791,6 +791,7 @@ func TestAccountDeletionRestrictiveFKRejectsRevisionBeforeRelease(t *testing.T) 
 func TestCommunityVoterDeletionCascadesVotesAndChangesScore(t *testing.T) {
 	ctx := context.Background()
 	fixture := newReleasedChecklistFixture(t, 1)
+	modelSearch := "task6-voter-deletion-" + uuid.NewString()
 	_, err := fixture.repository.Release(
 		ctx,
 		fixture.ownerUID,
@@ -799,6 +800,12 @@ func TestCommunityVoterDeletionCascadesVotesAndChangesScore(t *testing.T) {
 		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
 	)
 	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
 	voterUID := accountDeletionUser(t, "community-voter")
 	otherVoterUID := accountDeletionUser(t, "community-other-voter")
 	insertCommunityVote(t, fixture.checklist, voterUID, 1)
@@ -806,7 +813,10 @@ func TestCommunityVoterDeletionCascadesVotesAndChangesScore(t *testing.T) {
 
 	before, err := fixture.repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	require.Equal(
@@ -825,7 +835,10 @@ func TestCommunityVoterDeletionCascadesVotesAndChangesScore(t *testing.T) {
 
 	after, err := fixture.repository.Browse(
 		ctx,
-		shared.CommunityBrowseFilter{Limit: 10, Sort: shared.CommunitySortTop},
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop,
+			NormalizedModel: modelSearch,
+		},
 	)
 	require.NoError(t, err)
 	require.Equal(

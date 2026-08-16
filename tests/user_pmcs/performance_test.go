@@ -2418,11 +2418,13 @@ func captureUserPmcsQueryPlans(
 		persistence.NewStore(performanceDB, 3),
 		config,
 	)
+	capturedCommunityModelQueries := make(map[string]observedQuery)
 	captured["community public top"] = captureCommunityBrowseQuery(
 		t,
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community public top",
 		shared.CommunityBrowseFilter{Limit: 50, Sort: shared.CommunitySortTop},
 		[]any{int64(51)},
@@ -2432,6 +2434,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community public recent",
 		shared.CommunityBrowseFilter{Limit: 50, Sort: shared.CommunitySortRecent},
 		[]any{int64(51)},
@@ -2441,6 +2444,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community authenticated top",
 		shared.CommunityBrowseFilter{
 			Limit: 50, Sort: shared.CommunitySortTop, ViewerUID: fixture.subscriberUID,
@@ -2452,6 +2456,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community authenticated recent",
 		shared.CommunityBrowseFilter{
 			Limit: 50, Sort: shared.CommunitySortRecent, ViewerUID: fixture.subscriberUID,
@@ -2463,6 +2468,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community literal model top",
 		shared.CommunityBrowseFilter{
 			Limit: 50, Sort: shared.CommunitySortTop,
@@ -2485,6 +2491,7 @@ func captureUserPmcsQueryPlans(
 		ctx,
 		communityRepository,
 		counter,
+		capturedCommunityModelQueries,
 		"community top second page",
 		shared.CommunityBrowseFilter{
 			After: &topCursor, Limit: 20, Sort: shared.CommunitySortTop,
@@ -2703,33 +2710,49 @@ func captureUserPmcsQueryPlans(
 		"community literal model top",
 		"community top second page",
 	} {
-		observation := captured[name]
-		plan := explainAnalyzeIsolatedContainsModelPlan(
-			t,
-			ctx,
-			observation.query,
-			true,
-			observation.args...,
-		)
-		require.Contains(t, plan, `"Node Type"`)
-		require.Contains(t, plan, `"Execution Time"`)
-		require.Contains(t, plan, `"Shared Hit Blocks"`)
-		if name == "community public top" {
-			require.Contains(
+		for _, replay := range []struct {
+			kind        string
+			observation observedQuery
+			voteLookup  bool
+		}{
+			{
+				kind: "ranked summaries", observation: captured[name], voteLookup: true,
+			},
+			{
+				kind:        "batched model hydration",
+				observation: capturedCommunityModelQueries[name],
+			},
+		} {
+			require.NotEmpty(t, replay.observation.query)
+			plan := explainAnalyzeIsolatedContainsModelPlan(
 				t,
+				ctx,
+				replay.observation.query,
+				true,
+				replay.observation.args...,
+			)
+			require.Contains(t, plan, `"Node Type"`)
+			require.Contains(t, plan, `"Execution Time"`)
+			require.Contains(t, plan, `"Shared Hit Blocks"`)
+			if replay.voteLookup {
+				require.Contains(
+					t,
+					plan,
+					`"Index Name": "user_pmcs_community_votes_pkey"`,
+					"%s ranked query must use the representative vote lookup index",
+					name,
+				)
+			}
+			t.Logf(
+				"community planner scenario=%s query=%s plan_nodes=%d buffers=true sql=%q args=%#v plan=%s",
+				name,
+				replay.kind,
+				strings.Count(plan, `"Node Type"`),
+				replay.observation.query,
+				replay.observation.args,
 				plan,
-				`"Index Name": "user_pmcs_community_votes_pkey"`,
-				"live vote aggregation must use the representative vote lookup index",
 			)
 		}
-		t.Logf(
-			"community planner scenario=%s plan_nodes=%d buffers=true sql=%q args=%#v plan=%s",
-			name,
-			strings.Count(plan, `"Node Type"`),
-			observation.query,
-			observation.args,
-			plan,
-		)
 	}
 }
 
@@ -2738,6 +2761,7 @@ func captureCommunityBrowseQuery(
 	ctx context.Context,
 	repository community.Repository,
 	counter *queryCounter,
+	capturedModelQueries map[string]observedQuery,
 	scenario string,
 	filter shared.CommunityBrowseFilter,
 	wantArguments []any,
@@ -2749,12 +2773,19 @@ func captureCommunityBrowseQuery(
 	latency := time.Since(started)
 	require.NoError(t, err)
 	require.Equal(t, 2, counter.value(), "each browse has ranked and model queries")
-	query := requireObservedQuery(
+	rankedQuery := requireObservedQuery(
 		t,
 		counter.snapshot(),
 		"WHERE source.status = 'active'",
 	)
-	require.Equal(t, wantArguments, query.args)
+	require.Equal(t, wantArguments, rankedQuery.args)
+	modelQuery := requireObservedQuery(
+		t,
+		counter.snapshot(),
+		"FROM user_pmcs_revision_models",
+		"WHERE revision_id = ANY",
+	)
+	capturedModelQueries[scenario] = modelQuery
 	payload, err := json.Marshal(page)
 	require.NoError(t, err)
 	t.Logf(
@@ -2764,10 +2795,10 @@ func captureCommunityBrowseQuery(
 		counter.databaseDuration(),
 		counter.value(),
 		len(payload),
-		query.query,
-		query.args,
+		rankedQuery.query,
+		rankedQuery.args,
 	)
-	return query
+	return rankedQuery
 }
 
 func explainAnalyzePlan(
