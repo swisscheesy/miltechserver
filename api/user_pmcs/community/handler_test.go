@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,25 +22,36 @@ import (
 )
 
 type serviceStub struct {
-	releaseResult *ReleaseMutationResult
-	releaseETag   string
-	releaseError  error
-	retireResult  *ReleaseMutationResult
-	retireETag    string
-	retireError   error
-	browseResult  *shared.CommunityPage
-	browseError   error
-	detailResult  *shared.PublicChecklistRelease
-	detailETag    string
-	detailError   error
-	releaseCalls  int
-	retireCalls   int
-	browseCalls   int
-	detailCalls   int
-	browseAfter   string
-	browseLimit   string
-	browseModel   string
-	detailID      string
+	releaseResult    *ReleaseMutationResult
+	releaseETag      string
+	releaseError     error
+	retireResult     *ReleaseMutationResult
+	retireETag       string
+	retireError      error
+	browseResult     *shared.CommunityPage
+	browseError      error
+	detailResult     *shared.PublicChecklistRelease
+	detailETag       string
+	detailError      error
+	releaseCalls     int
+	retireCalls      int
+	browseCalls      int
+	authBrowseCalls  int
+	detailCalls      int
+	putVoteCalls     int
+	deleteVoteCalls  int
+	putVoteResult    *shared.CommunityVoteMutation
+	putVoteError     error
+	deleteVoteResult *shared.CommunityVoteMutation
+	deleteVoteError  error
+	browseAfter      string
+	browseLimit      string
+	browseModel      string
+	browseSort       string
+	putVoteID        string
+	putVoteDirection int16
+	deleteVoteID     string
+	detailID         string
 }
 
 type publicRepositoryStub struct {
@@ -69,6 +81,23 @@ func (stub *publicRepositoryStub) Retire(
 	uuid.UUID,
 	shared.Precondition,
 ) (*ReleaseMutationResult, error) {
+	return nil, nil
+}
+
+func (stub *publicRepositoryStub) PutVote(
+	context.Context,
+	string,
+	uuid.UUID,
+	int16,
+) (*shared.CommunityVoteMutation, error) {
+	return nil, nil
+}
+
+func (stub *publicRepositoryStub) DeleteVote(
+	context.Context,
+	string,
+	uuid.UUID,
+) (*shared.CommunityVoteMutation, error) {
 	return nil, nil
 }
 
@@ -136,6 +165,75 @@ func (stub *serviceStub) Browse(
 	stub.browseLimit = limit
 	stub.browseModel = model
 	return stub.browseResult, stub.browseError
+}
+
+func (stub *serviceStub) browsePublic() (*shared.PublicCommunityPage, error) {
+	stub.browseCalls++
+	if stub.browseError != nil {
+		return nil, stub.browseError
+	}
+	if stub.browseResult == nil {
+		return &shared.PublicCommunityPage{}, nil
+	}
+	return mapPublicCommunityPage(stub.browseResult), nil
+}
+
+func (stub *serviceStub) BrowsePublic(
+	_ context.Context,
+	after string,
+	limit string,
+	model string,
+	sort string,
+) (*shared.PublicCommunityPage, error) {
+	stub.browseAfter = after
+	stub.browseLimit = limit
+	stub.browseModel = model
+	stub.browseSort = sort
+	return stub.browsePublic()
+}
+
+func (stub *serviceStub) BrowseAuthenticated(
+	_ context.Context,
+	_ *bootstrap.User,
+	after string,
+	limit string,
+	model string,
+	sort string,
+) (*shared.AuthenticatedCommunityPage, error) {
+	stub.authBrowseCalls++
+	stub.browseAfter = after
+	stub.browseLimit = limit
+	stub.browseModel = model
+	stub.browseSort = sort
+	if stub.browseError != nil {
+		return nil, stub.browseError
+	}
+	if stub.browseResult == nil {
+		return &shared.AuthenticatedCommunityPage{}, nil
+	}
+	return mapAuthenticatedCommunityPage(stub.browseResult), nil
+}
+
+func (stub *serviceStub) PutVote(
+	_ context.Context,
+	_ *bootstrap.User,
+	checklistID string,
+	direction int16,
+) (*shared.CommunityVoteMutation, error) {
+	stub.putVoteCalls++
+	stub.putVoteID = checklistID
+	stub.putVoteDirection = direction
+	return stub.putVoteResult, stub.putVoteError
+}
+
+func (stub *serviceStub) DeleteVote(
+	_ context.Context,
+	_ *bootstrap.User,
+	checklistID string,
+) (*shared.CommunityVoteMutation, error) {
+	stub.deleteVoteCalls++
+	stub.deleteVoteID = checklistID
+	return stub.deleteVoteResult, stub.deleteVoteError
 }
 
 func (stub *serviceStub) GetCurrentRelease(
@@ -253,7 +351,7 @@ func TestCommunityBrowseHandlerIsAnonymousAndGzipped(t *testing.T) {
 	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
 	stub := &serviceStub{
 		browseResult: &shared.CommunityPage{
-			Items: []shared.PublicCommunitySummary{{
+			Items: []shared.CommunitySummary{{
 				ChecklistID:        checklistID,
 				RevisionID:         revisionID,
 				RevisionNumber:     2,
@@ -263,6 +361,9 @@ func TestCommunityBrowseHandlerIsAnonymousAndGzipped(t *testing.T) {
 				CreatorDisplayName: "Public creator",
 				ReleasedAt:         now,
 				UpdatedAt:          now,
+				Score:              9,
+				MyVote:             pointerToVote(1),
+				CanVote:            true,
 			}},
 		},
 	}
@@ -287,7 +388,173 @@ func TestCommunityBrowseHandlerIsAnonymousAndGzipped(t *testing.T) {
 	body := gunzipResponse(t, response)
 	require.NotContains(t, string(body), "owner_uid")
 	require.NotContains(t, string(body), "email")
+	require.Contains(t, string(body), `"score":9`)
+	require.NotContains(t, string(body), "my_vote")
+	require.NotContains(t, string(body), "can_vote")
 	require.Contains(t, string(body), `"creator_display_name":"Public creator"`)
+}
+
+func TestAuthenticatedCommunityBrowseIsPrivateGzippedAndPersonalized(t *testing.T) {
+	checklistID := uuid.New()
+	stub := &serviceStub{browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{{
+		ChecklistID: checklistID,
+		Score:       5,
+		MyVote:      pointerToVote(-1),
+		CanVote:     true,
+	}}}}
+	router := communityTestRouter(stub, true)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/auth/user-pmcs/community?sort=recent&limit=5",
+		nil,
+	)
+	request.Header.Set("Accept-Encoding", "gzip")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "private, no-cache", response.Header().Get("Cache-Control"))
+	require.Equal(t, "Accept-Encoding", response.Header().Get("Vary"))
+	require.Equal(t, "gzip", response.Header().Get("Content-Encoding"))
+	require.Equal(t, 1, stub.authBrowseCalls)
+	require.Equal(t, "recent", stub.browseSort)
+	data := string(gunzipResponse(t, response))
+	require.Contains(t, data, `"score":5`)
+	require.Contains(t, data, `"my_vote":-1`)
+	require.Contains(t, data, `"can_vote":true`)
+}
+
+func TestAuthenticatedCommunityBrowseSetsVaryWithoutGzip(t *testing.T) {
+	router := communityTestRouter(&serviceStub{}, true)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/auth/user-pmcs/community",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "private, no-cache", response.Header().Get("Cache-Control"))
+	require.Equal(t, "Accept-Encoding", response.Header().Get("Vary"))
+	require.Empty(t, response.Header().Get("Content-Encoding"))
+}
+
+func TestVoteHandlersRequireAuthenticationAndStrictDirection(t *testing.T) {
+	checklistID := uuid.New()
+	stub := &serviceStub{putVoteResult: &shared.CommunityVoteMutation{
+		ChecklistID: checklistID,
+		Score:       6,
+		MyVote:      pointerToVote(1),
+	}}
+
+	missingAuth := communityTestRouter(stub, false)
+	missingAuthResponse := httptest.NewRecorder()
+	missingAuth.ServeHTTP(missingAuthResponse, httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/auth/user-pmcs/community/"+checklistID.String()+"/vote",
+		bytes.NewBufferString(`{"direction":1}`),
+	))
+	require.Equal(t, http.StatusUnauthorized, missingAuthResponse.Code)
+	require.Zero(t, stub.putVoteCalls)
+
+	for _, body := range []string{`{"direction":1}`, `{"direction":-1}`} {
+		router := communityTestRouter(stub, true)
+		request := httptest.NewRequest(
+			http.MethodPut,
+			"/api/v1/auth/user-pmcs/community/"+checklistID.String()+"/vote",
+			bytes.NewBufferString(body),
+		)
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+	}
+	require.Equal(t, 2, stub.putVoteCalls)
+	require.Equal(t, int16(-1), stub.putVoteDirection)
+
+	for _, test := range []struct {
+		name        string
+		body        string
+		contentType string
+		encoding    string
+		status      int
+		code        string
+	}{
+		{"missing direction", `{}`, "application/json", "", 400, "invalid_request"},
+		{"zero", `{"direction":0}`, "application/json", "", 400, "invalid_request"},
+		{"out of range", `{"direction":2}`, "application/json", "", 400, "invalid_request"},
+		{"negative out of range", `{"direction":-2}`, "application/json", "", 400, "invalid_request"},
+		{"fraction", `{"direction":1.5}`, "application/json", "", 400, "invalid_request"},
+		{"string", `{"direction":"1"}`, "application/json", "", 400, "invalid_request"},
+		{"unknown key", `{"direction":1,"extra":true}`, "application/json", "", 400, "invalid_request"},
+		{"two values", `{"direction":1}{}`, "application/json", "", 400, "invalid_request"},
+		{"wrong content type", `{"direction":1}`, "text/plain", "", 400, "invalid_request"},
+		{"compressed", `{"direction":1}`, "application/json", "gzip", 400, "invalid_request"},
+		{"oversized", `{"direction":` + strings.Repeat("1", 1025) + `}`, "application/json", "", 413, "content_too_large"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			router := communityTestRouter(stub, true)
+			request := httptest.NewRequest(
+				http.MethodPut,
+				"/api/v1/auth/user-pmcs/community/"+checklistID.String()+"/vote",
+				bytes.NewBufferString(test.body),
+			)
+			request.Header.Set("Content-Type", test.contentType)
+			request.Header.Set("Content-Encoding", test.encoding)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			require.Equal(t, test.status, response.Code)
+			require.Equal(t, test.code, responseErrorCode(t, response))
+		})
+	}
+	require.Equal(t, 2, stub.putVoteCalls)
+}
+
+func TestVoteHandlersReturnPrivateMutationWithoutETag(t *testing.T) {
+	checklistID := uuid.New()
+	stub := &serviceStub{
+		putVoteResult: &shared.CommunityVoteMutation{
+			ChecklistID: checklistID,
+			Score:       6,
+			MyVote:      pointerToVote(1),
+		},
+		deleteVoteResult: &shared.CommunityVoteMutation{
+			ChecklistID: checklistID,
+			Score:       5,
+		},
+	}
+	router := communityTestRouter(stub, true)
+	putRequest := httptest.NewRequest(
+		http.MethodPut,
+		"/api/v1/auth/user-pmcs/community/"+checklistID.String()+"/vote",
+		bytes.NewBufferString(`{"direction":1}`),
+	)
+	putRequest.Header.Set("Content-Type", "application/json")
+	putResponse := httptest.NewRecorder()
+	router.ServeHTTP(putResponse, putRequest)
+	require.Equal(t, http.StatusOK, putResponse.Code)
+	require.Equal(t, "private, no-cache", putResponse.Header().Get("Cache-Control"))
+	require.Empty(t, putResponse.Header().Get("ETag"))
+	require.Equal(t, 1, stub.putVoteCalls)
+	require.Equal(t, checklistID.String(), stub.putVoteID)
+	require.Equal(t, int16(1), stub.putVoteDirection)
+	require.Contains(t, putResponse.Body.String(), `"checklist_id":"`+checklistID.String()+`"`)
+	require.Contains(t, putResponse.Body.String(), `"score":6`)
+	require.Contains(t, putResponse.Body.String(), `"my_vote":1`)
+
+	deleteResponse := httptest.NewRecorder()
+	router.ServeHTTP(deleteResponse, httptest.NewRequest(
+		http.MethodDelete,
+		"/api/v1/auth/user-pmcs/community/"+checklistID.String()+"/vote",
+		nil,
+	))
+	require.Equal(t, http.StatusOK, deleteResponse.Code)
+	require.Equal(t, "private, no-cache", deleteResponse.Header().Get("Cache-Control"))
+	require.Empty(t, deleteResponse.Header().Get("ETag"))
+	require.Equal(t, 1, stub.deleteVoteCalls)
+	require.Equal(t, checklistID.String(), stub.deleteVoteID)
+	require.Contains(t, deleteResponse.Body.String(), `"my_vote":null`)
 }
 
 func TestCommunityDetailHandlerUsesPublicCacheAndConditionalGET(t *testing.T) {
@@ -454,8 +721,11 @@ func TestCommunityPublicHandlersReturnTypedErrors(t *testing.T) {
 
 func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	config := shared.DefaultConfig()
+	score := int64(0)
 	cursor := shared.CommunityCursor{
-		Version:   1,
+		Version:   2,
+		Sort:      shared.CommunitySortTop,
+		Score:     &score,
 		UpdatedAt: time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC),
 		Checklist: uuid.New(),
 	}
@@ -463,7 +733,7 @@ func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	require.NoError(t, err)
 
 	repository := &publicRepositoryStub{
-		browseResult: &shared.CommunityPage{Items: []shared.PublicCommunitySummary{}},
+		browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{}},
 	}
 	service := NewService(repository, config)
 	_, err = service.Browse(
@@ -509,7 +779,7 @@ func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	}
 
 	maxRepository := &publicRepositoryStub{
-		browseResult: &shared.CommunityPage{Items: []shared.PublicCommunitySummary{}},
+		browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{}},
 	}
 	maxService := NewService(maxRepository, config)
 	_, err = maxService.Browse(

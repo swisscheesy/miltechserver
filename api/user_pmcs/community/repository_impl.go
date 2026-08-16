@@ -275,6 +275,188 @@ func (repository *RepositoryImpl) Retire(
 	)
 }
 
+func (repository *RepositoryImpl) PutVote(
+	ctx context.Context,
+	voterUID string,
+	checklistID uuid.UUID,
+	direction int16,
+) (*shared.CommunityVoteMutation, error) {
+	if !isCommunityVoteDirection(direction) {
+		return nil, shared.NewInvalidRequest(
+			"community vote direction must be 1 or -1",
+			nil,
+		)
+	}
+
+	return persistence.WithWriteTx(
+		ctx,
+		repository.store.DB,
+		repository.store.MaxWriteAttempts,
+		func(tx *sql.Tx) (*shared.CommunityVoteMutation, error) {
+			if err := requireCommunityVoteAccount(ctx, tx, voterUID); err != nil {
+				return nil, err
+			}
+			ownerUID, found, err := lockCommunityVoteSource(
+				ctx,
+				tx,
+				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				return nil, communityVoteNotFoundError()
+			}
+			if ownerUID.Valid && ownerUID.String == voterUID {
+				return nil, shared.NewForbidden(
+					"owners cannot vote on their own checklist",
+					nil,
+				)
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				`INSERT INTO user_pmcs_community_votes (
+				     checklist_id, voter_uid, direction
+				 ) VALUES ($1, $2, $3)
+				 ON CONFLICT (checklist_id, voter_uid) DO UPDATE
+				 SET direction = EXCLUDED.direction,
+				     updated_at = now()`,
+				checklistID,
+				voterUID,
+				direction,
+			); err != nil {
+				return nil, fmt.Errorf("upsert community vote: %w", err)
+			}
+			return loadCommunityVoteMutation(ctx, tx, checklistID, voterUID)
+		},
+	)
+}
+
+func (repository *RepositoryImpl) DeleteVote(
+	ctx context.Context,
+	voterUID string,
+	checklistID uuid.UUID,
+) (*shared.CommunityVoteMutation, error) {
+	return persistence.WithWriteTx(
+		ctx,
+		repository.store.DB,
+		repository.store.MaxWriteAttempts,
+		func(tx *sql.Tx) (*shared.CommunityVoteMutation, error) {
+			if err := requireCommunityVoteAccount(ctx, tx, voterUID); err != nil {
+				return nil, err
+			}
+			ownerUID, found, err := lockCommunityVoteSource(
+				ctx,
+				tx,
+				checklistID,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				return nil, communityVoteNotFoundError()
+			}
+			if ownerUID.Valid && ownerUID.String == voterUID {
+				return nil, shared.NewForbidden(
+					"owners cannot vote on their own checklist",
+					nil,
+				)
+			}
+			if _, err := tx.ExecContext(
+				ctx,
+				`DELETE FROM user_pmcs_community_votes
+				 WHERE checklist_id = $1 AND voter_uid = $2`,
+				checklistID,
+				voterUID,
+			); err != nil {
+				return nil, fmt.Errorf("delete community vote: %w", err)
+			}
+			return loadCommunityVoteMutation(ctx, tx, checklistID, voterUID)
+		},
+	)
+}
+
+func isCommunityVoteDirection(direction int16) bool {
+	return direction == 1 || direction == -1
+}
+
+func requireCommunityVoteAccount(
+	ctx context.Context,
+	queryer persistence.Queryer,
+	voterUID string,
+) error {
+	var exists bool
+	if err := queryer.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE uid = $1)`,
+		voterUID,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("verify community voter account: %w", err)
+	}
+	if !exists {
+		return shared.NewAccountNotInitialized("account is not initialized", nil)
+	}
+	return nil
+}
+
+func lockCommunityVoteSource(
+	ctx context.Context,
+	tx *sql.Tx,
+	checklistID uuid.UUID,
+) (sql.NullString, bool, error) {
+	var ownerUID sql.NullString
+	err := tx.QueryRowContext(
+		ctx,
+		`SELECT checklist.owner_uid
+		 FROM user_pmcs_community_sources AS source
+		 JOIN user_pmcs_checklists AS checklist ON checklist.id = source.checklist_id
+		 WHERE source.checklist_id = $1
+		   AND source.status = 'active'
+		   AND checklist.deleted_at IS NULL
+		 FOR SHARE OF source, checklist`,
+		checklistID,
+	).Scan(&ownerUID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return sql.NullString{}, false, nil
+	}
+	if err != nil {
+		return sql.NullString{}, false, fmt.Errorf("lock community vote source: %w", err)
+	}
+	return ownerUID, true, nil
+}
+
+func loadCommunityVoteMutation(
+	ctx context.Context,
+	queryer persistence.Queryer,
+	checklistID uuid.UUID,
+	voterUID string,
+) (*shared.CommunityVoteMutation, error) {
+	mutation := shared.CommunityVoteMutation{ChecklistID: checklistID}
+	var myVote sql.NullInt16
+	if err := queryer.QueryRowContext(
+		ctx,
+		`SELECT COALESCE(SUM(vote.direction), 0)::BIGINT,
+		        (SELECT direction
+		         FROM user_pmcs_community_votes
+		         WHERE checklist_id = $1 AND voter_uid = $2)
+		 FROM user_pmcs_community_votes AS vote
+		 WHERE vote.checklist_id = $1`,
+		checklistID,
+		voterUID,
+	).Scan(&mutation.Score, &myVote); err != nil {
+		return nil, fmt.Errorf("load community vote mutation: %w", err)
+	}
+	if myVote.Valid {
+		direction := int16(myVote.Int16)
+		mutation.MyVote = &direction
+	}
+	return &mutation, nil
+}
+
+func communityVoteNotFoundError() *shared.APIError {
+	return shared.NewResourceNotFound("community checklist not found", nil)
+}
+
 func (repository *RepositoryImpl) Browse(
 	ctx context.Context,
 	filter shared.CommunityBrowseFilter,
@@ -291,11 +473,12 @@ func (repository *RepositoryImpl) Browse(
 	}
 	defer rows.Close()
 
-	items := make([]shared.PublicCommunitySummary, 0, filter.Limit+1)
+	items := make([]shared.CommunitySummary, 0, filter.Limit+1)
 	for rows.Next() {
 		var (
-			item     shared.PublicCommunitySummary
+			item     shared.CommunitySummary
 			username sql.NullString
+			myVote   sql.NullInt16
 		)
 		if err := rows.Scan(
 			&item.ChecklistID,
@@ -306,11 +489,18 @@ func (repository *RepositoryImpl) Browse(
 			&username,
 			&item.ReleasedAt,
 			&item.UpdatedAt,
+			&item.Score,
+			&myVote,
+			&item.CanVote,
 		); err != nil {
 			return nil, fmt.Errorf("scan community summary: %w", err)
 		}
 		item.Models = []shared.ModelValue{}
 		item.CreatorDisplayName = creatorDisplayName(username)
+		if myVote.Valid {
+			vote := int16(myVote.Int16)
+			item.MyVote = &vote
+		}
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -330,11 +520,17 @@ func (repository *RepositoryImpl) Browse(
 	}
 	if hasMore {
 		last := items[len(items)-1]
-		cursor, err := shared.EncodeCommunityCursor(shared.CommunityCursor{
-			Version:   1,
+		cursorValue := shared.CommunityCursor{
+			Version:   2,
+			Sort:      communityBrowseSort(filter),
 			UpdatedAt: last.UpdatedAt,
 			Checklist: last.ChecklistID,
-		})
+		}
+		if cursorValue.Sort == shared.CommunitySortTop {
+			score := last.Score
+			cursorValue.Score = &score
+		}
+		cursor, err := shared.EncodeCommunityCursor(cursorValue)
 		if err != nil {
 			return nil, fmt.Errorf("encode community cursor: %w", err)
 		}
@@ -355,42 +551,73 @@ func containsModelPattern(normalizedModel string) string {
 func communityBrowseQuery(
 	filter shared.CommunityBrowseFilter,
 ) (string, []any) {
-	query := `SELECT source.checklist_id, revision.id,
-	                 revision.revision_number, revision.name,
-	                 revision.description, owner.username,
-	                 release.released_at, source.updated_at
-	          FROM user_pmcs_community_sources AS source
-	          JOIN user_pmcs_community_releases AS release
-	            ON release.checklist_id = source.checklist_id
-	           AND release.revision_id = source.current_release_revision_id
-	          JOIN user_pmcs_revisions AS revision
-	            ON revision.checklist_id = source.checklist_id
-	           AND revision.id = source.current_release_revision_id
-	          JOIN user_pmcs_checklists AS checklist
-	            ON checklist.id = source.checklist_id
-	          LEFT JOIN users AS owner
-	            ON owner.uid = checklist.owner_uid
-	          WHERE source.status = 'active'
-	            AND checklist.deleted_at IS NULL`
-	arguments := make([]any, 0, 4)
-	if filter.After != nil {
-		arguments = append(
-			arguments,
-			filter.After.UpdatedAt,
-			filter.After.Checklist,
-		)
-		query += fmt.Sprintf(
-			` AND (
-			      source.updated_at < $%d
-			      OR (
-			          source.updated_at = $%d
-			          AND source.checklist_id > $%d
-			      )
-			  )`,
-			len(arguments)-1,
-			len(arguments)-1,
+	sort := communityBrowseSort(filter)
+	arguments := make([]any, 0, 6)
+	viewerSelect := `NULL::SMALLINT AS my_vote,
+	                 FALSE AS can_vote`
+	viewerJoin := ""
+	if filter.ViewerUID != "" {
+		arguments = append(arguments, filter.ViewerUID)
+		viewerSelect = fmt.Sprintf(
+			`viewer_vote.direction AS my_vote,
+		     checklist.owner_uid <> $%d AS can_vote`,
 			len(arguments),
 		)
+		viewerJoin = fmt.Sprintf(
+			`LEFT JOIN user_pmcs_community_votes AS viewer_vote
+		        ON viewer_vote.checklist_id = source.checklist_id
+		       AND viewer_vote.voter_uid = $%d`,
+			len(arguments),
+		)
+	}
+
+	query := fmt.Sprintf(
+		`WITH ranked AS (
+		    SELECT source.checklist_id, revision.id AS revision_id,
+		           revision.revision_number, revision.name,
+		           revision.description, owner.username,
+		           release.released_at, source.updated_at,
+		           vote_total.score,
+		           %s
+		    FROM user_pmcs_community_sources AS source
+		    JOIN user_pmcs_community_releases AS release
+		      ON release.checklist_id = source.checklist_id
+		     AND release.revision_id = source.current_release_revision_id
+		    JOIN user_pmcs_revisions AS revision
+		      ON revision.checklist_id = source.checklist_id
+		     AND revision.id = source.current_release_revision_id
+		    JOIN user_pmcs_checklists AS checklist
+		      ON checklist.id = source.checklist_id
+		    LEFT JOIN users AS owner
+		      ON owner.uid = checklist.owner_uid
+		    LEFT JOIN LATERAL (
+		        SELECT COALESCE(SUM(vote.direction), 0)::BIGINT AS score
+		        FROM user_pmcs_community_votes AS vote
+		        WHERE vote.checklist_id = source.checklist_id
+		    ) AS vote_total ON TRUE
+		    %s
+		    WHERE source.status = 'active'
+		      AND checklist.deleted_at IS NULL`,
+		viewerSelect,
+		viewerJoin,
+	)
+	cursorArgumentStart := 0
+	if filter.After != nil {
+		cursorArgumentStart = len(arguments) + 1
+		if sort == shared.CommunitySortTop {
+			arguments = append(
+				arguments,
+				*filter.After.Score,
+				filter.After.UpdatedAt,
+				filter.After.Checklist,
+			)
+		} else {
+			arguments = append(
+				arguments,
+				filter.After.UpdatedAt,
+				filter.After.Checklist,
+			)
+		}
 	}
 	if filter.NormalizedModel != "" {
 		arguments = append(
@@ -408,19 +635,69 @@ func communityBrowseQuery(
 			len(arguments),
 		)
 	}
-	arguments = append(arguments, filter.Limit+1)
-	query += fmt.Sprintf(
-		` ORDER BY source.updated_at DESC, source.checklist_id ASC
-		  LIMIT $%d`,
-		len(arguments),
+	query += `
 	)
+	SELECT ranked.checklist_id, ranked.revision_id,
+	       ranked.revision_number, ranked.name,
+	       ranked.description, ranked.username,
+	       ranked.released_at, ranked.updated_at,
+	       ranked.score, ranked.my_vote, ranked.can_vote
+	FROM ranked`
+	if filter.After != nil {
+		if sort == shared.CommunitySortTop {
+			query += fmt.Sprintf(
+				` WHERE ranked.score < $%d
+			     OR (ranked.score = $%d AND ranked.updated_at < $%d)
+			     OR (ranked.score = $%d AND ranked.updated_at = $%d
+			         AND ranked.checklist_id > $%d)`,
+				cursorArgumentStart,
+				cursorArgumentStart,
+				cursorArgumentStart+1,
+				cursorArgumentStart,
+				cursorArgumentStart+1,
+				cursorArgumentStart+2,
+			)
+		} else {
+			query += fmt.Sprintf(
+				` WHERE ranked.updated_at < $%d
+			     OR (ranked.updated_at = $%d
+			         AND ranked.checklist_id > $%d)`,
+				cursorArgumentStart,
+				cursorArgumentStart,
+				cursorArgumentStart+1,
+			)
+		}
+	}
+	arguments = append(arguments, filter.Limit+1)
+	if sort == shared.CommunitySortTop {
+		query += fmt.Sprintf(
+			` ORDER BY ranked.score DESC, ranked.updated_at DESC, ranked.checklist_id ASC
+		      LIMIT $%d`,
+			len(arguments),
+		)
+	} else {
+		query += fmt.Sprintf(
+			` ORDER BY ranked.updated_at DESC, ranked.checklist_id ASC
+		      LIMIT $%d`,
+			len(arguments),
+		)
+	}
 	return query, arguments
+}
+
+func communityBrowseSort(
+	filter shared.CommunityBrowseFilter,
+) shared.CommunitySort {
+	if filter.Sort == "" {
+		return shared.CommunitySortTop
+	}
+	return filter.Sort
 }
 
 func loadSummaryModels(
 	ctx context.Context,
 	queryer persistence.Queryer,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 ) error {
 	if len(items) == 0 {
 		return nil

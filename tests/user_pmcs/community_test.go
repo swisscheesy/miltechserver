@@ -2,8 +2,10 @@ package user_pmcs_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"miltechserver/api/user_pmcs/owned"
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/api/user_pmcs/shared"
+	"miltechserver/bootstrap"
 )
 
 type releasedChecklistFixture struct {
@@ -554,7 +557,7 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	require.Equal(t, fixtures[2].checklist, secondPage.Items[0].ChecklistID)
 
 	allItems := append(
-		append([]shared.PublicCommunitySummary{}, firstPage.Items...),
+		append([]shared.CommunitySummary{}, firstPage.Items...),
 		secondPage.Items...,
 	)
 	require.Len(t, allItems, 3)
@@ -984,6 +987,605 @@ func TestCommunityDetailETagChangesWithCreatorDisplayName(t *testing.T) {
 	require.Equal(t, renamed.Header().Get("ETag"), stable.Header().Get("ETag"))
 }
 
+func TestCommunityBrowseRanksLiveVoteScoresAndProjectsViewerState(t *testing.T) {
+	baseTime := time.Date(2026, time.August, 16, 10, 0, 0, 0, time.UTC)
+	fixtures := make([]*releasedChecklistFixture, 5)
+	for index := range fixtures {
+		fixture := newReleasedChecklistFixture(t, 1)
+		released, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		fixture.aggregate = released.Aggregate
+		fixtures[index] = fixture
+	}
+
+	for index, fixture := range fixtures {
+		updatedAt := baseTime
+		switch index {
+		case 2:
+			updatedAt = baseTime.Add(-time.Minute)
+		case 3:
+			updatedAt = baseTime.Add(2 * time.Minute)
+		case 4:
+			updatedAt = baseTime.Add(3 * time.Minute)
+		}
+		_, err := testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			updatedAt,
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+	}
+
+	viewerUID := fixtures[0].ownerUID
+	insertCommunityVote(t, fixtures[0].checklist, viewerUID, 1)
+	insertCommunityVote(t, fixtures[0].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[1].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[1].checklist, viewerUID, 1)
+	insertCommunityVote(t, fixtures[2].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[2].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[4].checklist, newUserPmcsTestUser(t), -1)
+
+	repository := fixtures[0].repository
+	top, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:     10,
+			Sort:      shared.CommunitySortTop,
+			ViewerUID: viewerUID,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, top.Items, 5)
+	tiedIDs := []uuid.UUID{fixtures[0].checklist, fixtures[1].checklist}
+	sort.Slice(tiedIDs, func(left, right int) bool {
+		return tiedIDs[left].String() < tiedIDs[right].String()
+	})
+	require.Equal(
+		t,
+		append(tiedIDs, fixtures[2].checklist, fixtures[3].checklist, fixtures[4].checklist),
+		communityChecklistIDs(top.Items),
+	)
+	require.Equal(t, int64(2), top.Items[0].Score)
+	require.Equal(t, int64(0), top.Items[3].Score)
+	require.Equal(t, int64(-1), top.Items[4].Score)
+	ownerSummary := communitySummary(t, top.Items, fixtures[0].checklist)
+	require.Equal(t, int16(1), *ownerSummary.MyVote)
+	require.False(t, ownerSummary.CanVote)
+	votedSummary := communitySummary(t, top.Items, fixtures[1].checklist)
+	require.Equal(t, int16(1), *votedSummary.MyVote)
+	require.True(t, votedSummary.CanVote)
+	unvotedSummary := communitySummary(t, top.Items, fixtures[2].checklist)
+	require.Nil(t, unvotedSummary.MyVote)
+	require.True(t, unvotedSummary.CanVote)
+
+	recent, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit: 10,
+			Sort:  shared.CommunitySortRecent,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]uuid.UUID{
+			fixtures[4].checklist,
+			fixtures[3].checklist,
+			tiedIDs[0],
+			tiedIDs[1],
+			fixtures[2].checklist,
+		},
+		communityChecklistIDs(recent.Items),
+	)
+	firstRecentPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortRecent},
+	)
+	require.NoError(t, err)
+	require.True(t, firstRecentPage.HasMore)
+	recentCursor, err := shared.DecodeCommunityCursor(*firstRecentPage.NextCursor)
+	require.NoError(t, err)
+	secondRecentPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			After: &recentCursor,
+			Limit: 2,
+			Sort:  shared.CommunitySortRecent,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		communityChecklistIDs(recent.Items)[2:4],
+		communityChecklistIDs(secondRecentPage.Items),
+	)
+
+	firstTopPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortTop},
+	)
+	require.NoError(t, err)
+	require.True(t, firstTopPage.HasMore)
+	topCursor, err := shared.DecodeCommunityCursor(*firstTopPage.NextCursor)
+	require.NoError(t, err)
+	secondTopPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			After: &topCursor,
+			Limit: 2,
+			Sort:  shared.CommunitySortTop,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		communityChecklistIDs(top.Items)[2:4],
+		communityChecklistIDs(secondTopPage.Items),
+	)
+	setRevisionModel(
+		t,
+		fixtures[4].revisions[0].Input.ID,
+		"Ranked filter M1165",
+		"ranked-filter-m1165",
+	)
+
+	filtered, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           1,
+			NormalizedModel: "ranked-filter-m1165",
+			Sort:            shared.CommunitySortTop,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, filtered.Items, 1)
+	require.Equal(t, fixtures[4].checklist, filtered.Items[0].ChecklistID)
+	require.NotEmpty(t, filtered.Items[0].Models)
+}
+
+func TestCommunityVoteLifecycleIsIdempotentAndSwitchesDirectly(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	voterUID := newUserPmcsTestUser(t)
+	beforeAccountVersion := accountVersion(t, voterUID)
+
+	first, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, fixture.checklist, first.ChecklistID)
+	require.Equal(t, int64(1), first.Score)
+	require.NotNil(t, first.MyVote)
+	require.Equal(t, int16(1), *first.MyVote)
+	createdAt := communityVoteCreatedAt(t, fixture.checklist, voterUID)
+
+	same, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), same.Score)
+	require.NotNil(t, same.MyVote)
+	require.Equal(t, int16(1), *same.MyVote)
+	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
+	require.Equal(
+		t,
+		createdAt,
+		communityVoteCreatedAt(t, fixture.checklist, voterUID),
+	)
+
+	toDownvote, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		-1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(-1), toDownvote.Score)
+	require.NotNil(t, toDownvote.MyVote)
+	require.Equal(t, int16(-1), *toDownvote.MyVote)
+	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
+	require.Equal(
+		t,
+		createdAt,
+		communityVoteCreatedAt(t, fixture.checklist, voterUID),
+	)
+
+	toUpvote, err := fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), toUpvote.Score)
+	require.NotNil(t, toUpvote.MyVote)
+	require.Equal(t, int16(1), *toUpvote.MyVote)
+	require.Equal(t, beforeAccountVersion, accountVersion(t, voterUID))
+
+	deleted, err := fixture.repository.DeleteVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), deleted.Score)
+	require.Nil(t, deleted.MyVote)
+	require.Equal(t, 0, communityVoteCount(t, fixture.checklist, voterUID))
+
+	absent, err := fixture.repository.DeleteVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), absent.Score)
+	require.Nil(t, absent.MyVote)
+	require.Equal(t, beforeAccountVersion, accountVersion(t, voterUID))
+}
+
+func TestCommunityVotesSurviveRetirementAndHigherRerelease(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 2)
+	modelSearch := "task6-retirement-" + uuid.NewString()
+	first, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
+	voterUID := newUserPmcsTestUser(t)
+	_, err = fixture.repository.PutVote(ctx, voterUID, fixture.checklist, 1)
+	require.NoError(t, err)
+
+	retired, err := fixture.repository.Retire(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		checklistPrecondition(fixture.checklist, first.Aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, communityVoteCount(t, fixture.checklist, voterUID))
+	page, err := fixture.repository.Browse(ctx, shared.CommunityBrowseFilter{
+		Limit: 10, NormalizedModel: modelSearch,
+	})
+	require.NoError(t, err)
+	require.NotContains(t, communityChecklistIDs(page.Items), fixture.checklist)
+
+	_, err = fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[1].Input.ID,
+		checklistPrecondition(fixture.checklist, retired.Aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[1].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
+	rereleased, err := fixture.repository.Browse(
+		ctx,
+		shared.CommunityBrowseFilter{
+			Limit: 10, Sort: shared.CommunitySortTop, ViewerUID: voterUID,
+			NormalizedModel: modelSearch,
+		},
+	)
+	require.NoError(t, err)
+	summary := communitySummary(t, rereleased.Items, fixture.checklist)
+	require.Equal(t, int64(1), summary.Score)
+	require.NotNil(t, summary.MyVote)
+	require.Equal(t, int16(1), *summary.MyVote)
+}
+
+func TestCommunitySourceDeletionCascadesVotes(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	voterUID := newUserPmcsTestUser(t)
+	insertCommunityVote(t, fixture.checklist, voterUID, 1)
+
+	_, err = testDB.ExecContext(
+		ctx,
+		`DELETE FROM user_pmcs_community_sources WHERE checklist_id = $1`,
+		fixture.checklist,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 0, communityVoteCount(t, fixture.checklist, voterUID))
+}
+
+func TestCommunityVoteDoesNotAdvanceAccountVersionOrChecklistETag(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 1)
+	released, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	voterUID := newUserPmcsTestUser(t)
+	beforeVoterVersion := accountVersion(t, voterUID)
+	beforeOwnerVersion := accountVersion(t, fixture.ownerUID)
+	beforeETag := shared.MakeChecklistETag(
+		fixture.checklist,
+		released.Aggregate.SyncVersion,
+	)
+
+	_, err = fixture.repository.PutVote(ctx, voterUID, fixture.checklist, 1)
+	require.NoError(t, err)
+	_, err = fixture.repository.DeleteVote(ctx, voterUID, fixture.checklist)
+	require.NoError(t, err)
+
+	require.Equal(t, beforeVoterVersion, accountVersion(t, voterUID))
+	require.Equal(t, beforeOwnerVersion, accountVersion(t, fixture.ownerUID))
+	require.Equal(t, beforeETag, shared.MakeChecklistETag(
+		fixture.checklist,
+		checklistVersion(t, fixture.checklist),
+	))
+}
+
+func TestCommunityBrowseOmitsIdentityAndMarksOwnerEligibility(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 1)
+	modelSearch := "task6-identity-" + uuid.NewString()
+	_, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	setRevisionModel(
+		t,
+		fixture.revisions[0].Input.ID,
+		modelSearch,
+		modelSearch,
+	)
+	voterUID := newUserPmcsTestUser(t)
+	_, err = fixture.repository.PutVote(ctx, voterUID, fixture.checklist, 1)
+	require.NoError(t, err)
+	service := community.NewService(fixture.repository, shared.DefaultConfig())
+
+	publicPage, err := service.BrowsePublic(ctx, "", "10", modelSearch, "top")
+	require.NoError(t, err)
+	publicPayload, err := json.Marshal(publicPage)
+	require.NoError(t, err)
+	require.NotContains(t, string(publicPayload), `"my_vote"`)
+	require.NotContains(t, string(publicPayload), `"can_vote"`)
+
+	ownerPage, err := service.BrowseAuthenticated(
+		ctx,
+		&bootstrap.User{UserID: fixture.ownerUID},
+		"",
+		"10",
+		modelSearch,
+		"top",
+	)
+	require.NoError(t, err)
+	owner := authenticatedCommunitySummary(t, ownerPage.Items, fixture.checklist)
+	require.False(t, owner.CanVote)
+	require.Nil(t, owner.MyVote)
+
+	voterPage, err := service.BrowseAuthenticated(
+		ctx,
+		&bootstrap.User{UserID: voterUID},
+		"",
+		"10",
+		modelSearch,
+		"top",
+	)
+	require.NoError(t, err)
+	voter := authenticatedCommunitySummary(t, voterPage.Items, fixture.checklist)
+	require.True(t, voter.CanVote)
+	require.NotNil(t, voter.MyVote)
+	require.Equal(t, int16(1), *voter.MyVote)
+}
+
+func TestCommunityVoteStartsWithDownvote(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	mutation, err := fixture.repository.PutVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		fixture.checklist,
+		-1,
+	)
+	require.NoError(t, err)
+	require.Equal(t, int64(-1), mutation.Score)
+	require.NotNil(t, mutation.MyVote)
+	require.Equal(t, int16(-1), *mutation.MyVote)
+}
+
+func TestCommunityVoteRejectsInvalidDirectionWithoutWriting(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	voterUID := newUserPmcsTestUser(t)
+	_, err = fixture.repository.PutVote(
+		context.Background(),
+		voterUID,
+		fixture.checklist,
+		0,
+	)
+	requireAPIIntegrationError(t, err, 400, "invalid_request")
+	require.Equal(t, 0, communityVoteCount(t, fixture.checklist, voterUID))
+}
+
+func TestCommunityVoteRejectsOwnerAndMissingAccount(t *testing.T) {
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			fixture.checklist,
+			fixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+
+	_, err = fixture.repository.PutVote(
+		context.Background(),
+		fixture.ownerUID,
+		fixture.checklist,
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusForbidden, "forbidden")
+
+	_, err = fixture.repository.DeleteVote(
+		context.Background(),
+		"missing-voter-"+uuid.NewString(),
+		fixture.checklist,
+	)
+	requireAPIIntegrationError(
+		t,
+		err,
+		http.StatusConflict,
+		"account_not_initialized",
+	)
+}
+
+func TestCommunityVoteHidesUnavailableSources(t *testing.T) {
+	unknownFixture := newReleasedChecklistFixture(t, 1)
+	unknownUID := newUserPmcsTestUser(t)
+	_, err := unknownFixture.repository.PutVote(
+		context.Background(),
+		unknownUID,
+		uuid.New(),
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+
+	deletedFixture := newReleasedChecklistFixture(t, 1)
+	deletedRelease, err := deletedFixture.repository.Release(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		deletedFixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedFixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = deletedFixture.owned.DeleteChecklist(
+		context.Background(),
+		deletedFixture.ownerUID,
+		deletedFixture.checklist,
+		checklistPrecondition(
+			deletedFixture.checklist,
+			deletedRelease.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = deletedFixture.repository.DeleteVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		deletedFixture.checklist,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+
+	retiredFixture := newReleasedChecklistFixture(t, 1)
+	retiredRelease, err := retiredFixture.repository.Release(
+		context.Background(),
+		retiredFixture.ownerUID,
+		retiredFixture.checklist,
+		retiredFixture.revisions[0].Input.ID,
+		checklistPrecondition(
+			retiredFixture.checklist,
+			retiredFixture.aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = retiredFixture.repository.Retire(
+		context.Background(),
+		retiredFixture.ownerUID,
+		retiredFixture.checklist,
+		checklistPrecondition(
+			retiredFixture.checklist,
+			retiredRelease.Aggregate.SyncVersion,
+		),
+	)
+	require.NoError(t, err)
+	_, err = retiredFixture.repository.PutVote(
+		context.Background(),
+		newUserPmcsTestUser(t),
+		retiredFixture.checklist,
+		1,
+	)
+	requireAPIIntegrationError(t, err, http.StatusNotFound, "resource_not_found")
+}
+
 func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-24 * time.Hour)
 	normalizedModel := "task10-moving-" + uuid.NewString()
@@ -1068,7 +1670,7 @@ func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
 
 func summaryRevision(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) uuid.UUID {
 	t.Helper()
@@ -1100,7 +1702,7 @@ func setRevisionModel(
 	require.NoError(t, err)
 }
 
-func communityChecklistIDs(items []shared.PublicCommunitySummary) []uuid.UUID {
+func communityChecklistIDs(items []shared.CommunitySummary) []uuid.UUID {
 	checklistIDs := make([]uuid.UUID, len(items))
 	for index, item := range items {
 		checklistIDs[index] = item.ChecklistID
@@ -1108,9 +1710,96 @@ func communityChecklistIDs(items []shared.PublicCommunitySummary) []uuid.UUID {
 	return checklistIDs
 }
 
+func communitySummary(
+	t *testing.T,
+	items []shared.CommunitySummary,
+	checklistID uuid.UUID,
+) shared.CommunitySummary {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item
+		}
+	}
+	t.Fatalf("summary for checklist %s was not returned", checklistID)
+	return shared.CommunitySummary{}
+}
+
+func authenticatedCommunitySummary(
+	t *testing.T,
+	items []shared.AuthenticatedCommunitySummary,
+	checklistID uuid.UUID,
+) shared.AuthenticatedCommunitySummary {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item
+		}
+	}
+	t.Fatalf("authenticated summary for checklist %s was not returned", checklistID)
+	return shared.AuthenticatedCommunitySummary{}
+}
+
+func insertCommunityVote(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+	direction int16,
+) {
+	t.Helper()
+	_, err := testDB.ExecContext(
+		context.Background(),
+		`INSERT INTO user_pmcs_community_votes
+		     (checklist_id, voter_uid, direction)
+		 VALUES ($1, $2, $3)`,
+		checklistID,
+		voterUID,
+		direction,
+	)
+	require.NoError(t, err)
+}
+
+func communityVoteCount(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+) int {
+	t.Helper()
+	var count int
+	err := testDB.QueryRowContext(
+		context.Background(),
+		`SELECT count(*)
+		 FROM user_pmcs_community_votes
+		 WHERE checklist_id = $1 AND voter_uid = $2`,
+		checklistID,
+		voterUID,
+	).Scan(&count)
+	require.NoError(t, err)
+	return count
+}
+
+func communityVoteCreatedAt(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+) time.Time {
+	t.Helper()
+	var createdAt time.Time
+	err := testDB.QueryRowContext(
+		context.Background(),
+		`SELECT created_at
+		 FROM user_pmcs_community_votes
+		 WHERE checklist_id = $1 AND voter_uid = $2`,
+		checklistID,
+		voterUID,
+	).Scan(&createdAt)
+	require.NoError(t, err)
+	return createdAt
+}
+
 func summaryCreator(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) string {
 	t.Helper()
@@ -1125,7 +1814,7 @@ func summaryCreator(
 
 func summaryModels(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) []shared.ModelValue {
 	t.Helper()

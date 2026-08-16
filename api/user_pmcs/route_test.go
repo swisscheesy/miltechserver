@@ -29,6 +29,7 @@ func TestGzipGETResponsesPreservesRepresentationHeaders(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "gzip", recorder.Header().Get("Content-Encoding"))
+	require.Equal(t, "Accept-Encoding", recorder.Header().Get("Vary"))
 	require.Equal(t, `"tree-version"`, recorder.Header().Get("ETag"))
 	require.Equal(t, "private, no-cache", recorder.Header().Get("Cache-Control"))
 	reader, err := gzip.NewReader(recorder.Body)

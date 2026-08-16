@@ -21,6 +21,7 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 		"user_pmcs_community_sources",
 		"user_pmcs_community_releases",
 		"user_pmcs_subscriptions",
+		"user_pmcs_community_votes",
 	}
 	for _, tableName := range requiredTables {
 		t.Run("table/"+tableName, func(t *testing.T) {
@@ -54,6 +55,101 @@ func TestUserPmcsSchemaIntegrity(t *testing.T) {
 		GROUP BY constraint_definition.oid`).Scan(&reservationPrimaryKeyColumns)
 	require.NoError(t, err)
 	require.Equal(t, "id", reservationPrimaryKeyColumns)
+
+	var primaryKeyColumns string
+	err = testDB.QueryRow(`
+		SELECT string_agg(
+			primary_key_column.attname,
+			',' ORDER BY primary_key.ordinality
+		)
+		FROM pg_constraint AS constraint_definition
+		JOIN LATERAL unnest(constraint_definition.conkey)
+			WITH ORDINALITY AS primary_key(attnum, ordinality) ON true
+		JOIN pg_attribute AS primary_key_column
+			ON primary_key_column.attrelid = constraint_definition.conrelid
+			AND primary_key_column.attnum = primary_key.attnum
+		WHERE constraint_definition.conrelid =
+				'user_pmcs_community_votes'::regclass
+			AND constraint_definition.contype = 'p'
+		GROUP BY constraint_definition.oid`).Scan(&primaryKeyColumns)
+	require.NoError(t, err)
+	require.Equal(t, "checklist_id,voter_uid", primaryKeyColumns)
+
+	var (
+		directionConstraintName      string
+		directionConstraintType      string
+		directionConstraintValidated bool
+	)
+	err = testDB.QueryRow(`
+		SELECT conname, contype::text, convalidated
+		FROM pg_constraint
+		WHERE conrelid = 'user_pmcs_community_votes'::regclass
+			AND conname = 'user_pmcs_community_votes_direction_check'`).Scan(
+		&directionConstraintName,
+		&directionConstraintType,
+		&directionConstraintValidated,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "user_pmcs_community_votes_direction_check", directionConstraintName)
+	require.Equal(t, "c", directionConstraintType)
+	require.True(t, directionConstraintValidated)
+
+	var sourceDeleteAction string
+	err = testDB.QueryRow(`
+		SELECT CASE confdeltype
+			WHEN 'c' THEN 'CASCADE'
+			ELSE confdeltype::text
+		END
+		FROM pg_constraint
+		WHERE conrelid = 'user_pmcs_community_votes'::regclass
+			AND conname = 'fk_user_pmcs_community_votes_source'`).Scan(
+		&sourceDeleteAction,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "CASCADE", sourceDeleteAction)
+
+	var voterDeleteAction, voterUpdateAction string
+	err = testDB.QueryRow(`
+		SELECT
+			CASE confdeltype
+				WHEN 'c' THEN 'CASCADE'
+				ELSE confdeltype::text
+			END,
+			CASE confupdtype
+				WHEN 'c' THEN 'CASCADE'
+				ELSE confupdtype::text
+			END
+		FROM pg_constraint
+		WHERE conrelid = 'user_pmcs_community_votes'::regclass
+			AND conname = 'fk_user_pmcs_community_votes_voter'`).Scan(
+		&voterDeleteAction,
+		&voterUpdateAction,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "CASCADE", voterDeleteAction)
+	require.Equal(t, "CASCADE", voterUpdateAction)
+
+	var voterIndexDefinition string
+	err = testDB.QueryRow(`
+		SELECT pg_get_indexdef(index_class.oid)
+		FROM pg_index AS index_definition
+		JOIN pg_class AS index_class
+			ON index_class.oid = index_definition.indexrelid
+		JOIN pg_class AS table_class
+			ON table_class.oid = index_definition.indrelid
+		JOIN pg_namespace AS table_schema
+			ON table_schema.oid = table_class.relnamespace
+		WHERE table_schema.nspname = 'public'
+			AND table_class.relname = 'user_pmcs_community_votes'
+			AND index_class.relname = 'user_pmcs_community_votes_voter_idx'`).Scan(
+		&voterIndexDefinition,
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"CREATE INDEX user_pmcs_community_votes_voter_idx ON public.user_pmcs_community_votes USING btree (voter_uid)",
+		voterIndexDefinition,
+	)
 
 	restrictiveForeignKeys := []struct {
 		constraintName    string
