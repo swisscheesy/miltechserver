@@ -424,6 +424,22 @@ func TestAuthenticatedCommunityBrowseIsPrivateGzippedAndPersonalized(t *testing.
 	require.Contains(t, data, `"can_vote":true`)
 }
 
+func TestAuthenticatedCommunityBrowseSetsVaryWithoutGzip(t *testing.T) {
+	router := communityTestRouter(&serviceStub{}, true)
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/auth/user-pmcs/community",
+		nil,
+	)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "private, no-cache", response.Header().Get("Cache-Control"))
+	require.Equal(t, "Accept-Encoding", response.Header().Get("Vary"))
+	require.Empty(t, response.Header().Get("Content-Encoding"))
+}
+
 func TestVoteHandlersRequireAuthenticationAndStrictDirection(t *testing.T) {
 	checklistID := uuid.New()
 	stub := &serviceStub{putVoteResult: &shared.CommunityVoteMutation{

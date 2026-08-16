@@ -99,6 +99,7 @@ func (handler Handler) browseAuthenticated(context *gin.Context) {
 		return
 	}
 	setPrivateHeaders(context)
+	context.Header("Vary", "Accept-Encoding")
 	writeSuccess(context, http.StatusOK, page)
 }
 
