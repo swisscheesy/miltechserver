@@ -12,12 +12,17 @@ import (
 	"github.com/google/uuid"
 )
 
-const cursorVersion = 1
+const (
+	communityCursorVersion          = 2
+	subscriptionUpdateCursorVersion = 1
+)
 
 type CommunityCursor struct {
-	Version   int       `json:"v"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Checklist uuid.UUID `json:"checklist_id"`
+	Version   int           `json:"v"`
+	Sort      CommunitySort `json:"sort"`
+	Score     *int64        `json:"score,omitempty"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	Checklist uuid.UUID     `json:"checklist_id"`
 }
 
 type SubscriptionUpdateCursor struct {
@@ -62,8 +67,20 @@ func DecodeSubscriptionUpdateCursor(value string) (SubscriptionUpdateCursor, err
 }
 
 func validateCommunityCursor(cursor CommunityCursor) error {
-	if cursor.Version != cursorVersion {
+	if cursor.Version != communityCursorVersion {
 		return fmt.Errorf("unsupported community cursor version %d", cursor.Version)
+	}
+	switch cursor.Sort {
+	case CommunitySortTop:
+		if cursor.Score == nil {
+			return fmt.Errorf("top community cursor requires score anchor")
+		}
+	case CommunitySortRecent:
+		if cursor.Score != nil {
+			return fmt.Errorf("recent community cursor must not include score anchor")
+		}
+	default:
+		return fmt.Errorf("unsupported community cursor sort %q", cursor.Sort)
 	}
 	if cursor.UpdatedAt.IsZero() || cursor.Checklist == uuid.Nil {
 		return fmt.Errorf("community cursor requires updated_at and checklist_id anchors")
@@ -72,7 +89,7 @@ func validateCommunityCursor(cursor CommunityCursor) error {
 }
 
 func validateSubscriptionUpdateCursor(cursor SubscriptionUpdateCursor) error {
-	if cursor.Version != cursorVersion {
+	if cursor.Version != subscriptionUpdateCursorVersion {
 		return fmt.Errorf("unsupported subscription update cursor version %d", cursor.Version)
 	}
 	if cursor.Checklist == uuid.Nil {

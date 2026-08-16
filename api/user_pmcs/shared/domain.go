@@ -143,10 +143,40 @@ type SubscriptionUpdatePage struct {
 	Items      []SubscriptionUpdate `json:"items"`
 }
 
+type CommunitySort string
+
+const (
+	CommunitySortTop    CommunitySort = "top"
+	CommunitySortRecent CommunitySort = "recent"
+)
+
 type CommunityBrowseFilter struct {
 	After           *CommunityCursor
 	Limit           int
 	NormalizedModel string
+	Sort            CommunitySort
+	ViewerUID       string
+}
+
+type CommunitySummary struct {
+	ChecklistID        uuid.UUID
+	RevisionID         uuid.UUID
+	RevisionNumber     int32
+	Name               string
+	Description        string
+	Models             []ModelValue
+	CreatorDisplayName string
+	ReleasedAt         time.Time
+	UpdatedAt          time.Time
+	Score              int64
+	MyVote             *int16
+	CanVote            bool
+}
+
+type CommunityPage struct {
+	NextCursor *string
+	HasMore    bool
+	Items      []CommunitySummary
 }
 
 type PublicCommunitySummary struct {
@@ -159,12 +189,40 @@ type PublicCommunitySummary struct {
 	CreatorDisplayName string       `json:"creator_display_name"`
 	ReleasedAt         time.Time    `json:"released_at"`
 	UpdatedAt          time.Time    `json:"updated_at"`
+	Score              int64        `json:"score"`
 }
 
-type CommunityPage struct {
+type PublicCommunityPage struct {
 	NextCursor *string                  `json:"next_cursor,omitempty"`
 	HasMore    bool                     `json:"has_more"`
 	Items      []PublicCommunitySummary `json:"items"`
+}
+
+type AuthenticatedCommunitySummary struct {
+	ChecklistID        uuid.UUID    `json:"checklist_id"`
+	RevisionID         uuid.UUID    `json:"revision_id"`
+	RevisionNumber     int32        `json:"revision_number"`
+	Name               string       `json:"name"`
+	Description        string       `json:"description"`
+	Models             []ModelValue `json:"models"`
+	CreatorDisplayName string       `json:"creator_display_name"`
+	ReleasedAt         time.Time    `json:"released_at"`
+	UpdatedAt          time.Time    `json:"updated_at"`
+	Score              int64        `json:"score"`
+	MyVote             *int16       `json:"my_vote"`
+	CanVote            bool         `json:"can_vote"`
+}
+
+type AuthenticatedCommunityPage struct {
+	NextCursor *string                         `json:"next_cursor,omitempty"`
+	HasMore    bool                            `json:"has_more"`
+	Items      []AuthenticatedCommunitySummary `json:"items"`
+}
+
+type CommunityVoteMutation struct {
+	ChecklistID uuid.UUID `json:"checklist_id"`
+	Score       int64     `json:"score"`
+	MyVote      *int16    `json:"my_vote"`
 }
 
 type PublicChecklistRelease struct {
