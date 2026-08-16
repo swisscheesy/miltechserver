@@ -746,7 +746,7 @@ structured envelope above.
 
 Only checklist creation, draft replacement, publication, and community-vote
 `PUT` accept a JSON
-body. For those three routes:
+body. For those four routes:
 
 - send uncompressed UTF-8 JSON;
 - send `Content-Type: application/json`;
