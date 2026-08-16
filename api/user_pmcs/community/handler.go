@@ -61,11 +61,12 @@ func (handler Handler) retire(context *gin.Context) {
 }
 
 func (handler Handler) browse(context *gin.Context) {
-	page, err := handler.service.Browse(
+	page, err := handler.service.BrowsePublic(
 		context.Request.Context(),
 		context.Query("after"),
 		context.Query("limit"),
 		context.Query("model"),
+		context.Query("sort"),
 	)
 	if err != nil {
 		writeServiceError(context, err)

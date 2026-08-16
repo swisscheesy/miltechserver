@@ -138,6 +138,41 @@ func (stub *serviceStub) Browse(
 	return stub.browseResult, stub.browseError
 }
 
+func (stub *serviceStub) browsePublic() (*shared.PublicCommunityPage, error) {
+	stub.browseCalls++
+	if stub.browseError != nil {
+		return nil, stub.browseError
+	}
+	if stub.browseResult == nil {
+		return &shared.PublicCommunityPage{}, nil
+	}
+	return mapPublicCommunityPage(stub.browseResult), nil
+}
+
+func (stub *serviceStub) BrowsePublic(
+	_ context.Context,
+	after string,
+	limit string,
+	model string,
+	_ string,
+) (*shared.PublicCommunityPage, error) {
+	stub.browseAfter = after
+	stub.browseLimit = limit
+	stub.browseModel = model
+	return stub.browsePublic()
+}
+
+func (stub *serviceStub) BrowseAuthenticated(
+	context.Context,
+	*bootstrap.User,
+	string,
+	string,
+	string,
+	string,
+) (*shared.AuthenticatedCommunityPage, error) {
+	return nil, nil
+}
+
 func (stub *serviceStub) GetCurrentRelease(
 	_ context.Context,
 	checklistID string,
@@ -253,7 +288,7 @@ func TestCommunityBrowseHandlerIsAnonymousAndGzipped(t *testing.T) {
 	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
 	stub := &serviceStub{
 		browseResult: &shared.CommunityPage{
-			Items: []shared.PublicCommunitySummary{{
+			Items: []shared.CommunitySummary{{
 				ChecklistID:        checklistID,
 				RevisionID:         revisionID,
 				RevisionNumber:     2,
@@ -454,8 +489,11 @@ func TestCommunityPublicHandlersReturnTypedErrors(t *testing.T) {
 
 func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	config := shared.DefaultConfig()
+	score := int64(0)
 	cursor := shared.CommunityCursor{
-		Version:   1,
+		Version:   2,
+		Sort:      shared.CommunitySortTop,
+		Score:     &score,
 		UpdatedAt: time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC),
 		Checklist: uuid.New(),
 	}
@@ -463,7 +501,7 @@ func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	require.NoError(t, err)
 
 	repository := &publicRepositoryStub{
-		browseResult: &shared.CommunityPage{Items: []shared.PublicCommunitySummary{}},
+		browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{}},
 	}
 	service := NewService(repository, config)
 	_, err = service.Browse(
@@ -509,7 +547,7 @@ func TestCommunityBrowseServiceDefaultsValidatesAndNormalizes(t *testing.T) {
 	}
 
 	maxRepository := &publicRepositoryStub{
-		browseResult: &shared.CommunityPage{Items: []shared.PublicCommunitySummary{}},
+		browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{}},
 	}
 	maxService := NewService(maxRepository, config)
 	_, err = maxService.Browse(

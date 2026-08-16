@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -554,7 +555,7 @@ func TestCommunityBrowseStaticKeysetCurrentOnlyAndModelFilter(t *testing.T) {
 	require.Equal(t, fixtures[2].checklist, secondPage.Items[0].ChecklistID)
 
 	allItems := append(
-		append([]shared.PublicCommunitySummary{}, firstPage.Items...),
+		append([]shared.CommunitySummary{}, firstPage.Items...),
 		secondPage.Items...,
 	)
 	require.Len(t, allItems, 3)
@@ -984,6 +985,174 @@ func TestCommunityDetailETagChangesWithCreatorDisplayName(t *testing.T) {
 	require.Equal(t, renamed.Header().Get("ETag"), stable.Header().Get("ETag"))
 }
 
+func TestCommunityBrowseRanksLiveVoteScoresAndProjectsViewerState(t *testing.T) {
+	baseTime := time.Date(2026, time.August, 16, 10, 0, 0, 0, time.UTC)
+	fixtures := make([]*releasedChecklistFixture, 5)
+	for index := range fixtures {
+		fixture := newReleasedChecklistFixture(t, 1)
+		released, err := fixture.repository.Release(
+			context.Background(),
+			fixture.ownerUID,
+			fixture.checklist,
+			fixture.revisions[0].Input.ID,
+			checklistPrecondition(
+				fixture.checklist,
+				fixture.aggregate.SyncVersion,
+			),
+		)
+		require.NoError(t, err)
+		fixture.aggregate = released.Aggregate
+		fixtures[index] = fixture
+	}
+
+	for index, fixture := range fixtures {
+		updatedAt := baseTime
+		switch index {
+		case 2:
+			updatedAt = baseTime.Add(-time.Minute)
+		case 3:
+			updatedAt = baseTime.Add(2 * time.Minute)
+		case 4:
+			updatedAt = baseTime.Add(3 * time.Minute)
+		}
+		_, err := testDB.ExecContext(
+			context.Background(),
+			`UPDATE user_pmcs_community_sources
+			 SET updated_at = $1
+			 WHERE checklist_id = $2`,
+			updatedAt,
+			fixture.checklist,
+		)
+		require.NoError(t, err)
+	}
+
+	viewerUID := fixtures[0].ownerUID
+	insertCommunityVote(t, fixtures[0].checklist, viewerUID, 1)
+	insertCommunityVote(t, fixtures[0].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[1].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[1].checklist, viewerUID, 1)
+	insertCommunityVote(t, fixtures[2].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[2].checklist, newUserPmcsTestUser(t), 1)
+	insertCommunityVote(t, fixtures[4].checklist, newUserPmcsTestUser(t), -1)
+
+	repository := fixtures[0].repository
+	top, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:     10,
+			Sort:      shared.CommunitySortTop,
+			ViewerUID: viewerUID,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, top.Items, 5)
+	tiedIDs := []uuid.UUID{fixtures[0].checklist, fixtures[1].checklist}
+	sort.Slice(tiedIDs, func(left, right int) bool {
+		return tiedIDs[left].String() < tiedIDs[right].String()
+	})
+	require.Equal(
+		t,
+		append(tiedIDs, fixtures[2].checklist, fixtures[3].checklist, fixtures[4].checklist),
+		communityChecklistIDs(top.Items),
+	)
+	require.Equal(t, int64(2), top.Items[0].Score)
+	require.Equal(t, int64(0), top.Items[3].Score)
+	require.Equal(t, int64(-1), top.Items[4].Score)
+	ownerSummary := communitySummary(t, top.Items, fixtures[0].checklist)
+	require.Equal(t, int16(1), *ownerSummary.MyVote)
+	require.False(t, ownerSummary.CanVote)
+	votedSummary := communitySummary(t, top.Items, fixtures[1].checklist)
+	require.Equal(t, int16(1), *votedSummary.MyVote)
+	require.True(t, votedSummary.CanVote)
+	unvotedSummary := communitySummary(t, top.Items, fixtures[2].checklist)
+	require.Nil(t, unvotedSummary.MyVote)
+	require.True(t, unvotedSummary.CanVote)
+
+	recent, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit: 10,
+			Sort:  shared.CommunitySortRecent,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		[]uuid.UUID{
+			fixtures[4].checklist,
+			fixtures[3].checklist,
+			tiedIDs[0],
+			tiedIDs[1],
+			fixtures[2].checklist,
+		},
+		communityChecklistIDs(recent.Items),
+	)
+	firstRecentPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortRecent},
+	)
+	require.NoError(t, err)
+	require.True(t, firstRecentPage.HasMore)
+	recentCursor, err := shared.DecodeCommunityCursor(*firstRecentPage.NextCursor)
+	require.NoError(t, err)
+	secondRecentPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			After: &recentCursor,
+			Limit: 2,
+			Sort:  shared.CommunitySortRecent,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		communityChecklistIDs(recent.Items)[2:4],
+		communityChecklistIDs(secondRecentPage.Items),
+	)
+
+	firstTopPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{Limit: 2, Sort: shared.CommunitySortTop},
+	)
+	require.NoError(t, err)
+	require.True(t, firstTopPage.HasMore)
+	topCursor, err := shared.DecodeCommunityCursor(*firstTopPage.NextCursor)
+	require.NoError(t, err)
+	secondTopPage, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			After: &topCursor,
+			Limit: 2,
+			Sort:  shared.CommunitySortTop,
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		communityChecklistIDs(top.Items)[2:4],
+		communityChecklistIDs(secondTopPage.Items),
+	)
+	setRevisionModel(
+		t,
+		fixtures[4].revisions[0].Input.ID,
+		"Ranked filter M1165",
+		"ranked-filter-m1165",
+	)
+
+	filtered, err := repository.Browse(
+		context.Background(),
+		shared.CommunityBrowseFilter{
+			Limit:           1,
+			NormalizedModel: "ranked-filter-m1165",
+			Sort:            shared.CommunitySortTop,
+		},
+	)
+	require.NoError(t, err)
+	require.Len(t, filtered.Items, 1)
+	require.Equal(t, fixtures[4].checklist, filtered.Items[0].ChecklistID)
+	require.NotEmpty(t, filtered.Items[0].Models)
+}
+
 func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
 	baseTime := time.Now().UTC().Add(-24 * time.Hour)
 	normalizedModel := "task10-moving-" + uuid.NewString()
@@ -1068,7 +1237,7 @@ func TestCommunityBrowseMovingReleaseAppearsAfterRestart(t *testing.T) {
 
 func summaryRevision(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) uuid.UUID {
 	t.Helper()
@@ -1100,7 +1269,7 @@ func setRevisionModel(
 	require.NoError(t, err)
 }
 
-func communityChecklistIDs(items []shared.PublicCommunitySummary) []uuid.UUID {
+func communityChecklistIDs(items []shared.CommunitySummary) []uuid.UUID {
 	checklistIDs := make([]uuid.UUID, len(items))
 	for index, item := range items {
 		checklistIDs[index] = item.ChecklistID
@@ -1108,9 +1277,43 @@ func communityChecklistIDs(items []shared.PublicCommunitySummary) []uuid.UUID {
 	return checklistIDs
 }
 
+func communitySummary(
+	t *testing.T,
+	items []shared.CommunitySummary,
+	checklistID uuid.UUID,
+) shared.CommunitySummary {
+	t.Helper()
+	for _, item := range items {
+		if item.ChecklistID == checklistID {
+			return item
+		}
+	}
+	t.Fatalf("summary for checklist %s was not returned", checklistID)
+	return shared.CommunitySummary{}
+}
+
+func insertCommunityVote(
+	t *testing.T,
+	checklistID uuid.UUID,
+	voterUID string,
+	direction int16,
+) {
+	t.Helper()
+	_, err := testDB.ExecContext(
+		context.Background(),
+		`INSERT INTO user_pmcs_community_votes
+		     (checklist_id, voter_uid, direction)
+		 VALUES ($1, $2, $3)`,
+		checklistID,
+		voterUID,
+		direction,
+	)
+	require.NoError(t, err)
+}
+
 func summaryCreator(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) string {
 	t.Helper()
@@ -1125,7 +1328,7 @@ func summaryCreator(
 
 func summaryModels(
 	t *testing.T,
-	items []shared.PublicCommunitySummary,
+	items []shared.CommunitySummary,
 	checklistID uuid.UUID,
 ) []shared.ModelValue {
 	t.Helper()

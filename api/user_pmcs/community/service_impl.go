@@ -96,14 +96,86 @@ func (service *ServiceImpl) Browse(
 	limit string,
 	model string,
 ) (*shared.CommunityPage, error) {
+	filter, err := service.parseBrowseFilter(after, limit, model, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return service.repository.Browse(ctx, filter)
+}
+
+func (service *ServiceImpl) BrowsePublic(
+	ctx context.Context,
+	after string,
+	limit string,
+	model string,
+	sort string,
+) (*shared.PublicCommunityPage, error) {
+	filter, err := service.parseBrowseFilter(after, limit, model, sort, "")
+	if err != nil {
+		return nil, err
+	}
+	page, err := service.repository.Browse(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return mapPublicCommunityPage(page), nil
+}
+
+func (service *ServiceImpl) BrowseAuthenticated(
+	ctx context.Context,
+	user *bootstrap.User,
+	after string,
+	limit string,
+	model string,
+	sort string,
+) (*shared.AuthenticatedCommunityPage, error) {
+	viewerUID, apiError := authenticatedUID(user)
+	if apiError != nil {
+		return nil, apiError
+	}
+	filter, err := service.parseBrowseFilter(
+		after,
+		limit,
+		model,
+		sort,
+		viewerUID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	page, err := service.repository.Browse(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	return mapAuthenticatedCommunityPage(page), nil
+}
+
+func (service *ServiceImpl) parseBrowseFilter(
+	after string,
+	limit string,
+	model string,
+	sort string,
+	viewerUID string,
+) (shared.CommunityBrowseFilter, error) {
 	filter := shared.CommunityBrowseFilter{
 		Limit: service.config.CommunityDefaultLimit,
+		Sort:  shared.CommunitySortTop,
+	}
+	if strings.TrimSpace(sort) != "" {
+		filter.Sort = shared.CommunitySort(strings.TrimSpace(sort))
+		if filter.Sort != shared.CommunitySortTop &&
+			filter.Sort != shared.CommunitySortRecent {
+			return shared.CommunityBrowseFilter{}, shared.NewInvalidRequest(
+				"sort must be top or recent",
+				map[string]any{"sort": "top or recent"},
+			)
+		}
 	}
 	if strings.TrimSpace(limit) != "" {
 		parsedLimit, err := strconv.Atoi(limit)
 		if err != nil || parsedLimit <= 0 ||
 			parsedLimit > service.config.CommunityMaxLimit {
-			return nil, shared.NewInvalidRequest(
+			return shared.CommunityBrowseFilter{}, shared.NewInvalidRequest(
 				fmt.Sprintf(
 					"limit must be between 1 and %d",
 					service.config.CommunityMaxLimit,
@@ -116,8 +188,14 @@ func (service *ServiceImpl) Browse(
 	if strings.TrimSpace(after) != "" {
 		cursor, err := shared.DecodeCommunityCursor(after)
 		if err != nil {
-			return nil, shared.NewInvalidRequest(
+			return shared.CommunityBrowseFilter{}, shared.NewInvalidRequest(
 				"invalid community cursor",
+				nil,
+			)
+		}
+		if cursor.Sort != filter.Sort {
+			return shared.CommunityBrowseFilter{}, shared.NewInvalidRequest(
+				"community cursor sort does not match request sort",
 				nil,
 			)
 		}
@@ -126,17 +204,70 @@ func (service *ServiceImpl) Browse(
 	if strings.TrimSpace(model) != "" {
 		normalized, err := shared.NormalizeModel(model)
 		if err != nil {
-			return nil, err
+			return shared.CommunityBrowseFilter{}, err
 		}
 		if normalized == "" {
-			return nil, shared.NewInvalidRequest(
+			return shared.CommunityBrowseFilter{}, shared.NewInvalidRequest(
 				"model filter must contain text",
 				nil,
 			)
 		}
 		filter.NormalizedModel = normalized
 	}
-	return service.repository.Browse(ctx, filter)
+	filter.ViewerUID = viewerUID
+	return filter, nil
+}
+
+func mapPublicCommunityPage(
+	page *shared.CommunityPage,
+) *shared.PublicCommunityPage {
+	items := make([]shared.PublicCommunitySummary, len(page.Items))
+	for index, item := range page.Items {
+		items[index] = shared.PublicCommunitySummary{
+			ChecklistID:        item.ChecklistID,
+			RevisionID:         item.RevisionID,
+			RevisionNumber:     item.RevisionNumber,
+			Name:               item.Name,
+			Description:        item.Description,
+			Models:             item.Models,
+			CreatorDisplayName: item.CreatorDisplayName,
+			ReleasedAt:         item.ReleasedAt,
+			UpdatedAt:          item.UpdatedAt,
+			Score:              item.Score,
+		}
+	}
+	return &shared.PublicCommunityPage{
+		NextCursor: page.NextCursor,
+		HasMore:    page.HasMore,
+		Items:      items,
+	}
+}
+
+func mapAuthenticatedCommunityPage(
+	page *shared.CommunityPage,
+) *shared.AuthenticatedCommunityPage {
+	items := make([]shared.AuthenticatedCommunitySummary, len(page.Items))
+	for index, item := range page.Items {
+		items[index] = shared.AuthenticatedCommunitySummary{
+			ChecklistID:        item.ChecklistID,
+			RevisionID:         item.RevisionID,
+			RevisionNumber:     item.RevisionNumber,
+			Name:               item.Name,
+			Description:        item.Description,
+			Models:             item.Models,
+			CreatorDisplayName: item.CreatorDisplayName,
+			ReleasedAt:         item.ReleasedAt,
+			UpdatedAt:          item.UpdatedAt,
+			Score:              item.Score,
+			MyVote:             item.MyVote,
+			CanVote:            item.CanVote,
+		}
+	}
+	return &shared.AuthenticatedCommunityPage{
+		NextCursor: page.NextCursor,
+		HasMore:    page.HasMore,
+		Items:      items,
+	}
 }
 
 func (service *ServiceImpl) GetCurrentRelease(

@@ -2,7 +2,9 @@ package community
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -50,6 +52,23 @@ func (stub *repositoryStub) Retire(
 	stub.receivedChecklist = checklistID
 	stub.receivedCondition = precondition
 	return stub.retireResult, stub.retireError
+}
+
+type browseRepositoryStub struct {
+	repositoryStub
+	browseResult *shared.CommunityPage
+	browseError  error
+	browseCalls  int
+	browseFilter shared.CommunityBrowseFilter
+}
+
+func (stub *browseRepositoryStub) Browse(
+	_ context.Context,
+	filter shared.CommunityBrowseFilter,
+) (*shared.CommunityPage, error) {
+	stub.browseCalls++
+	stub.browseFilter = filter
+	return stub.browseResult, stub.browseError
 }
 
 func TestReleaseParsesAuthenticationIDsAndParentPrecondition(t *testing.T) {
@@ -201,6 +220,106 @@ func TestReleaseRejectsEmptyRepositoryResult(t *testing.T) {
 	)
 
 	requireCommunityAPIError(t, err, 500, "internal_error")
+}
+
+func TestBrowsePublicMapsOnlyPublicFieldsAndDefaultsToTop(t *testing.T) {
+	checklistID := uuid.New()
+	repository := &browseRepositoryStub{
+		browseResult: &shared.CommunityPage{
+			HasMore: true,
+			Items: []shared.CommunitySummary{{
+				ChecklistID: checklistID,
+				Name:        "Public checklist",
+				Score:       -2,
+				MyVote:      pointerToVote(1),
+				CanVote:     true,
+			}},
+		},
+	}
+	service := NewService(repository)
+
+	page, err := service.BrowsePublic(
+		context.Background(),
+		"",
+		"",
+		" M1165 ",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, shared.CommunitySortTop, repository.browseFilter.Sort)
+	require.Empty(t, repository.browseFilter.ViewerUID)
+	require.Equal(t, "m1165", repository.browseFilter.NormalizedModel)
+	require.Equal(t, checklistID, page.Items[0].ChecklistID)
+	require.Equal(t, int64(-2), page.Items[0].Score)
+	encoded, err := json.Marshal(page)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "my_vote")
+	require.NotContains(t, string(encoded), "can_vote")
+}
+
+func TestBrowseAuthenticatedProjectsViewerVoteAndEligibility(t *testing.T) {
+	updatedAt := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
+	checklistID := uuid.New()
+	repository := &browseRepositoryStub{
+		browseResult: &shared.CommunityPage{Items: []shared.CommunitySummary{
+			{
+				ChecklistID: checklistID,
+				UpdatedAt:   updatedAt,
+				Score:       3,
+				MyVote:      pointerToVote(-1),
+				CanVote:     false,
+			},
+			{ChecklistID: uuid.New(), CanVote: true},
+		}},
+	}
+	service := NewService(repository)
+
+	page, err := service.BrowseAuthenticated(
+		context.Background(),
+		&bootstrap.User{UserID: "viewer-1"},
+		"",
+		"10",
+		"",
+		"recent",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, shared.CommunitySortRecent, repository.browseFilter.Sort)
+	require.Equal(t, "viewer-1", repository.browseFilter.ViewerUID)
+	require.Equal(t, int16(-1), *page.Items[0].MyVote)
+	require.False(t, page.Items[0].CanVote)
+	require.Nil(t, page.Items[1].MyVote)
+	require.True(t, page.Items[1].CanVote)
+}
+
+func TestBrowseRejectsCrossSortCursorBeforeRepository(t *testing.T) {
+	score := int64(1)
+	cursor, err := shared.EncodeCommunityCursor(shared.CommunityCursor{
+		Version:   2,
+		Sort:      shared.CommunitySortTop,
+		Score:     &score,
+		UpdatedAt: time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC),
+		Checklist: uuid.New(),
+	})
+	require.NoError(t, err)
+	repository := &browseRepositoryStub{}
+	service := NewService(repository)
+
+	_, err = service.BrowsePublic(
+		context.Background(),
+		cursor,
+		"",
+		"",
+		"recent",
+	)
+
+	requireCommunityAPIError(t, err, 400, "invalid_request")
+	require.Zero(t, repository.browseCalls)
+}
+
+func pointerToVote(value int16) *int16 {
+	return &value
 }
 
 func requireCommunityAPIError(
