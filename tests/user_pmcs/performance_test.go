@@ -2735,13 +2735,7 @@ func captureUserPmcsQueryPlans(
 			require.Contains(t, plan, `"Execution Time"`)
 			require.Contains(t, plan, `"Shared Hit Blocks"`)
 			if replay.voteLookup {
-				require.Contains(
-					t,
-					plan,
-					`"Index Name": "user_pmcs_community_votes_pkey"`,
-					"%s ranked query must use the representative vote lookup index",
-					name,
-				)
+				requireVoteTotalAggregateUsesVoteIndex(t, plan, name)
 			}
 			t.Logf(
 				"community planner scenario=%s query=%s plan_nodes=%d buffers=true sql=%q args=%#v plan=%s",
@@ -3212,6 +3206,132 @@ func explainAnalyzeJSONPlanWithQueryer(
 	require.NoError(t, rows.Scan(&plan))
 	require.NoError(t, rows.Err())
 	return plan
+}
+
+func TestPerformanceVoteTotalPlanGateRejectsViewerVoteOnlyIndex(t *testing.T) {
+	viewerVoteOnlyPlan := `[
+		{
+			"Plan": {
+				"Node Type": "Nested Loop Left Join",
+				"Plans": [
+					{
+						"Node Type": "Index Scan",
+						"Relation Name": "user_pmcs_community_votes",
+						"Index Name": "user_pmcs_community_votes_pkey",
+						"Index Cond": "((checklist_id = source.checklist_id) AND (voter_uid = 'viewer'))"
+					}
+				]
+			}
+		}
+	]`
+	matches, err := voteTotalAggregateUsesVoteIndex(viewerVoteOnlyPlan)
+	require.NoError(t, err)
+	require.False(
+		t,
+		matches,
+		"the viewer_vote join must not satisfy the live score aggregation gate",
+	)
+
+	voteTotalPlan := `[
+		{
+			"Plan": {
+				"Node Type": "Aggregate",
+				"Plans": [
+					{
+						"Node Type": "Bitmap Index Scan",
+						"Relation Name": "user_pmcs_community_votes",
+						"Index Name": "user_pmcs_community_votes_pkey",
+						"Index Cond": "(checklist_id = source.checklist_id)"
+					}
+				]
+			}
+		}
+	]`
+	matches, err = voteTotalAggregateUsesVoteIndex(voteTotalPlan)
+	require.NoError(t, err)
+	require.True(t, matches)
+}
+
+func requireVoteTotalAggregateUsesVoteIndex(
+	t *testing.T,
+	plan string,
+	scenario string,
+) {
+	t.Helper()
+	matches, err := voteTotalAggregateUsesVoteIndex(plan)
+	require.NoError(t, err)
+	require.Truef(
+		t,
+		matches,
+		"%s ranked query must use user_pmcs_community_votes_pkey inside the correlated vote_total aggregate",
+		scenario,
+	)
+}
+
+func voteTotalAggregateUsesVoteIndex(plan string) (bool, error) {
+	var documents []map[string]any
+	if err := json.Unmarshal([]byte(plan), &documents); err != nil {
+		return false, err
+	}
+	for _, document := range documents {
+		root, ok := document["Plan"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if aggregateContainsVoteTotalIndex(root) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func aggregateContainsVoteTotalIndex(node map[string]any) bool {
+	if node["Node Type"] == "Aggregate" &&
+		planNodeContains(node, "checklist_id = source.checklist_id") &&
+		planNodeContains(node, "user_pmcs_community_votes_pkey") {
+		return true
+	}
+	for _, child := range planNodeChildren(node) {
+		if aggregateContainsVoteTotalIndex(child) {
+			return true
+		}
+	}
+	return false
+}
+
+func planNodeContains(value any, token string) bool {
+	switch typed := value.(type) {
+	case string:
+		return strings.Contains(typed, token)
+	case map[string]any:
+		for _, child := range typed {
+			if planNodeContains(child, token) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if planNodeContains(child, token) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func planNodeChildren(node map[string]any) []map[string]any {
+	values, ok := node["Plans"].([]any)
+	if !ok {
+		return nil
+	}
+	children := make([]map[string]any, 0, len(values))
+	for _, value := range values {
+		child, ok := value.(map[string]any)
+		if ok {
+			children = append(children, child)
+		}
+	}
+	return children
 }
 
 func requirePlanUsesApprovedRelationIndex(
