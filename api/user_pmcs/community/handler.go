@@ -19,6 +19,10 @@ type Handler struct {
 	service Service
 }
 
+type voteRequest struct {
+	Direction int16 `json:"direction"`
+}
+
 func (handler Handler) release(context *gin.Context) {
 	user, apiError := userFromContext(context)
 	if apiError != nil {
@@ -74,6 +78,79 @@ func (handler Handler) browse(context *gin.Context) {
 	}
 	setPublicHeaders(context)
 	writeSuccess(context, http.StatusOK, page)
+}
+
+func (handler Handler) browseAuthenticated(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	page, err := handler.service.BrowseAuthenticated(
+		context.Request.Context(),
+		user,
+		context.Query("after"),
+		context.Query("limit"),
+		context.Query("model"),
+		context.Query("sort"),
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+	setPrivateHeaders(context)
+	writeSuccess(context, http.StatusOK, page)
+}
+
+func (handler Handler) putVote(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	var request voteRequest
+	if apiError := shared.DecodeStrictJSON(context, &request, 1024); apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	if !isVoteDirection(request.Direction) {
+		shared.WriteAPIError(context, shared.NewInvalidRequest(
+			"direction must be 1 or -1",
+			map[string]any{"direction": "1 or -1"},
+		))
+		return
+	}
+	mutation, err := handler.service.PutVote(
+		context.Request.Context(),
+		user,
+		context.Param("checklist_id"),
+		request.Direction,
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+	setPrivateHeaders(context)
+	writeSuccess(context, http.StatusOK, mutation)
+}
+
+func (handler Handler) deleteVote(context *gin.Context) {
+	user, apiError := userFromContext(context)
+	if apiError != nil {
+		shared.WriteAPIError(context, apiError)
+		return
+	}
+	mutation, err := handler.service.DeleteVote(
+		context.Request.Context(),
+		user,
+		context.Param("checklist_id"),
+	)
+	if err != nil {
+		writeServiceError(context, err)
+		return
+	}
+	setPrivateHeaders(context)
+	writeSuccess(context, http.StatusOK, mutation)
 }
 
 func (handler Handler) getCurrentRelease(context *gin.Context) {
@@ -136,6 +213,10 @@ func writeServiceError(context *gin.Context, err error) {
 
 func setOwnerHeaders(context *gin.Context, etag string) {
 	context.Header("ETag", etag)
+	context.Header("Cache-Control", ownerCommunityCacheControl)
+}
+
+func setPrivateHeaders(context *gin.Context) {
 	context.Header("Cache-Control", ownerCommunityCacheControl)
 }
 

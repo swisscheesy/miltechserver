@@ -44,6 +44,9 @@ func TestHTTPContractEveryAuthenticatedRouteRejectsAbsentAndMalformedAuth(
 		{"sync", http.MethodGet, "/auth/user-pmcs/sync"},
 		{"release", http.MethodPut, "/auth/user-pmcs/checklists/" + checklistID + "/community-releases/" + revisionID},
 		{"retire", http.MethodDelete, "/auth/user-pmcs/checklists/" + checklistID + "/community-source"},
+		{"community browse", http.MethodGet, "/auth/user-pmcs/community"},
+		{"put community vote", http.MethodPut, "/auth/user-pmcs/community/" + checklistID + "/vote"},
+		{"delete community vote", http.MethodDelete, "/auth/user-pmcs/community/" + checklistID + "/vote"},
 		{"updates", http.MethodGet, "/auth/user-pmcs/subscriptions/updates"},
 		{"install", http.MethodPut, "/auth/user-pmcs/subscriptions/" + checklistID},
 		{"unsubscribe", http.MethodDelete, "/auth/user-pmcs/subscriptions/" + checklistID},
@@ -71,6 +74,123 @@ func TestHTTPContractEveryAuthenticatedRouteRejectsAbsentAndMalformedAuth(
 			})
 		}
 	}
+}
+
+func TestHTTPContractRouteInventoryIncludesAuthenticatedCommunityVoting(
+	t *testing.T,
+) {
+	router := newUserPmcsContractRouter(shared.DefaultConfig())
+	routes := router.Routes()
+	require.Len(t, routes, 20)
+
+	found := make(map[string]bool, len(routes))
+	for _, route := range routes {
+		found[route.Method+" "+route.Path] = true
+	}
+	require.True(t, found[http.MethodGet+" /auth/user-pmcs/community"])
+	require.True(t, found[http.MethodPut+" /auth/user-pmcs/community/:checklist_id/vote"])
+	require.True(t, found[http.MethodDelete+" /auth/user-pmcs/community/:checklist_id/vote"])
+}
+
+func TestHTTPContractCommunityVoteBrowseAndMutationResponses(t *testing.T) {
+	ctx := context.Background()
+	fixture := newReleasedChecklistFixture(t, 1)
+	_, err := fixture.repository.Release(
+		ctx,
+		fixture.ownerUID,
+		fixture.checklist,
+		fixture.revisions[0].Input.ID,
+		checklistPrecondition(fixture.checklist, fixture.aggregate.SyncVersion),
+	)
+	require.NoError(t, err)
+	voterUID := newUserPmcsTestUser(t)
+	router := newUserPmcsContractRouter(shared.DefaultConfig())
+	votePath := "/auth/user-pmcs/community/" + fixture.checklist.String() + "/vote"
+
+	browse := performContractRequest(
+		router,
+		http.MethodGet,
+		"/auth/user-pmcs/community",
+		voterUID,
+		nil,
+		nil,
+	)
+	require.Equal(t, http.StatusOK, browse.Code)
+	require.Equal(t, "private, no-cache", browse.Header().Get("Cache-Control"))
+	require.Contains(t, browse.Body.String(), `"my_vote":null`)
+	require.Contains(t, browse.Body.String(), `"can_vote":true`)
+
+	put := performContractRequest(
+		router,
+		http.MethodPut,
+		votePath,
+		voterUID,
+		[]byte(`{"direction":1}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	require.Equal(t, http.StatusOK, put.Code, put.Body.String())
+	require.Equal(t, "private, no-cache", put.Header().Get("Cache-Control"))
+	require.Empty(t, put.Header().Get("ETag"))
+	var putEnvelope struct {
+		Data shared.CommunityVoteMutation `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(put.Body.Bytes(), &putEnvelope))
+	require.Equal(t, fixture.checklist, putEnvelope.Data.ChecklistID)
+	require.Equal(t, int64(1), putEnvelope.Data.Score)
+	require.NotNil(t, putEnvelope.Data.MyVote)
+	require.Equal(t, int16(1), *putEnvelope.Data.MyVote)
+
+	deleteVote := performContractRequest(
+		router,
+		http.MethodDelete,
+		votePath,
+		voterUID,
+		nil,
+		nil,
+	)
+	require.Equal(t, http.StatusOK, deleteVote.Code, deleteVote.Body.String())
+	var deleteEnvelope struct {
+		Data shared.CommunityVoteMutation `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(deleteVote.Body.Bytes(), &deleteEnvelope))
+	require.Equal(t, fixture.checklist, deleteEnvelope.Data.ChecklistID)
+	require.Zero(t, deleteEnvelope.Data.Score)
+	require.Nil(t, deleteEnvelope.Data.MyVote)
+
+	ownerVote := performContractRequest(
+		router,
+		http.MethodPut,
+		votePath,
+		fixture.ownerUID,
+		[]byte(`{"direction":1}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	requireStableAPIError(t, ownerVote, http.StatusForbidden, "forbidden")
+
+	unavailable := performContractRequest(
+		router,
+		http.MethodPut,
+		"/auth/user-pmcs/community/"+uuid.NewString()+"/vote",
+		voterUID,
+		[]byte(`{"direction":1}`),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	requireStableAPIError(t, unavailable, http.StatusNotFound, "resource_not_found")
+
+	uninitialized := performContractRequest(
+		router,
+		http.MethodDelete,
+		votePath,
+		"uninitialized-"+uuid.NewString(),
+		nil,
+		nil,
+	)
+	requireStableAPIError(
+		t,
+		uninitialized,
+		http.StatusConflict,
+		"account_not_initialized",
+	)
 }
 
 func TestHTTPContractUnknownResourcesUseSafeStable404s(t *testing.T) {

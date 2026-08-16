@@ -16,6 +16,13 @@ func RegisterRoutes(authGroup *gin.RouterGroup, service Service) {
 		"/checklists/:checklist_id/community-source",
 		handler.retire,
 	)
+	group.GET(
+		"/community",
+		gzip.Gzip(gzip.DefaultCompression),
+		handler.browseAuthenticated,
+	)
+	group.PUT("/community/:checklist_id/vote", handler.putVote)
+	group.DELETE("/community/:checklist_id/vote", handler.deleteVote)
 }
 
 func RegisterPublicRoutes(publicGroup *gin.RouterGroup, service Service) {

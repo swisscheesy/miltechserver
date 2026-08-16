@@ -219,6 +219,56 @@ func TestCommunityReleaseUsesSeparateUserAndIPBuckets(t *testing.T) {
 	require.Equal(t, http.StatusTooManyRequests, sameUserDifferentIP.Code)
 }
 
+func TestRateLimitAuthenticatedCommunityVotingUsesReadAndMutationBuckets(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	clock := &fakeClock{now: time.Unix(5_000, 0)}
+	config := shared.DefaultConfig()
+	config.AuthenticatedReadsPerSecond = 1
+	config.AuthenticatedReadBurst = 1
+	config.AuthenticatedMutationsPerSecond = 1
+	config.AuthenticatedMutationBurst = 1
+	limiters := newOperationalLimiters(config, clock.Now, defaultLimiterFactory)
+
+	router := gin.New()
+	router.Use(func(context *gin.Context) {
+		context.Set("user", &bootstrap.User{UserID: context.GetHeader("X-Test-UID")})
+		context.Next()
+	})
+	router.GET(
+		"/api/v1/auth/user-pmcs/community",
+		limiters.authenticatedMiddleware(),
+		func(context *gin.Context) { context.Status(http.StatusNoContent) },
+	)
+	router.PUT(
+		"/api/v1/auth/user-pmcs/community/:checklist_id/vote",
+		limiters.authenticatedMiddleware(),
+		func(context *gin.Context) { context.Status(http.StatusNoContent) },
+	)
+	router.DELETE(
+		"/api/v1/auth/user-pmcs/community/:checklist_id/vote",
+		limiters.authenticatedMiddleware(),
+		func(context *gin.Context) { context.Status(http.StatusNoContent) },
+	)
+
+	require.Equal(t, http.StatusNoContent, performLimiterRequest(
+		router, http.MethodGet, "/api/v1/auth/user-pmcs/community", "192.0.2.1:1000", "viewer-1",
+	).Code)
+	readExhausted := performLimiterRequest(
+		router, http.MethodGet, "/api/v1/auth/user-pmcs/community", "192.0.2.1:1001", "viewer-1",
+	)
+	require.Equal(t, http.StatusTooManyRequests, readExhausted.Code)
+	require.Equal(t, "rate_limited", limiterErrorCode(t, readExhausted))
+
+	require.Equal(t, http.StatusNoContent, performLimiterRequest(
+		router, http.MethodPut, "/api/v1/auth/user-pmcs/community/checklist/vote", "192.0.2.1:1002", "viewer-1",
+	).Code)
+	mutationExhausted := performLimiterRequest(
+		router, http.MethodDelete, "/api/v1/auth/user-pmcs/community/checklist/vote", "192.0.2.1:1003", "viewer-1",
+	)
+	require.Equal(t, http.StatusTooManyRequests, mutationExhausted.Code)
+	require.Equal(t, "rate_limited", limiterErrorCode(t, mutationExhausted))
+}
+
 func keyedLimiterEntryCount(limiter *keyedLimiter) int {
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
@@ -247,4 +297,15 @@ func performLimiterRequest(
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	return recorder
+}
+
+func limiterErrorCode(t *testing.T, response *httptest.ResponseRecorder) string {
+	t.Helper()
+	var envelope struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &envelope))
+	return envelope.Error.Code
 }

@@ -150,6 +150,54 @@ func (service *ServiceImpl) BrowseAuthenticated(
 	return mapAuthenticatedCommunityPage(page), nil
 }
 
+func (service *ServiceImpl) PutVote(
+	ctx context.Context,
+	user *bootstrap.User,
+	checklistID string,
+	direction int16,
+) (*shared.CommunityVoteMutation, error) {
+	voterUID, apiError := authenticatedUID(user)
+	if apiError != nil {
+		return nil, apiError
+	}
+	parsedChecklistID, apiError := parseUUID("checklist_id", checklistID)
+	if apiError != nil {
+		return nil, apiError
+	}
+	if !isVoteDirection(direction) {
+		return nil, shared.NewInvalidRequest(
+			"direction must be 1 or -1",
+			map[string]any{"direction": "1 or -1"},
+		)
+	}
+	return service.repository.PutVote(
+		ctx,
+		voterUID,
+		parsedChecklistID,
+		direction,
+	)
+}
+
+func (service *ServiceImpl) DeleteVote(
+	ctx context.Context,
+	user *bootstrap.User,
+	checklistID string,
+) (*shared.CommunityVoteMutation, error) {
+	voterUID, apiError := authenticatedUID(user)
+	if apiError != nil {
+		return nil, apiError
+	}
+	parsedChecklistID, apiError := parseUUID("checklist_id", checklistID)
+	if apiError != nil {
+		return nil, apiError
+	}
+	return service.repository.DeleteVote(ctx, voterUID, parsedChecklistID)
+}
+
+func isVoteDirection(direction int16) bool {
+	return direction == 1 || direction == -1
+}
+
 func (service *ServiceImpl) parseBrowseFilter(
 	after string,
 	limit string,

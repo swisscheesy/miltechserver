@@ -24,6 +24,14 @@ type repositoryStub struct {
 	receivedChecklist uuid.UUID
 	receivedRevision  uuid.UUID
 	receivedCondition shared.Precondition
+	putVoteResult     *shared.CommunityVoteMutation
+	putVoteError      error
+	deleteVoteResult  *shared.CommunityVoteMutation
+	deleteVoteError   error
+	putVoteCalls      int
+	deleteVoteCalls   int
+	receivedVoterUID  string
+	receivedDirection int16
 }
 
 func (stub *repositoryStub) Release(
@@ -55,20 +63,27 @@ func (stub *repositoryStub) Retire(
 }
 
 func (stub *repositoryStub) PutVote(
-	context.Context,
-	string,
-	uuid.UUID,
-	int16,
+	_ context.Context,
+	voterUID string,
+	checklistID uuid.UUID,
+	direction int16,
 ) (*shared.CommunityVoteMutation, error) {
-	return nil, nil
+	stub.putVoteCalls++
+	stub.receivedVoterUID = voterUID
+	stub.receivedChecklist = checklistID
+	stub.receivedDirection = direction
+	return stub.putVoteResult, stub.putVoteError
 }
 
 func (stub *repositoryStub) DeleteVote(
-	context.Context,
-	string,
-	uuid.UUID,
+	_ context.Context,
+	voterUID string,
+	checklistID uuid.UUID,
 ) (*shared.CommunityVoteMutation, error) {
-	return nil, nil
+	stub.deleteVoteCalls++
+	stub.receivedVoterUID = voterUID
+	stub.receivedChecklist = checklistID
+	return stub.deleteVoteResult, stub.deleteVoteError
 }
 
 type browseRepositoryStub struct {
@@ -333,6 +348,120 @@ func TestBrowseRejectsCrossSortCursorBeforeRepository(t *testing.T) {
 
 	requireCommunityAPIError(t, err, 400, "invalid_request")
 	require.Zero(t, repository.browseCalls)
+}
+
+func TestPutVoteValidatesAndPreservesRepositoryErrors(t *testing.T) {
+	checklistID := uuid.New()
+	repository := &repositoryStub{
+		putVoteResult: &shared.CommunityVoteMutation{
+			ChecklistID: checklistID,
+			Score:       4,
+			MyVote:      pointerToVote(1),
+		},
+	}
+	service := NewService(repository)
+
+	result, err := service.PutVote(
+		context.Background(),
+		&bootstrap.User{UserID: "voter-1"},
+		checklistID.String(),
+		1,
+	)
+
+	require.NoError(t, err)
+	require.Same(t, repository.putVoteResult, result)
+	require.Equal(t, 1, repository.putVoteCalls)
+	require.Equal(t, "voter-1", repository.receivedVoterUID)
+	require.Equal(t, checklistID, repository.receivedChecklist)
+	require.Equal(t, int16(1), repository.receivedDirection)
+
+	for _, test := range []struct {
+		name      string
+		user      *bootstrap.User
+		checklist string
+		direction int16
+		status    int
+		code      string
+	}{
+		{"missing user", nil, checklistID.String(), 1, 401, "authentication_required"},
+		{"blank uid", &bootstrap.User{UserID: " "}, checklistID.String(), 1, 401, "authentication_required"},
+		{"invalid UUID", &bootstrap.User{UserID: "voter-1"}, "invalid", 1, 400, "invalid_request"},
+		{"zero direction", &bootstrap.User{UserID: "voter-1"}, checklistID.String(), 0, 400, "invalid_request"},
+		{"positive out of range", &bootstrap.User{UserID: "voter-1"}, checklistID.String(), 2, 400, "invalid_request"},
+		{"negative out of range", &bootstrap.User{UserID: "voter-1"}, checklistID.String(), -2, 400, "invalid_request"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			invalidRepository := &repositoryStub{}
+			invalidService := NewService(invalidRepository)
+			_, voteErr := invalidService.PutVote(
+				context.Background(),
+				test.user,
+				test.checklist,
+				test.direction,
+			)
+			requireCommunityAPIError(t, voteErr, test.status, test.code)
+			require.Zero(t, invalidRepository.putVoteCalls)
+		})
+	}
+
+	repository.putVoteError = shared.NewResourceNotFound("source unavailable", nil)
+	_, err = service.PutVote(
+		context.Background(),
+		&bootstrap.User{UserID: "voter-1"},
+		checklistID.String(),
+		-1,
+	)
+	require.Same(t, repository.putVoteError, err)
+}
+
+func TestDeleteVoteParsesAuthenticatedVoterAndPreservesRepositoryError(t *testing.T) {
+	checklistID := uuid.New()
+	repository := &repositoryStub{
+		deleteVoteResult: &shared.CommunityVoteMutation{ChecklistID: checklistID},
+	}
+	service := NewService(repository)
+
+	result, err := service.DeleteVote(
+		context.Background(),
+		&bootstrap.User{UserID: "voter-1"},
+		checklistID.String(),
+	)
+	require.NoError(t, err)
+	require.Same(t, repository.deleteVoteResult, result)
+	require.Equal(t, 1, repository.deleteVoteCalls)
+	require.Equal(t, "voter-1", repository.receivedVoterUID)
+	require.Equal(t, checklistID, repository.receivedChecklist)
+
+	for _, test := range []struct {
+		name      string
+		user      *bootstrap.User
+		checklist string
+		status    int
+		code      string
+	}{
+		{"missing user", nil, checklistID.String(), 401, "authentication_required"},
+		{"nil UUID", &bootstrap.User{UserID: "voter-1"}, uuid.Nil.String(), 400, "invalid_request"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			invalidRepository := &repositoryStub{}
+			invalidService := NewService(invalidRepository)
+			_, deleteErr := invalidService.DeleteVote(
+				context.Background(), test.user, test.checklist,
+			)
+			requireCommunityAPIError(t, deleteErr, test.status, test.code)
+			require.Zero(t, invalidRepository.deleteVoteCalls)
+		})
+	}
+
+	repository.deleteVoteError = shared.NewAccountNotInitialized(
+		"account is not initialized", nil,
+	)
+	_, err = service.DeleteVote(
+		context.Background(),
+		&bootstrap.User{UserID: "voter-1"},
+		checklistID.String(),
+	)
+	require.Same(t, repository.deleteVoteError, err)
 }
 
 func pointerToVote(value int16) *int16 {

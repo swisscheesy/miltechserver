@@ -42,6 +42,17 @@ type Service interface {
 		model string,
 		sort string,
 	) (*shared.AuthenticatedCommunityPage, error)
+	PutVote(
+		ctx context.Context,
+		user *bootstrap.User,
+		checklistID string,
+		direction int16,
+	) (*shared.CommunityVoteMutation, error)
+	DeleteVote(
+		ctx context.Context,
+		user *bootstrap.User,
+		checklistID string,
+	) (*shared.CommunityVoteMutation, error)
 	GetCurrentRelease(
 		ctx context.Context,
 		checklistID string,
