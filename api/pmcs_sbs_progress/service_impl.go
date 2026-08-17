@@ -83,7 +83,7 @@ func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID stri
 	if err != nil {
 		return nil, err
 	}
-	resp := mapInspection(detail.PmcsSbsInspections, detail.PerformedByUsername, faults, comments)
+	resp := mapInspection(detail.UserPmcsInspections, detail.PerformedByUsername, faults, comments)
 	return &resp, nil
 }
 
@@ -295,30 +295,30 @@ func (service *ServiceImpl) DeleteComment(user *bootstrap.User, equipmentID stri
 	return &resp, nil
 }
 
-func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID string, userID string, req InspectionRequest) (model.PmcsSbsInspections, error) {
+func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID string, userID string, req InspectionRequest) (model.UserPmcsInspections, error) {
 	trimmedEquipmentID, err := validateEquipmentID(equipmentID)
 	if err != nil {
-		return model.PmcsSbsInspections{}, err
+		return model.UserPmcsInspections{}, err
 	}
 	parsedPmcsID, err := validatePmcsID(pmcsID)
 	if err != nil {
-		return model.PmcsSbsInspections{}, err
+		return model.UserPmcsInspections{}, err
 	}
 	source, err := normalizeInspectionSource(req.InspectionSourceRequest)
 	if err != nil {
-		return model.PmcsSbsInspections{}, err
+		return model.UserPmcsInspections{}, err
 	}
 	if req.PerformedDate.IsZero() {
-		return model.PmcsSbsInspections{}, ErrInvalidRequest
+		return model.UserPmcsInspections{}, ErrInvalidRequest
 	}
 
 	notes, err := validateNotes(req.Notes)
 	if err != nil {
-		return model.PmcsSbsInspections{}, err
+		return model.UserPmcsInspections{}, err
 	}
 
 	performedBy := strings.TrimSpace(userID)
-	return model.PmcsSbsInspections{
+	return model.UserPmcsInspections{
 		ID:                   parsedPmcsID,
 		EquipmentID:          trimmedEquipmentID,
 		SourceType:           source.SourceType,
@@ -333,13 +333,13 @@ func (service *ServiceImpl) validateInspectionRequest(equipmentID string, pmcsID
 	}, nil
 }
 
-func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID string, userID string, req FaultRequest) (model.PmcsSbsInspections, model.PmcsSbsFaults, error) {
+func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID string, userID string, req FaultRequest) (model.UserPmcsInspections, model.UserPmcsFaults, error) {
 	inspection, err := service.validateInspectionRequest(equipmentID, pmcsID, userID, InspectionRequest{
 		InspectionSourceRequest: req.InspectionSourceRequest,
 		PerformedDate:           req.PerformedDate,
 	})
 	if err != nil {
-		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, err
+		return model.UserPmcsInspections{}, model.UserPmcsFaults{}, err
 	}
 
 	sectionID := strings.TrimSpace(req.SectionID)
@@ -347,18 +347,18 @@ func (service *ServiceImpl) validateFaultRequest(equipmentID string, pmcsID stri
 	status, validStatus := normalizeFaultStatus(req.Status)
 	faultText := strings.TrimSpace(req.FaultText)
 	if sectionID == "" || itemNo == "" || req.ItemIndex < 0 || faultText == "" {
-		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, ErrInvalidRequest
+		return model.UserPmcsInspections{}, model.UserPmcsFaults{}, ErrInvalidRequest
 	}
 	if !validStatus {
-		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, ErrInvalidStatus
+		return model.UserPmcsInspections{}, model.UserPmcsFaults{}, ErrInvalidStatus
 	}
 	sectionTitle, err := validateOptionalShortField(req.SectionTitle)
 	if err != nil {
-		return model.PmcsSbsInspections{}, model.PmcsSbsFaults{}, err
+		return model.UserPmcsInspections{}, model.UserPmcsFaults{}, err
 	}
 
 	now := time.Now().UTC()
-	fault := model.PmcsSbsFaults{
+	fault := model.UserPmcsFaults{
 		PmcsID:           inspection.ID,
 		SectionID:        sectionID,
 		SectionTitle:     sectionTitle,
@@ -595,7 +595,7 @@ func normalizeFaultStatus(status string) (string, bool) {
 	}
 }
 
-func mapFault(row model.PmcsSbsFaults) FaultResponse {
+func mapFault(row model.UserPmcsFaults) FaultResponse {
 	return FaultResponse{
 		PmcsID:           row.PmcsID,
 		SectionID:        row.SectionID,
@@ -610,7 +610,7 @@ func mapFault(row model.PmcsSbsFaults) FaultResponse {
 	}
 }
 
-func mapInspection(row model.PmcsSbsInspections, performedByUsername *string, faultRows []model.PmcsSbsFaults, commentRows []CommentWithAuthor) InspectionResponse {
+func mapInspection(row model.UserPmcsInspections, performedByUsername *string, faultRows []model.UserPmcsFaults, commentRows []CommentWithAuthor) InspectionResponse {
 	faults := make([]FaultResponse, 0, len(faultRows))
 	for _, faultRow := range faultRows {
 		faults = append(faults, mapFault(faultRow))

@@ -11,9 +11,9 @@ import (
 	"github.com/go-jet/jet/v2/postgres"
 )
 
-var PmcsSbsInspections = newPmcsSbsInspectionsTable("public", "pmcs_sbs_inspections", "")
+var UserPmcsInspections = newUserPmcsInspectionsTable("public", "user_pmcs_inspections", "")
 
-type pmcsSbsInspectionsTable struct {
+type userPmcsInspectionsTable struct {
 	postgres.Table
 
 	// Columns
@@ -36,40 +36,40 @@ type pmcsSbsInspectionsTable struct {
 	DefaultColumns postgres.ColumnList
 }
 
-type PmcsSbsInspectionsTable struct {
-	pmcsSbsInspectionsTable
+type UserPmcsInspectionsTable struct {
+	userPmcsInspectionsTable
 
-	EXCLUDED pmcsSbsInspectionsTable
+	EXCLUDED userPmcsInspectionsTable
 }
 
-// AS creates new PmcsSbsInspectionsTable with assigned alias
-func (a PmcsSbsInspectionsTable) AS(alias string) *PmcsSbsInspectionsTable {
-	return newPmcsSbsInspectionsTable(a.SchemaName(), a.TableName(), alias)
+// AS creates new UserPmcsInspectionsTable with assigned alias
+func (a UserPmcsInspectionsTable) AS(alias string) *UserPmcsInspectionsTable {
+	return newUserPmcsInspectionsTable(a.SchemaName(), a.TableName(), alias)
 }
 
-// Schema creates new PmcsSbsInspectionsTable with assigned schema name
-func (a PmcsSbsInspectionsTable) FromSchema(schemaName string) *PmcsSbsInspectionsTable {
-	return newPmcsSbsInspectionsTable(schemaName, a.TableName(), a.Alias())
+// Schema creates new UserPmcsInspectionsTable with assigned schema name
+func (a UserPmcsInspectionsTable) FromSchema(schemaName string) *UserPmcsInspectionsTable {
+	return newUserPmcsInspectionsTable(schemaName, a.TableName(), a.Alias())
 }
 
-// WithPrefix creates new PmcsSbsInspectionsTable with assigned table prefix
-func (a PmcsSbsInspectionsTable) WithPrefix(prefix string) *PmcsSbsInspectionsTable {
-	return newPmcsSbsInspectionsTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
+// WithPrefix creates new UserPmcsInspectionsTable with assigned table prefix
+func (a UserPmcsInspectionsTable) WithPrefix(prefix string) *UserPmcsInspectionsTable {
+	return newUserPmcsInspectionsTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
 }
 
-// WithSuffix creates new PmcsSbsInspectionsTable with assigned table suffix
-func (a PmcsSbsInspectionsTable) WithSuffix(suffix string) *PmcsSbsInspectionsTable {
-	return newPmcsSbsInspectionsTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
+// WithSuffix creates new UserPmcsInspectionsTable with assigned table suffix
+func (a UserPmcsInspectionsTable) WithSuffix(suffix string) *UserPmcsInspectionsTable {
+	return newUserPmcsInspectionsTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
 }
 
-func newPmcsSbsInspectionsTable(schemaName, tableName, alias string) *PmcsSbsInspectionsTable {
-	return &PmcsSbsInspectionsTable{
-		pmcsSbsInspectionsTable: newPmcsSbsInspectionsTableImpl(schemaName, tableName, alias),
-		EXCLUDED:                newPmcsSbsInspectionsTableImpl("", "excluded", ""),
+func newUserPmcsInspectionsTable(schemaName, tableName, alias string) *UserPmcsInspectionsTable {
+	return &UserPmcsInspectionsTable{
+		userPmcsInspectionsTable: newUserPmcsInspectionsTableImpl(schemaName, tableName, alias),
+		EXCLUDED:                 newUserPmcsInspectionsTableImpl("", "excluded", ""),
 	}
 }
 
-func newPmcsSbsInspectionsTableImpl(schemaName, tableName, alias string) pmcsSbsInspectionsTable {
+func newUserPmcsInspectionsTableImpl(schemaName, tableName, alias string) userPmcsInspectionsTable {
 	var (
 		IDColumn                   = postgres.StringColumn("id")
 		EquipmentIDColumn          = postgres.StringColumn("equipment_id")
@@ -89,7 +89,7 @@ func newPmcsSbsInspectionsTableImpl(schemaName, tableName, alias string) pmcsSbs
 		defaultColumns             = postgres.ColumnList{CreatedAtColumn, UpdatedAtColumn}
 	)
 
-	return pmcsSbsInspectionsTable{
+	return userPmcsInspectionsTable{
 		Table: postgres.NewTable(schemaName, tableName, alias, allColumns...),
 
 		//Columns

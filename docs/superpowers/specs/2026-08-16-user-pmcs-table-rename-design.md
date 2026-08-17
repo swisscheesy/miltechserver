@@ -75,7 +75,7 @@ The live catalog was inspected read-only on 2026-08-16.
 
 Both databases run PostgreSQL 14.18 and contain the three legacy table names.
 None of the three target names exists. The logical table shapes, 15
-constraints, and five indexes are equivalent in both databases. Differences
+constraints, and five original indexes are equivalent in both databases. Differences
 in internal column ordinal numbers in `miltech_ng_test` are remnants of prior
 add/drop migration rehearsals and do not represent a logical schema
 difference.
@@ -108,8 +108,11 @@ cleanup, catalog assertions, row counts, and fixed-query-count assertions.
 
 ## Chosen approach
 
-Use one metadata-only, transactional PostgreSQL rename migration followed by
-canonical Jet regeneration and a mechanical handwritten-code migration.
+Use one transactional PostgreSQL rename migration followed by canonical Jet
+regeneration and a mechanical handwritten-code migration. The migration also
+adds two non-unique foreign-key-leading indexes required by the existing
+`user_pmcs_%` schema invariant: `performed_by` on inspections and `author_id`
+on inspection comments. No table rows or column definitions are rewritten.
 
 `ALTER TABLE ... RENAME TO` changes catalog metadata and does not rewrite the
 table or its rows. PostgreSQL-maintained dependencies continue to point to
@@ -214,6 +217,10 @@ Index definitions and sort directions do not change:
 
 - inspections remain indexed by `(equipment_id, performed_date DESC)`; and
 - comments remain indexed by `(pmcs_id, created_at ASC)`.
+
+The migration additionally creates `user_pmcs_inspections_performed_by_idx`
+and `user_pmcs_inspection_comments_author_id_idx`; rollback drops both before
+restoring the legacy names.
 
 ### Rollback transaction
 

@@ -15,12 +15,12 @@ import (
 )
 
 type repoStub struct {
-	inspection     *model.PmcsSbsInspections
+	inspection     *model.UserPmcsInspections
 	detailUsername *string
-	faults         []model.PmcsSbsFaults
+	faults         []model.UserPmcsFaults
 	comments       []CommentWithAuthor
 	summaries      []InspectionSummary
-	savedFault     *model.PmcsSbsFaults
+	savedFault     *model.UserPmcsFaults
 	deletedCount   int64
 	err            error
 
@@ -38,8 +38,8 @@ type repoStub struct {
 	capturedGuideManual      string
 	capturedLimit            int
 	capturedOffset           int
-	capturedInspection       model.PmcsSbsInspections
-	capturedFault            model.PmcsSbsFaults
+	capturedInspection       model.UserPmcsInspections
+	capturedFault            model.UserPmcsFaults
 	capturedDelete           FaultKey
 	capturedBulkKeys         []FaultKey
 	capturedLookupUsernameID string
@@ -51,7 +51,7 @@ func stringPointer(value string) *string {
 	return &value
 }
 
-func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
+func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.UserPmcsInspections) (*model.UserPmcsInspections, error) {
 	repo.capturedUser = user
 	repo.capturedInspection = inspection
 	if repo.inspection != nil {
@@ -60,14 +60,14 @@ func (repo *repoStub) EnsureInspection(user *bootstrap.User, inspection model.Pm
 	return &inspection, repo.err
 }
 
-func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, []CommentWithAuthor, error) {
+func (repo *repoStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.UserPmcsFaults, []CommentWithAuthor, error) {
 	repo.capturedUser = user
 	repo.capturedEquipmentID = equipmentID
 	repo.capturedPmcsID = pmcsID
 	if repo.inspection == nil {
 		return nil, repo.faults, repo.comments, repo.err
 	}
-	return &InspectionDetail{PmcsSbsInspections: *repo.inspection, PerformedByUsername: repo.detailUsername}, repo.faults, repo.comments, repo.err
+	return &InspectionDetail{UserPmcsInspections: *repo.inspection, PerformedByUsername: repo.detailUsername}, repo.faults, repo.comments, repo.err
 }
 
 func (repo *repoStub) LookupUsername(userID string) (*string, error) {
@@ -92,7 +92,7 @@ func (repo *repoStub) DeleteInspection(user *bootstrap.User, equipmentID string,
 	return repo.err
 }
 
-func (repo *repoStub) UpsertFault(user *bootstrap.User, inspection model.PmcsSbsInspections, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
+func (repo *repoStub) UpsertFault(user *bootstrap.User, inspection model.UserPmcsInspections, fault model.UserPmcsFaults) (*model.UserPmcsFaults, error) {
 	repo.capturedUser = user
 	repo.capturedInspection = inspection
 	repo.capturedFault = fault
@@ -125,7 +125,7 @@ func (repo *repoStub) CreateComment(user *bootstrap.User, equipmentID string, pm
 	if repo.createdComment != nil {
 		return repo.createdComment, repo.err
 	}
-	return &CommentWithAuthor{PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{
+	return &CommentWithAuthor{UserPmcsInspectionComments: model.UserPmcsInspectionComments{
 		ID: uuid.New(), PmcsID: pmcsID, AuthorID: user.UserID, Text: text,
 	}}, repo.err
 }
@@ -144,7 +144,7 @@ func (repo *repoStub) UpdateComment(commentID uuid.UUID, text string) (*CommentW
 	if repo.updatedComment != nil {
 		return repo.updatedComment, repo.err
 	}
-	return &CommentWithAuthor{PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: commentID, Text: text}}, repo.err
+	return &CommentWithAuthor{UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: commentID, Text: text}}, repo.err
 }
 
 func requireUser() *bootstrap.User {
@@ -419,7 +419,7 @@ func TestEnsureInspectionRejectsInvalidValues(t *testing.T) {
 
 func TestEnsureInspectionMapsResponse(t *testing.T) {
 	performedBy := "user-1"
-	stub := &repoStub{inspection: &model.PmcsSbsInspections{
+	stub := &repoStub{inspection: &model.UserPmcsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
 		SourceType:    "guide",
@@ -449,7 +449,7 @@ func TestMapInspectionCustomSourceOmitsGuideManual(t *testing.T) {
 	revisionNumber := int32(3)
 	checklistName := "Weekly Generator PMCS"
 
-	response := mapInspection(model.PmcsSbsInspections{
+	response := mapInspection(model.UserPmcsInspections{
 		ID:                   samplePmcsID(),
 		EquipmentID:          "vehicle-1",
 		SourceType:           "custom",
@@ -477,7 +477,7 @@ func TestMapInspectionCustomSourceOmitsGuideManual(t *testing.T) {
 
 func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *testing.T) {
 	performedBy := "user-1"
-	stub := &repoStub{inspection: &model.PmcsSbsInspections{
+	stub := &repoStub{inspection: &model.UserPmcsInspections{
 		ID:            samplePmcsID(),
 		EquipmentID:   "vehicle-1",
 		GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
@@ -502,7 +502,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiff
 	performedBy := "original-user"
 	lookupResult := "original-username"
 	stub := &repoStub{
-		inspection: &model.PmcsSbsInspections{
+		inspection: &model.UserPmcsInspections{
 			ID:            samplePmcsID(),
 			EquipmentID:   "vehicle-1",
 			GuideManual:   stringPointer("pmcs_sbs/hmmwv/file.json"),
@@ -537,8 +537,8 @@ func TestGetInspectionRejectsInvalidPmcsID(t *testing.T) {
 func TestGetInspectionMapsFaults(t *testing.T) {
 	now := time.Now().UTC()
 	stub := &repoStub{
-		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now},
-		faults: []model.PmcsSbsFaults{{
+		inspection: &model.UserPmcsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now},
+		faults: []model.UserPmcsFaults{{
 			PmcsID: samplePmcsID(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "x", FaultText: "leak", CreatedAt: now, UpdatedAt: now,
 		}},
 	}
@@ -779,7 +779,7 @@ func shortFieldAtByteLimit() string {
 
 func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	now := time.Now().UTC()
-	stub := &repoStub{savedFault: &model.PmcsSbsFaults{
+	stub := &repoStub{savedFault: &model.UserPmcsFaults{
 		PmcsID: samplePmcsID(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "x", FaultText: "leak", CreatedAt: now, UpdatedAt: now,
 	}}
 	svc := NewService(stub)
@@ -908,10 +908,10 @@ func TestGetInspectionMapsNotesAndComments(t *testing.T) {
 	notes := "clean inspection"
 	authorUsername := "jsmith"
 	stub := &repoStub{
-		inspection: &model.PmcsSbsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now, Notes: &notes},
+		inspection: &model.UserPmcsInspections{ID: samplePmcsID(), EquipmentID: "vehicle-1", GuideManual: stringPointer("pmcs_sbs/hmmwv/file.json"), PerformedDate: now, Notes: &notes},
 		comments: []CommentWithAuthor{{
-			PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: uuid.New(), PmcsID: samplePmcsID(), AuthorID: "user-1", Text: "looks good", CreatedAt: now},
-			AuthorUsername:            &authorUsername,
+			UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: uuid.New(), PmcsID: samplePmcsID(), AuthorID: "user-1", Text: "looks good", CreatedAt: now},
+			AuthorUsername:             &authorUsername,
 		}},
 	}
 	svc := NewService(stub)
@@ -968,7 +968,7 @@ func TestCreateCommentTrimsTextAndPassesThrough(t *testing.T) {
 
 func TestUpdateCommentRequiresAuthorship(t *testing.T) {
 	stub := &repoStub{existingComment: &CommentWithAuthor{
-		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
+		UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
 	}}
 	svc := NewService(stub)
 
@@ -979,7 +979,7 @@ func TestUpdateCommentRequiresAuthorship(t *testing.T) {
 
 func TestUpdateCommentSucceedsForAuthor(t *testing.T) {
 	stub := &repoStub{existingComment: &CommentWithAuthor{
-		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
+		UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
 	}}
 	svc := NewService(stub)
 
@@ -993,7 +993,7 @@ func TestUpdateCommentSucceedsForAuthor(t *testing.T) {
 
 func TestDeleteCommentRequiresAuthorshipAndUsesSentinelText(t *testing.T) {
 	stub := &repoStub{existingComment: &CommentWithAuthor{
-		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
+		UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: samplePmcsID(), AuthorID: "user-1", Text: "original"},
 	}}
 	svc := NewService(stub)
 
@@ -1007,7 +1007,7 @@ func TestDeleteCommentRequiresAuthorshipAndUsesSentinelText(t *testing.T) {
 
 func TestDeleteCommentRejectsNonAuthor(t *testing.T) {
 	stub := &repoStub{existingComment: &CommentWithAuthor{
-		PmcsSbsInspectionComments: model.PmcsSbsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
+		UserPmcsInspectionComments: model.UserPmcsInspectionComments{ID: samplePmcsID(), AuthorID: "someone-else", Text: "original"},
 	}}
 	svc := NewService(stub)
 

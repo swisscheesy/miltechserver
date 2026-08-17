@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type PmcsSbsFaults struct {
+type UserPmcsFaults struct {
 	PmcsID           uuid.UUID `sql:"primary_key" json:"pmcs_id"`
 	SectionID        string    `sql:"primary_key" json:"section_id"`
 	ItemIndex        int32     `sql:"primary_key" json:"item_index"`

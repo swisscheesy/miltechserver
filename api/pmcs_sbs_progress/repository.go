@@ -10,13 +10,13 @@ import (
 )
 
 type Repository interface {
-	EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error)
-	GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, []CommentWithAuthor, error)
+	EnsureInspection(user *bootstrap.User, inspection model.UserPmcsInspections) (*model.UserPmcsInspections, error)
+	GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.UserPmcsFaults, []CommentWithAuthor, error)
 	ListInspections(user *bootstrap.User, equipmentID string, guideManual string, limit int, offset int) ([]InspectionSummary, error)
 	DeleteInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) error
 	LookupUsername(userID string) (*string, error)
 
-	UpsertFault(user *bootstrap.User, inspection model.PmcsSbsInspections, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error)
+	UpsertFault(user *bootstrap.User, inspection model.UserPmcsInspections, fault model.UserPmcsFaults) (*model.UserPmcsFaults, error)
 	DeleteFault(user *bootstrap.User, equipmentID string, key FaultKey) error
 	DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, keys []FaultKey) (int64, error)
 
@@ -26,7 +26,7 @@ type Repository interface {
 }
 
 type InspectionDetail struct {
-	model.PmcsSbsInspections
+	model.UserPmcsInspections
 	PerformedByUsername *string
 }
 
@@ -53,6 +53,6 @@ type InspectionSummary struct {
 }
 
 type CommentWithAuthor struct {
-	model.PmcsSbsInspectionComments
+	model.UserPmcsInspectionComments
 	AuthorUsername *string
 }

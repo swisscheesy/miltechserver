@@ -375,7 +375,7 @@ func createPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, guideMan
 	id := uuid.New().String()
 	now := time.Now().UTC()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspections (id, equipment_id, source_type, guide_manual, performed_date, performed_by, created_at, updated_at)
+		`INSERT INTO user_pmcs_inspections (id, equipment_id, source_type, guide_manual, performed_date, performed_by, created_at, updated_at)
 		 VALUES ($1, $2, 'guide', $3, $4, $5, $6, $6)`,
 		id, equipmentID, guideManual, performedDate, performedBy, now,
 	)
@@ -388,7 +388,7 @@ func createCustomPmcsInspection(t *testing.T, db *sql.DB, equipmentID string, pe
 
 	id := uuid.New().String()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspections
+		`INSERT INTO user_pmcs_inspections
 		  (id, equipment_id, source_type, guide_manual,
 		   custom_checklist_id, custom_revision_id,
 		   custom_revision_number, custom_checklist_name,
@@ -405,7 +405,7 @@ func createPmcsFault(t *testing.T, db *sql.DB, pmcsID string, sectionID string, 
 
 	now := time.Now().UTC()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_faults (pmcs_id, section_id, item_index, item_no, status, fault_text, corrective_action, created_at, updated_at)
+		`INSERT INTO user_pmcs_faults (pmcs_id, section_id, item_index, item_no, status, fault_text, corrective_action, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
 		pmcsID, sectionID, itemIndex, "1", "x", "test fault", "", now,
 	)
@@ -417,7 +417,7 @@ func createPmcsComment(t *testing.T, db *sql.DB, pmcsID string, authorID string,
 
 	now := time.Now().UTC()
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspection_comments (id, pmcs_id, author_id, text, created_at)
+		`INSERT INTO user_pmcs_inspection_comments (id, pmcs_id, author_id, text, created_at)
 		 VALUES ($1, $2, $3, $4, $5)`,
 		uuid.New().String(), pmcsID, authorID, text, now,
 	)

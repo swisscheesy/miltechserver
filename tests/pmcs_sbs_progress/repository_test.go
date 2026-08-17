@@ -48,7 +48,7 @@ func TestInspectionSourceConstraint(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = testDB.Exec(
-		`INSERT INTO pmcs_sbs_inspections
+		`INSERT INTO user_pmcs_inspections
 		  (id, equipment_id, source_type, guide_manual, performed_date, performed_by)
 		 VALUES ($1, $2, 'guide', 'pmcs_sbs/hmmwv/file.json', $3, $4)`,
 		uuid.New(), vehicleID, performedDate, user.UserID,
@@ -58,7 +58,7 @@ func TestInspectionSourceConstraint(t *testing.T) {
 	customChecklistID := uuid.New()
 	customRevisionID := uuid.New()
 	_, err = testDB.Exec(
-		`INSERT INTO pmcs_sbs_inspections
+		`INSERT INTO user_pmcs_inspections
 		  (id, equipment_id, source_type, guide_manual,
 		   custom_checklist_id, custom_revision_id,
 		   custom_revision_number, custom_checklist_name,
@@ -75,14 +75,14 @@ func TestInspectionSourceConstraint(t *testing.T) {
 	}{
 		{
 			name: "inspection equipment cannot be blank",
-			query: `INSERT INTO pmcs_sbs_inspections
+			query: `INSERT INTO user_pmcs_inspections
 			  (id, equipment_id, source_type, guide_manual, performed_date, performed_by)
 			 VALUES ($1, '', 'guide', 'pmcs_sbs/hmmwv/file.json', $2, $3)`,
 			args: []any{uuid.New(), performedDate, user.UserID},
 		},
 		{
 			name: "custom source cannot include guide manual",
-			query: `INSERT INTO pmcs_sbs_inspections
+			query: `INSERT INTO user_pmcs_inspections
 			  (id, equipment_id, source_type, guide_manual,
 			   custom_checklist_id, custom_revision_id,
 			   custom_revision_number, custom_checklist_name,
@@ -92,7 +92,7 @@ func TestInspectionSourceConstraint(t *testing.T) {
 		},
 		{
 			name: "guide source cannot include custom provenance",
-			query: `INSERT INTO pmcs_sbs_inspections
+			query: `INSERT INTO user_pmcs_inspections
 			  (id, equipment_id, source_type, guide_manual, custom_checklist_id,
 			   performed_date, performed_by)
 			 VALUES ($1, $2, 'guide', 'pmcs_sbs/hmmwv/file.json', $3, $4, $5)`,
@@ -100,7 +100,7 @@ func TestInspectionSourceConstraint(t *testing.T) {
 		},
 		{
 			name: "custom source requires revision number",
-			query: `INSERT INTO pmcs_sbs_inspections
+			query: `INSERT INTO user_pmcs_inspections
 			  (id, equipment_id, source_type, guide_manual,
 			   custom_checklist_id, custom_revision_id, custom_checklist_name,
 			   performed_date, performed_by)
@@ -109,7 +109,7 @@ func TestInspectionSourceConstraint(t *testing.T) {
 		},
 		{
 			name: "custom source requires checklist name",
-			query: `INSERT INTO pmcs_sbs_inspections
+			query: `INSERT INTO user_pmcs_inspections
 			  (id, equipment_id, source_type, guide_manual,
 			   custom_checklist_id, custom_revision_id, custom_revision_number,
 			   performed_date, performed_by)
@@ -256,7 +256,7 @@ func TestRepositoryCustomEnsureInspectionRetryUpdatesOnlyMutableFields(t *testin
 	require.Equal(t, inspection.CustomChecklistID, second.CustomChecklistID)
 
 	var count int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE id=$1`, inspection.ID).Scan(&count)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_inspections WHERE id=$1`, inspection.ID).Scan(&count)
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
 }
@@ -275,11 +275,11 @@ func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
 
 	mutations := []struct {
 		name   string
-		mutate func(model model.PmcsSbsInspections) model.PmcsSbsInspections
+		mutate func(model model.UserPmcsInspections) model.UserPmcsInspections
 	}{
 		{
 			name: "source type",
-			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+			mutate: func(model model.UserPmcsInspections) model.UserPmcsInspections {
 				guideManual := "pmcs_sbs/hmmwv/file.json"
 				model.SourceType = "guide"
 				model.GuideManual = &guideManual
@@ -292,7 +292,7 @@ func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
 		},
 		{
 			name: "checklist id",
-			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+			mutate: func(model model.UserPmcsInspections) model.UserPmcsInspections {
 				value := uuid.New()
 				model.CustomChecklistID = &value
 				return model
@@ -300,7 +300,7 @@ func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
 		},
 		{
 			name: "revision id",
-			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+			mutate: func(model model.UserPmcsInspections) model.UserPmcsInspections {
 				value := uuid.New()
 				model.CustomRevisionID = &value
 				return model
@@ -308,7 +308,7 @@ func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
 		},
 		{
 			name: "revision number",
-			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+			mutate: func(model model.UserPmcsInspections) model.UserPmcsInspections {
 				value := *model.CustomRevisionNumber + 1
 				model.CustomRevisionNumber = &value
 				return model
@@ -316,7 +316,7 @@ func TestRepositoryCustomEnsureInspectionRejectsSourceMutation(t *testing.T) {
 		},
 		{
 			name: "checklist name",
-			mutate: func(model model.PmcsSbsInspections) model.PmcsSbsInspections {
+			mutate: func(model model.UserPmcsInspections) model.UserPmcsInspections {
 				value := "Different Checklist"
 				model.CustomChecklistName = &value
 				return model
@@ -439,11 +439,11 @@ func TestRepositoryCustomVehicleDeleteCascadesInspectionFaultAndComment(t *testi
 	require.NoError(t, err)
 
 	var inspectionCount, faultCount, commentCount int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE id=$1`, inspection.ID).Scan(&inspectionCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_inspections WHERE id=$1`, inspection.ID).Scan(&inspectionCount)
 	require.NoError(t, err)
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
 	require.NoError(t, err)
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
 	require.NoError(t, err)
 	require.Zero(t, inspectionCount)
 	require.Zero(t, faultCount)
@@ -820,7 +820,7 @@ func TestRepositoryDeleteInspectionCascadesFaultsButNotSiblings(t *testing.T) {
 	require.NoError(t, err)
 
 	var faultCount int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, toDelete.ID).Scan(&faultCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_faults WHERE pmcs_id=$1`, toDelete.ID).Scan(&faultCount)
 	require.NoError(t, err)
 	require.Equal(t, 0, faultCount)
 
@@ -1041,7 +1041,7 @@ func TestRepositoryDeleteInspectionCascadesComments(t *testing.T) {
 	require.NoError(t, err)
 
 	var commentCount int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_inspection_comments WHERE pmcs_id=$1`, inspection.ID).Scan(&commentCount)
 	require.NoError(t, err)
 	require.Equal(t, 0, commentCount)
 }
@@ -1062,11 +1062,11 @@ func TestRepositoryVehicleDeleteCascadesInspectionsAndFaults(t *testing.T) {
 	require.NoError(t, err)
 
 	var inspectionCount, faultCount int
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_inspections WHERE equipment_id=$1`, vehicleID).Scan(&inspectionCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_inspections WHERE equipment_id=$1`, vehicleID).Scan(&inspectionCount)
 	require.NoError(t, err)
 	require.Equal(t, 0, inspectionCount)
 
-	err = testDB.QueryRow(`SELECT COUNT(*) FROM pmcs_sbs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
+	err = testDB.QueryRow(`SELECT COUNT(*) FROM user_pmcs_faults WHERE pmcs_id=$1`, inspection.ID).Scan(&faultCount)
 	require.NoError(t, err)
 	require.Equal(t, 0, faultCount)
 }

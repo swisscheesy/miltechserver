@@ -566,3 +566,54 @@ Based on the current project setup:
   inspection record
 - The schema migration is reversible only while no custom inspection rows
   exist; rollback refuses to discard custom history
+
+### ADR-021: Rename PMCS SBS Persistence Tables to User PMCS Convention (2026-08-16)
+
+**Context:**
+- The PostgreSQL tables `pmcs_sbs_inspections`, `pmcs_sbs_faults`, and
+  `pmcs_sbs_inspection_comments` used a legacy prefix that did not follow the
+  established `user_pmcs_` convention used by related server-side PMCS tables
+- The physical names were referenced by generated Jet identifiers, handwritten
+  repositories, integration-test SQL, constraint names, and index names, while
+  remaining internal to the server's HTTP contract
+- Only the non-production `miltech_ng_test` and `miltech_ng` databases were in
+  scope, so the schema and application could be changed as one coordinated
+  cutover
+
+**Decision:**
+- Rename the tables to `user_pmcs_inspections`, `user_pmcs_faults`, and
+  `user_pmcs_inspection_comments` with one metadata-only PostgreSQL transaction
+- Rename the 15 table-derived constraints and two explicit secondary indexes
+  without changing their definitions; allow primary-key constraint renames to
+  carry their backing index names. Add FK-leading indexes on
+  `user_pmcs_inspections.performed_by` and
+  `user_pmcs_inspection_comments.author_id` to satisfy the existing
+  `user_pmcs_%` schema invariant
+- Bound lock acquisition with a local timeout, acquire all three table locks in
+  one deterministic order, and make a partial rename fail atomically
+- Provide an exact inverse rollback, rehearse forward/rollback/forward on
+  `miltech_ng_test`, apply forward once to `miltech_ng`, and compare row
+  fingerprints and catalog definitions before and after
+- Regenerate Jet from the migrated `miltech_ng` schema with the repository's
+  canonical JSON-tag template, then mechanically update internal Go and test
+  references
+
+**Alternatives considered:**
+- Compatibility views under the legacy names (rejected: unnecessary for a
+  coordinated development cutover and unsafe for the existing write patterns)
+- Create-copy-swap replacement tables (rejected: adds data-copy and dependency
+  reconstruction risks to a metadata-only change)
+- Dual writes or synchronization triggers (rejected: no old and new application
+  versions need to run concurrently)
+
+**Consequences:**
+- Old and new binaries require their matching schema names and cannot run
+  concurrently during the cutover
+- Inspection, fault, comment, authorization, cascade, ordering, Shop aggregate,
+  route, and JSON behavior do not change; the two additive indexes improve FK
+  maintenance and preserve the repository's schema-integrity contract
+- Migration `014` is data-preserving and reversible, and its rollback behavior
+  is exercised only on `miltech_ng_test`; production is not part of this
+  decision or migration execution
+- Historical migrations and ADRs retain the table names that were correct when
+  those records were written

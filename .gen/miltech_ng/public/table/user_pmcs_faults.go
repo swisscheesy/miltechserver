@@ -11,9 +11,9 @@ import (
 	"github.com/go-jet/jet/v2/postgres"
 )
 
-var PmcsSbsFaults = newPmcsSbsFaultsTable("public", "pmcs_sbs_faults", "")
+var UserPmcsFaults = newUserPmcsFaultsTable("public", "user_pmcs_faults", "")
 
-type pmcsSbsFaultsTable struct {
+type userPmcsFaultsTable struct {
 	postgres.Table
 
 	// Columns
@@ -33,40 +33,40 @@ type pmcsSbsFaultsTable struct {
 	DefaultColumns postgres.ColumnList
 }
 
-type PmcsSbsFaultsTable struct {
-	pmcsSbsFaultsTable
+type UserPmcsFaultsTable struct {
+	userPmcsFaultsTable
 
-	EXCLUDED pmcsSbsFaultsTable
+	EXCLUDED userPmcsFaultsTable
 }
 
-// AS creates new PmcsSbsFaultsTable with assigned alias
-func (a PmcsSbsFaultsTable) AS(alias string) *PmcsSbsFaultsTable {
-	return newPmcsSbsFaultsTable(a.SchemaName(), a.TableName(), alias)
+// AS creates new UserPmcsFaultsTable with assigned alias
+func (a UserPmcsFaultsTable) AS(alias string) *UserPmcsFaultsTable {
+	return newUserPmcsFaultsTable(a.SchemaName(), a.TableName(), alias)
 }
 
-// Schema creates new PmcsSbsFaultsTable with assigned schema name
-func (a PmcsSbsFaultsTable) FromSchema(schemaName string) *PmcsSbsFaultsTable {
-	return newPmcsSbsFaultsTable(schemaName, a.TableName(), a.Alias())
+// Schema creates new UserPmcsFaultsTable with assigned schema name
+func (a UserPmcsFaultsTable) FromSchema(schemaName string) *UserPmcsFaultsTable {
+	return newUserPmcsFaultsTable(schemaName, a.TableName(), a.Alias())
 }
 
-// WithPrefix creates new PmcsSbsFaultsTable with assigned table prefix
-func (a PmcsSbsFaultsTable) WithPrefix(prefix string) *PmcsSbsFaultsTable {
-	return newPmcsSbsFaultsTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
+// WithPrefix creates new UserPmcsFaultsTable with assigned table prefix
+func (a UserPmcsFaultsTable) WithPrefix(prefix string) *UserPmcsFaultsTable {
+	return newUserPmcsFaultsTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
 }
 
-// WithSuffix creates new PmcsSbsFaultsTable with assigned table suffix
-func (a PmcsSbsFaultsTable) WithSuffix(suffix string) *PmcsSbsFaultsTable {
-	return newPmcsSbsFaultsTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
+// WithSuffix creates new UserPmcsFaultsTable with assigned table suffix
+func (a UserPmcsFaultsTable) WithSuffix(suffix string) *UserPmcsFaultsTable {
+	return newUserPmcsFaultsTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
 }
 
-func newPmcsSbsFaultsTable(schemaName, tableName, alias string) *PmcsSbsFaultsTable {
-	return &PmcsSbsFaultsTable{
-		pmcsSbsFaultsTable: newPmcsSbsFaultsTableImpl(schemaName, tableName, alias),
-		EXCLUDED:           newPmcsSbsFaultsTableImpl("", "excluded", ""),
+func newUserPmcsFaultsTable(schemaName, tableName, alias string) *UserPmcsFaultsTable {
+	return &UserPmcsFaultsTable{
+		userPmcsFaultsTable: newUserPmcsFaultsTableImpl(schemaName, tableName, alias),
+		EXCLUDED:            newUserPmcsFaultsTableImpl("", "excluded", ""),
 	}
 }
 
-func newPmcsSbsFaultsTableImpl(schemaName, tableName, alias string) pmcsSbsFaultsTable {
+func newUserPmcsFaultsTableImpl(schemaName, tableName, alias string) userPmcsFaultsTable {
 	var (
 		PmcsIDColumn           = postgres.StringColumn("pmcs_id")
 		SectionIDColumn        = postgres.StringColumn("section_id")
@@ -83,7 +83,7 @@ func newPmcsSbsFaultsTableImpl(schemaName, tableName, alias string) pmcsSbsFault
 		defaultColumns         = postgres.ColumnList{CorrectiveActionColumn, CreatedAtColumn, UpdatedAtColumn}
 	)
 
-	return pmcsSbsFaultsTable{
+	return userPmcsFaultsTable{
 		Table: postgres.NewTable(schemaName, tableName, alias, allColumns...),
 
 		//Columns

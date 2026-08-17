@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-type PmcsSbsInspections struct {
+type UserPmcsInspections struct {
 	ID                   uuid.UUID  `sql:"primary_key" json:"id"`
 	EquipmentID          string     `json:"equipment_id"`
 	GuideManual          *string    `json:"guide_manual"`
