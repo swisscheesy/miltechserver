@@ -9,6 +9,18 @@ A caller must be a member of the vehicle Shop. An absent vehicle and one the
 caller cannot view both return 404 {"message":"pmcs sbs equipment not found"}.
 Do not use this API to disclose Shop membership or vehicle data.
 
+## Server persistence
+
+The server persists this feature in the PostgreSQL tables
+`user_pmcs_inspections`, `user_pmcs_faults`, and
+`user_pmcs_inspection_comments`. These physical names are internal: the
+`/pmcs-sbs` routes, JSON representations, and `pmcs_id` contract are
+unchanged.
+
+The PostgreSQL `user_pmcs_inspections` table is server storage and is distinct
+from the Flutter application's device-local SQLite/Drift table with the same
+name. The two tables have independent schemas and lifecycles.
+
 ## Endpoint index
 
 | Method | Path | Purpose |
