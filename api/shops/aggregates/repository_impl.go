@@ -1125,16 +1125,16 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 	}
 
 	var inspections []struct {
-		model.PmcsSbsInspections
+		model.UserPmcsInspections
 		PerformedByUsername *string `sql:"performed_by_username"`
 	}
 	inspectionsStmt := SELECT(
-		PmcsSbsInspections.AllColumns,
+		UserPmcsInspections.AllColumns,
 		Users.Username.AS("performed_by_username"),
 	).
-		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
-		WHERE(PmcsSbsInspections.EquipmentID.IN(equipmentIDs...)).
-		ORDER_BY(PmcsSbsInspections.EquipmentID.ASC(), PmcsSbsInspections.PerformedDate.DESC())
+		FROM(UserPmcsInspections.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspections.PerformedBy))).
+		WHERE(UserPmcsInspections.EquipmentID.IN(equipmentIDs...)).
+		ORDER_BY(UserPmcsInspections.EquipmentID.ASC(), UserPmcsInspections.PerformedDate.DESC())
 
 	if err := inspectionsStmt.QueryContext(ctx, repo.db, &inspections); err != nil {
 		return nil, fmt.Errorf("failed to query pmcs inspections for equipment history: %w", err)
@@ -1152,11 +1152,11 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 			Total  int32     `sql:"total"`
 		}
 		countStmt := SELECT(
-			PmcsSbsFaults.PmcsID.AS("pmcs_id"),
-			COUNT(PmcsSbsFaults.PmcsID).AS("total"),
-		).FROM(PmcsSbsFaults).
-			WHERE(PmcsSbsFaults.PmcsID.IN(inspectionIDs...)).
-			GROUP_BY(PmcsSbsFaults.PmcsID)
+			UserPmcsFaults.PmcsID.AS("pmcs_id"),
+			COUNT(UserPmcsFaults.PmcsID).AS("total"),
+		).FROM(UserPmcsFaults).
+			WHERE(UserPmcsFaults.PmcsID.IN(inspectionIDs...)).
+			GROUP_BY(UserPmcsFaults.PmcsID)
 
 		if err := countStmt.QueryContext(ctx, repo.db, &counts); err != nil {
 			return nil, fmt.Errorf("failed to count pmcs faults for equipment history: %w", err)
@@ -1178,11 +1178,11 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 			Total  int32     `sql:"total"`
 		}
 		commentCountStmt := SELECT(
-			PmcsSbsInspectionComments.PmcsID.AS("pmcs_id"),
-			COUNT(PmcsSbsInspectionComments.PmcsID).AS("total"),
-		).FROM(PmcsSbsInspectionComments).
-			WHERE(PmcsSbsInspectionComments.PmcsID.IN(inspectionIDs...)).
-			GROUP_BY(PmcsSbsInspectionComments.PmcsID)
+			UserPmcsInspectionComments.PmcsID.AS("pmcs_id"),
+			COUNT(UserPmcsInspectionComments.PmcsID).AS("total"),
+		).FROM(UserPmcsInspectionComments).
+			WHERE(UserPmcsInspectionComments.PmcsID.IN(inspectionIDs...)).
+			GROUP_BY(UserPmcsInspectionComments.PmcsID)
 
 		if err := commentCountStmt.QueryContext(ctx, repo.db, &commentCounts); err != nil {
 			return nil, fmt.Errorf("failed to count pmcs inspection comments for equipment history: %w", err)

@@ -131,9 +131,9 @@ func TestGetEquipmentPmcsHistoryRepositoryIncludesGuideAndCustom(t *testing.T) {
 
 	queries := queryCounter.snapshot()
 	require.Len(t, queries, 4, "equipment history must stay fixed at four batched queries")
-	require.Equal(t, 1, countQueriesContaining(queries, "pmcs_sbs_inspections"))
-	require.Equal(t, 1, countQueriesContaining(queries, "pmcs_sbs_faults"))
-	require.Equal(t, 1, countQueriesContaining(queries, "pmcs_sbs_inspection_comments"))
+	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_inspections"))
+	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_faults"))
+	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_inspection_comments"))
 }
 
 func TestGetEquipmentPmcsHistoryRepositoryReturnsEmptyForUserWithNoShops(t *testing.T) {
@@ -251,7 +251,7 @@ func createCustomPmcsHistoryFixture(t *testing.T, db *sql.DB, equipmentID string
 		ChecklistName:  "Device Checklist",
 	}
 	_, err := db.Exec(
-		`INSERT INTO pmcs_sbs_inspections
+		`INSERT INTO user_pmcs_inspections
 		  (id, equipment_id, source_type, guide_manual,
 		   custom_checklist_id, custom_revision_id,
 		   custom_revision_number, custom_checklist_name,

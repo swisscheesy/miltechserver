@@ -40,9 +40,9 @@ func clearPmcsSbsTables(t *testing.T, db *sql.DB) {
 	truncate := func() {
 		_, err := db.Exec(
 			`TRUNCATE TABLE
-			pmcs_sbs_faults,
-			pmcs_sbs_inspection_comments,
-			pmcs_sbs_inspections,
+			user_pmcs_faults,
+			user_pmcs_inspection_comments,
+			user_pmcs_inspections,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,
 			shop_vehicle,
@@ -132,10 +132,10 @@ func createShopVehicle(t *testing.T, db *sql.DB, shopID string, creator *bootstr
 	return vehicleID
 }
 
-func sampleInspection(equipmentID string, performedBy string) model.PmcsSbsInspections {
+func sampleInspection(equipmentID string, performedBy string) model.UserPmcsInspections {
 	performedByCopy := performedBy
 	guideManual := "pmcs_sbs/hmmwv/file.json"
-	return model.PmcsSbsInspections{
+	return model.UserPmcsInspections{
 		ID:            uuid.New(),
 		EquipmentID:   equipmentID,
 		SourceType:    "guide",
@@ -145,13 +145,13 @@ func sampleInspection(equipmentID string, performedBy string) model.PmcsSbsInspe
 	}
 }
 
-func sampleCustomInspection(equipmentID string, performedBy string) model.PmcsSbsInspections {
+func sampleCustomInspection(equipmentID string, performedBy string) model.UserPmcsInspections {
 	performedByCopy := performedBy
 	checklistID := uuid.New()
 	revisionID := uuid.New()
 	revisionNumber := int32(3)
 	checklistName := "Weekly Generator PMCS"
-	return model.PmcsSbsInspections{
+	return model.UserPmcsInspections{
 		ID:                   uuid.New(),
 		EquipmentID:          equipmentID,
 		SourceType:           "custom",
@@ -168,9 +168,9 @@ func stringPointer(value string) *string {
 	return &value
 }
 
-func sampleFault(pmcsID uuid.UUID) model.PmcsSbsFaults {
+func sampleFault(pmcsID uuid.UUID) model.UserPmcsFaults {
 	now := time.Now().UTC()
-	return model.PmcsSbsFaults{
+	return model.UserPmcsFaults{
 		PmcsID:           pmcsID,
 		SectionID:        "before",
 		ItemIndex:        0,

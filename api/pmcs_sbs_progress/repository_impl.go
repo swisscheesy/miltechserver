@@ -23,30 +23,30 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
-func (repo *RepositoryImpl) EnsureInspection(user *bootstrap.User, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
+func (repo *RepositoryImpl) EnsureInspection(user *bootstrap.User, inspection model.UserPmcsInspections) (*model.UserPmcsInspections, error) {
 	if err := repo.requireVehicleAccess(user, inspection.EquipmentID); err != nil {
 		return nil, err
 	}
 	return ensureInspection(repo.db, inspection)
 }
 
-func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.PmcsSbsFaults, []CommentWithAuthor, error) {
+func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID) (*InspectionDetail, []model.UserPmcsFaults, []CommentWithAuthor, error) {
 	if err := repo.requireVehicleAccess(user, equipmentID); err != nil {
 		return nil, nil, nil, err
 	}
 
 	var row struct {
-		model.PmcsSbsInspections
+		model.UserPmcsInspections
 		PerformedByUsername *string `sql:"performed_by_username"`
 	}
 	stmt := SELECT(
-		PmcsSbsInspections.AllColumns,
+		UserPmcsInspections.AllColumns,
 		Users.Username.AS("performed_by_username"),
 	).
-		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
+		FROM(UserPmcsInspections.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspections.PerformedBy))).
 		WHERE(
-			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
-				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
+			UserPmcsInspections.ID.EQ(UUID(pmcsID)).
+				AND(UserPmcsInspections.EquipmentID.EQ(String(equipmentID))),
 		)
 
 	if err := stmt.Query(repo.db, &row); err != nil {
@@ -56,27 +56,27 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 		return nil, nil, nil, fmt.Errorf("get pmcs sbs inspection: %w", err)
 	}
 
-	var faults []model.PmcsSbsFaults
-	faultsStmt := SELECT(PmcsSbsFaults.AllColumns).
-		FROM(PmcsSbsFaults).
-		WHERE(PmcsSbsFaults.PmcsID.EQ(UUID(pmcsID))).
-		ORDER_BY(PmcsSbsFaults.SectionID.ASC(), PmcsSbsFaults.ItemIndex.ASC())
+	var faults []model.UserPmcsFaults
+	faultsStmt := SELECT(UserPmcsFaults.AllColumns).
+		FROM(UserPmcsFaults).
+		WHERE(UserPmcsFaults.PmcsID.EQ(UUID(pmcsID))).
+		ORDER_BY(UserPmcsFaults.SectionID.ASC(), UserPmcsFaults.ItemIndex.ASC())
 
 	if err := faultsStmt.Query(repo.db, &faults); err != nil {
 		return nil, nil, nil, fmt.Errorf("list pmcs sbs inspection faults: %w", err)
 	}
 
 	var comments []struct {
-		model.PmcsSbsInspectionComments
+		model.UserPmcsInspectionComments
 		AuthorUsername *string `sql:"author_username"`
 	}
 	commentsStmt := SELECT(
-		PmcsSbsInspectionComments.AllColumns,
+		UserPmcsInspectionComments.AllColumns,
 		Users.Username.AS("author_username"),
 	).
-		FROM(PmcsSbsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspectionComments.AuthorID))).
-		WHERE(PmcsSbsInspectionComments.PmcsID.EQ(UUID(pmcsID))).
-		ORDER_BY(PmcsSbsInspectionComments.CreatedAt.ASC())
+		FROM(UserPmcsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspectionComments.AuthorID))).
+		WHERE(UserPmcsInspectionComments.PmcsID.EQ(UUID(pmcsID))).
+		ORDER_BY(UserPmcsInspectionComments.CreatedAt.ASC())
 
 	if err := commentsStmt.Query(repo.db, &comments); err != nil {
 		return nil, nil, nil, fmt.Errorf("list pmcs sbs inspection comments: %w", err)
@@ -85,12 +85,12 @@ func (repo *RepositoryImpl) GetInspection(user *bootstrap.User, equipmentID stri
 	commentsWithAuthor := make([]CommentWithAuthor, 0, len(comments))
 	for _, comment := range comments {
 		commentsWithAuthor = append(commentsWithAuthor, CommentWithAuthor{
-			PmcsSbsInspectionComments: comment.PmcsSbsInspectionComments,
-			AuthorUsername:            comment.AuthorUsername,
+			UserPmcsInspectionComments: comment.UserPmcsInspectionComments,
+			AuthorUsername:             comment.AuthorUsername,
 		})
 	}
 
-	return &InspectionDetail{PmcsSbsInspections: row.PmcsSbsInspections, PerformedByUsername: row.PerformedByUsername}, faults, commentsWithAuthor, nil
+	return &InspectionDetail{UserPmcsInspections: row.UserPmcsInspections, PerformedByUsername: row.PerformedByUsername}, faults, commentsWithAuthor, nil
 }
 
 func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID string, guideManual string, limit int, offset int) ([]InspectionSummary, error) {
@@ -98,26 +98,26 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		return nil, err
 	}
 
-	condition := PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))
+	condition := UserPmcsInspections.EquipmentID.EQ(String(equipmentID))
 	if guideManual != "" {
 		condition = condition.
-			AND(PmcsSbsInspections.SourceType.EQ(String("guide"))).
-			AND(PmcsSbsInspections.GuideManual.EQ(String(guideManual)))
+			AND(UserPmcsInspections.SourceType.EQ(String("guide"))).
+			AND(UserPmcsInspections.GuideManual.EQ(String(guideManual)))
 	}
 
 	var inspections []struct {
-		model.PmcsSbsInspections
+		model.UserPmcsInspections
 		PerformedByUsername *string `sql:"performed_by_username"`
 	}
 	stmt := SELECT(
-		PmcsSbsInspections.AllColumns,
+		UserPmcsInspections.AllColumns,
 		Users.Username.AS("performed_by_username"),
 	).
-		FROM(PmcsSbsInspections.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspections.PerformedBy))).
+		FROM(UserPmcsInspections.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspections.PerformedBy))).
 		WHERE(condition).
 		ORDER_BY(
-			PmcsSbsInspections.PerformedDate.DESC(),
-			PmcsSbsInspections.ID.DESC(),
+			UserPmcsInspections.PerformedDate.DESC(),
+			UserPmcsInspections.ID.DESC(),
 		).
 		LIMIT(int64(limit)).
 		OFFSET(int64(offset))
@@ -139,11 +139,11 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		Total  int32     `sql:"total"`
 	}
 	countStmt := SELECT(
-		PmcsSbsFaults.PmcsID.AS("pmcs_id"),
-		COUNT(PmcsSbsFaults.PmcsID).AS("total"),
-	).FROM(PmcsSbsFaults).
-		WHERE(PmcsSbsFaults.PmcsID.IN(ids...)).
-		GROUP_BY(PmcsSbsFaults.PmcsID)
+		UserPmcsFaults.PmcsID.AS("pmcs_id"),
+		COUNT(UserPmcsFaults.PmcsID).AS("total"),
+	).FROM(UserPmcsFaults).
+		WHERE(UserPmcsFaults.PmcsID.IN(ids...)).
+		GROUP_BY(UserPmcsFaults.PmcsID)
 
 	if err := countStmt.Query(repo.db, &counts); err != nil {
 		return nil, fmt.Errorf("count pmcs sbs faults: %w", err)
@@ -159,11 +159,11 @@ func (repo *RepositoryImpl) ListInspections(user *bootstrap.User, equipmentID st
 		Total  int32     `sql:"total"`
 	}
 	commentCountStmt := SELECT(
-		PmcsSbsInspectionComments.PmcsID.AS("pmcs_id"),
-		COUNT(PmcsSbsInspectionComments.PmcsID).AS("total"),
-	).FROM(PmcsSbsInspectionComments).
-		WHERE(PmcsSbsInspectionComments.PmcsID.IN(ids...)).
-		GROUP_BY(PmcsSbsInspectionComments.PmcsID)
+		UserPmcsInspectionComments.PmcsID.AS("pmcs_id"),
+		COUNT(UserPmcsInspectionComments.PmcsID).AS("total"),
+	).FROM(UserPmcsInspectionComments).
+		WHERE(UserPmcsInspectionComments.PmcsID.IN(ids...)).
+		GROUP_BY(UserPmcsInspectionComments.PmcsID)
 
 	if err := commentCountStmt.Query(repo.db, &commentCounts); err != nil {
 		return nil, fmt.Errorf("count pmcs sbs inspection comments: %w", err)
@@ -200,10 +200,10 @@ func (repo *RepositoryImpl) DeleteInspection(user *bootstrap.User, equipmentID s
 		return err
 	}
 
-	result, err := PmcsSbsInspections.DELETE().
+	result, err := UserPmcsInspections.DELETE().
 		WHERE(
-			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
-				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
+			UserPmcsInspections.ID.EQ(UUID(pmcsID)).
+				AND(UserPmcsInspections.EquipmentID.EQ(String(equipmentID))),
 		).
 		Exec(repo.db)
 	if err != nil {
@@ -219,7 +219,7 @@ func (repo *RepositoryImpl) DeleteInspection(user *bootstrap.User, equipmentID s
 	return nil
 }
 
-func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.PmcsSbsInspections, fault model.PmcsSbsFaults) (*model.PmcsSbsFaults, error) {
+func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.UserPmcsInspections, fault model.UserPmcsFaults) (*model.UserPmcsFaults, error) {
 	if err := repo.requireVehicleAccess(user, inspection.EquipmentID); err != nil {
 		return nil, err
 	}
@@ -231,17 +231,17 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 	}
 	fault.UpdatedAt = now
 
-	stmt := PmcsSbsFaults.INSERT(
-		PmcsSbsFaults.PmcsID,
-		PmcsSbsFaults.SectionID,
-		PmcsSbsFaults.ItemIndex,
-		PmcsSbsFaults.ItemNo,
-		PmcsSbsFaults.Status,
-		PmcsSbsFaults.FaultText,
-		PmcsSbsFaults.CorrectiveAction,
-		PmcsSbsFaults.SectionTitle,
-		PmcsSbsFaults.CreatedAt,
-		PmcsSbsFaults.UpdatedAt,
+	stmt := UserPmcsFaults.INSERT(
+		UserPmcsFaults.PmcsID,
+		UserPmcsFaults.SectionID,
+		UserPmcsFaults.ItemIndex,
+		UserPmcsFaults.ItemNo,
+		UserPmcsFaults.Status,
+		UserPmcsFaults.FaultText,
+		UserPmcsFaults.CorrectiveAction,
+		UserPmcsFaults.SectionTitle,
+		UserPmcsFaults.CreatedAt,
+		UserPmcsFaults.UpdatedAt,
 	).VALUES(
 		UUID(fault.PmcsID),
 		String(fault.SectionID),
@@ -254,17 +254,17 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		TimestampzT(fault.CreatedAt),
 		TimestampzT(now),
 	).ON_CONFLICT(
-		PmcsSbsFaults.PmcsID,
-		PmcsSbsFaults.SectionID,
-		PmcsSbsFaults.ItemIndex,
+		UserPmcsFaults.PmcsID,
+		UserPmcsFaults.SectionID,
+		UserPmcsFaults.ItemIndex,
 	).DO_UPDATE(SET(
-		PmcsSbsFaults.ItemNo.SET(String(fault.ItemNo)),
-		PmcsSbsFaults.Status.SET(String(fault.Status)),
-		PmcsSbsFaults.FaultText.SET(String(fault.FaultText)),
-		PmcsSbsFaults.CorrectiveAction.SET(String(fault.CorrectiveAction)),
-		PmcsSbsFaults.SectionTitle.SET(nullableStringExpression(fault.SectionTitle)),
-		PmcsSbsFaults.UpdatedAt.SET(TimestampzT(now)),
-	)).RETURNING(PmcsSbsFaults.AllColumns)
+		UserPmcsFaults.ItemNo.SET(String(fault.ItemNo)),
+		UserPmcsFaults.Status.SET(String(fault.Status)),
+		UserPmcsFaults.FaultText.SET(String(fault.FaultText)),
+		UserPmcsFaults.CorrectiveAction.SET(String(fault.CorrectiveAction)),
+		UserPmcsFaults.SectionTitle.SET(nullableStringExpression(fault.SectionTitle)),
+		UserPmcsFaults.UpdatedAt.SET(TimestampzT(now)),
+	)).RETURNING(UserPmcsFaults.AllColumns)
 
 	tx, err := repo.db.Begin()
 	if err != nil {
@@ -276,7 +276,7 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.P
 		return nil, err
 	}
 
-	var saved model.PmcsSbsFaults
+	var saved model.UserPmcsFaults
 	if err := stmt.Query(tx, &saved); err != nil {
 		return nil, fmt.Errorf("upsert pmcs sbs fault: %w", err)
 	}
@@ -295,11 +295,11 @@ func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, equipmentID string
 		return err
 	}
 
-	if _, err := PmcsSbsFaults.DELETE().
+	if _, err := UserPmcsFaults.DELETE().
 		WHERE(
-			PmcsSbsFaults.PmcsID.EQ(UUID(key.PmcsID)).
-				AND(PmcsSbsFaults.SectionID.EQ(String(key.SectionID))).
-				AND(PmcsSbsFaults.ItemIndex.EQ(Int32(key.ItemIndex))),
+			UserPmcsFaults.PmcsID.EQ(UUID(key.PmcsID)).
+				AND(UserPmcsFaults.SectionID.EQ(String(key.SectionID))).
+				AND(UserPmcsFaults.ItemIndex.EQ(Int32(key.ItemIndex))),
 		).
 		Exec(repo.db); err != nil {
 		return fmt.Errorf("delete pmcs sbs fault: %w", err)
@@ -323,10 +323,10 @@ func (repo *RepositoryImpl) DeleteFaults(user *bootstrap.User, equipmentID strin
 		keyRows = append(keyRows, ROW(String(key.SectionID), Int32(key.ItemIndex)))
 	}
 
-	result, err := PmcsSbsFaults.DELETE().
+	result, err := UserPmcsFaults.DELETE().
 		WHERE(
-			PmcsSbsFaults.PmcsID.EQ(UUID(pmcsID)).
-				AND(ROW(PmcsSbsFaults.SectionID, PmcsSbsFaults.ItemIndex).IN(keyRows...)),
+			UserPmcsFaults.PmcsID.EQ(UUID(pmcsID)).
+				AND(ROW(UserPmcsFaults.SectionID, UserPmcsFaults.ItemIndex).IN(keyRows...)),
 		).
 		Exec(repo.db)
 	if err != nil {
@@ -347,23 +347,23 @@ func (repo *RepositoryImpl) CreateComment(user *bootstrap.User, equipmentID stri
 		return nil, err
 	}
 
-	stmt := PmcsSbsInspectionComments.INSERT(
-		PmcsSbsInspectionComments.PmcsID,
-		PmcsSbsInspectionComments.AuthorID,
-		PmcsSbsInspectionComments.Text,
+	stmt := UserPmcsInspectionComments.INSERT(
+		UserPmcsInspectionComments.PmcsID,
+		UserPmcsInspectionComments.AuthorID,
+		UserPmcsInspectionComments.Text,
 	).VALUES(
 		UUID(pmcsID),
 		String(user.UserID),
 		String(text),
-	).RETURNING(PmcsSbsInspectionComments.AllColumns)
+	).RETURNING(UserPmcsInspectionComments.AllColumns)
 
-	var created model.PmcsSbsInspectionComments
+	var created model.UserPmcsInspectionComments
 	if err := stmt.Query(repo.db, &created); err != nil {
 		return nil, fmt.Errorf("create pmcs sbs inspection comment: %w", err)
 	}
 
 	username := user.Username
-	return &CommentWithAuthor{PmcsSbsInspectionComments: created, AuthorUsername: &username}, nil
+	return &CommentWithAuthor{UserPmcsInspectionComments: created, AuthorUsername: &username}, nil
 }
 
 func (repo *RepositoryImpl) GetComment(user *bootstrap.User, equipmentID string, pmcsID uuid.UUID, commentID uuid.UUID) (*CommentWithAuthor, error) {
@@ -375,17 +375,17 @@ func (repo *RepositoryImpl) GetComment(user *bootstrap.User, equipmentID string,
 	}
 
 	var row struct {
-		model.PmcsSbsInspectionComments
+		model.UserPmcsInspectionComments
 		AuthorUsername *string `sql:"author_username"`
 	}
 	stmt := SELECT(
-		PmcsSbsInspectionComments.AllColumns,
+		UserPmcsInspectionComments.AllColumns,
 		Users.Username.AS("author_username"),
 	).
-		FROM(PmcsSbsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(PmcsSbsInspectionComments.AuthorID))).
+		FROM(UserPmcsInspectionComments.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspectionComments.AuthorID))).
 		WHERE(
-			PmcsSbsInspectionComments.ID.EQ(UUID(commentID)).
-				AND(PmcsSbsInspectionComments.PmcsID.EQ(UUID(pmcsID))),
+			UserPmcsInspectionComments.ID.EQ(UUID(commentID)).
+				AND(UserPmcsInspectionComments.PmcsID.EQ(UUID(pmcsID))),
 		)
 
 	if err := stmt.Query(repo.db, &row); err != nil {
@@ -394,21 +394,21 @@ func (repo *RepositoryImpl) GetComment(user *bootstrap.User, equipmentID string,
 		}
 		return nil, fmt.Errorf("get pmcs sbs inspection comment: %w", err)
 	}
-	return &CommentWithAuthor{PmcsSbsInspectionComments: row.PmcsSbsInspectionComments, AuthorUsername: row.AuthorUsername}, nil
+	return &CommentWithAuthor{UserPmcsInspectionComments: row.UserPmcsInspectionComments, AuthorUsername: row.AuthorUsername}, nil
 }
 
 func (repo *RepositoryImpl) UpdateComment(commentID uuid.UUID, text string) (*CommentWithAuthor, error) {
 	now := time.Now().UTC()
 
-	stmt := PmcsSbsInspectionComments.UPDATE().
+	stmt := UserPmcsInspectionComments.UPDATE().
 		SET(
-			PmcsSbsInspectionComments.Text.SET(String(text)),
-			PmcsSbsInspectionComments.UpdatedAt.SET(TimestampzT(now)),
+			UserPmcsInspectionComments.Text.SET(String(text)),
+			UserPmcsInspectionComments.UpdatedAt.SET(TimestampzT(now)),
 		).
-		WHERE(PmcsSbsInspectionComments.ID.EQ(UUID(commentID))).
-		RETURNING(PmcsSbsInspectionComments.AllColumns)
+		WHERE(UserPmcsInspectionComments.ID.EQ(UUID(commentID))).
+		RETURNING(UserPmcsInspectionComments.AllColumns)
 
-	var updated model.PmcsSbsInspectionComments
+	var updated model.UserPmcsInspectionComments
 	if err := stmt.Query(repo.db, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
 			return nil, ErrCommentNotFound
@@ -420,7 +420,7 @@ func (repo *RepositoryImpl) UpdateComment(commentID uuid.UUID, text string) (*Co
 	if err != nil {
 		return nil, err
 	}
-	return &CommentWithAuthor{PmcsSbsInspectionComments: updated, AuthorUsername: username}, nil
+	return &CommentWithAuthor{UserPmcsInspectionComments: updated, AuthorUsername: username}, nil
 }
 
 func (repo *RepositoryImpl) requireVehicleAccess(user *bootstrap.User, equipmentID string) error {
@@ -456,10 +456,10 @@ func (repo *RepositoryImpl) requireVehicleAccess(user *bootstrap.User, equipment
 
 func (repo *RepositoryImpl) requireInspectionOwnership(queryable qrm.Queryable, equipmentID string, pmcsID uuid.UUID) error {
 	stmt := SELECT(Int(1).AS("exists")).
-		FROM(PmcsSbsInspections).
+		FROM(UserPmcsInspections).
 		WHERE(
-			PmcsSbsInspections.ID.EQ(UUID(pmcsID)).
-				AND(PmcsSbsInspections.EquipmentID.EQ(String(equipmentID))),
+			UserPmcsInspections.ID.EQ(UUID(pmcsID)).
+				AND(UserPmcsInspections.EquipmentID.EQ(String(equipmentID))),
 		).
 		LIMIT(1)
 
@@ -497,7 +497,7 @@ func (repo *RepositoryImpl) LookupUsername(userID string) (*string, error) {
 // updates mutable inspection metadata only when equipment and the complete
 // immutable source tuple match the existing row. queryable is either *sql.DB
 // for standalone calls or *sql.Tx for fault upserts.
-func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspections) (*model.PmcsSbsInspections, error) {
+func ensureInspection(queryable qrm.Queryable, inspection model.UserPmcsInspections) (*model.UserPmcsInspections, error) {
 	now := time.Now().UTC()
 	var performedByExpr Expression = NULL
 	if inspection.PerformedBy != nil {
@@ -508,20 +508,20 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		notesExpr = String(*inspection.Notes)
 	}
 
-	stmt := PmcsSbsInspections.INSERT(
-		PmcsSbsInspections.ID,
-		PmcsSbsInspections.EquipmentID,
-		PmcsSbsInspections.SourceType,
-		PmcsSbsInspections.GuideManual,
-		PmcsSbsInspections.CustomChecklistID,
-		PmcsSbsInspections.CustomRevisionID,
-		PmcsSbsInspections.CustomRevisionNumber,
-		PmcsSbsInspections.CustomChecklistName,
-		PmcsSbsInspections.PerformedDate,
-		PmcsSbsInspections.PerformedBy,
-		PmcsSbsInspections.Notes,
-		PmcsSbsInspections.CreatedAt,
-		PmcsSbsInspections.UpdatedAt,
+	stmt := UserPmcsInspections.INSERT(
+		UserPmcsInspections.ID,
+		UserPmcsInspections.EquipmentID,
+		UserPmcsInspections.SourceType,
+		UserPmcsInspections.GuideManual,
+		UserPmcsInspections.CustomChecklistID,
+		UserPmcsInspections.CustomRevisionID,
+		UserPmcsInspections.CustomRevisionNumber,
+		UserPmcsInspections.CustomChecklistName,
+		UserPmcsInspections.PerformedDate,
+		UserPmcsInspections.PerformedBy,
+		UserPmcsInspections.Notes,
+		UserPmcsInspections.CreatedAt,
+		UserPmcsInspections.UpdatedAt,
 	).VALUES(
 		UUID(inspection.ID),
 		String(inspection.EquipmentID),
@@ -536,23 +536,23 @@ func ensureInspection(queryable qrm.Queryable, inspection model.PmcsSbsInspectio
 		notesExpr,
 		TimestampzT(now),
 		TimestampzT(now),
-	).ON_CONFLICT(PmcsSbsInspections.ID).DO_UPDATE(
+	).ON_CONFLICT(UserPmcsInspections.ID).DO_UPDATE(
 		SET(
-			PmcsSbsInspections.PerformedDate.SET(TimestampzT(inspection.PerformedDate)),
-			PmcsSbsInspections.Notes.SET(notesExpr),
-			PmcsSbsInspections.UpdatedAt.SET(TimestampzT(now)),
+			UserPmcsInspections.PerformedDate.SET(TimestampzT(inspection.PerformedDate)),
+			UserPmcsInspections.Notes.SET(notesExpr),
+			UserPmcsInspections.UpdatedAt.SET(TimestampzT(now)),
 		).WHERE(
-			PmcsSbsInspections.EquipmentID.EQ(PmcsSbsInspections.EXCLUDED.EquipmentID).
-				AND(PmcsSbsInspections.SourceType.EQ(PmcsSbsInspections.EXCLUDED.SourceType)).
-				AND(PmcsSbsInspections.GuideManual.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.GuideManual)).
-				AND(PmcsSbsInspections.CustomChecklistID.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomChecklistID)).
-				AND(PmcsSbsInspections.CustomRevisionID.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomRevisionID)).
-				AND(PmcsSbsInspections.CustomRevisionNumber.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomRevisionNumber)).
-				AND(PmcsSbsInspections.CustomChecklistName.IS_NOT_DISTINCT_FROM(PmcsSbsInspections.EXCLUDED.CustomChecklistName)),
+			UserPmcsInspections.EquipmentID.EQ(UserPmcsInspections.EXCLUDED.EquipmentID).
+				AND(UserPmcsInspections.SourceType.EQ(UserPmcsInspections.EXCLUDED.SourceType)).
+				AND(UserPmcsInspections.GuideManual.IS_NOT_DISTINCT_FROM(UserPmcsInspections.EXCLUDED.GuideManual)).
+				AND(UserPmcsInspections.CustomChecklistID.IS_NOT_DISTINCT_FROM(UserPmcsInspections.EXCLUDED.CustomChecklistID)).
+				AND(UserPmcsInspections.CustomRevisionID.IS_NOT_DISTINCT_FROM(UserPmcsInspections.EXCLUDED.CustomRevisionID)).
+				AND(UserPmcsInspections.CustomRevisionNumber.IS_NOT_DISTINCT_FROM(UserPmcsInspections.EXCLUDED.CustomRevisionNumber)).
+				AND(UserPmcsInspections.CustomChecklistName.IS_NOT_DISTINCT_FROM(UserPmcsInspections.EXCLUDED.CustomChecklistName)),
 		),
-	).RETURNING(PmcsSbsInspections.AllColumns)
+	).RETURNING(UserPmcsInspections.AllColumns)
 
-	var saved model.PmcsSbsInspections
+	var saved model.UserPmcsInspections
 	if err := stmt.Query(queryable, &saved); err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
 			return nil, ErrInspectionConflict
