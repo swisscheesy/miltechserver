@@ -47,6 +47,9 @@ LOCK TABLE
     public.user_pmcs_inspection_comments
     IN ACCESS EXCLUSIVE MODE;
 
+DROP INDEX public.user_pmcs_inspections_performed_by_idx;
+DROP INDEX public.user_pmcs_inspection_comments_author_id_idx;
+
 ALTER INDEX public.user_pmcs_inspections_equipment_performed_idx RENAME TO idx_pmcs_sbs_inspections_equipment_performed;
 ALTER INDEX public.user_pmcs_inspection_comments_pmcs_id_idx RENAME TO idx_pmcs_sbs_inspection_comments_pmcs_id;
 

@@ -192,9 +192,11 @@ func requireTargetIndexes(t *testing.T, ctx context.Context, db *sql.DB) {
 	expected := map[string]string{
 		"user_pmcs_inspections_pkey":                    "CREATE UNIQUE INDEX user_pmcs_inspections_pkey ON public.user_pmcs_inspections USING btree (id)",
 		"user_pmcs_inspections_equipment_performed_idx": "CREATE INDEX user_pmcs_inspections_equipment_performed_idx ON public.user_pmcs_inspections USING btree (equipment_id, performed_date DESC)",
+		"user_pmcs_inspections_performed_by_idx":        "CREATE INDEX user_pmcs_inspections_performed_by_idx ON public.user_pmcs_inspections USING btree (performed_by)",
 		"user_pmcs_faults_pkey":                         "CREATE UNIQUE INDEX user_pmcs_faults_pkey ON public.user_pmcs_faults USING btree (pmcs_id, section_id, item_index)",
 		"user_pmcs_inspection_comments_pkey":            "CREATE UNIQUE INDEX user_pmcs_inspection_comments_pkey ON public.user_pmcs_inspection_comments USING btree (id)",
 		"user_pmcs_inspection_comments_pmcs_id_idx":     "CREATE INDEX user_pmcs_inspection_comments_pmcs_id_idx ON public.user_pmcs_inspection_comments USING btree (pmcs_id, created_at)",
+		"user_pmcs_inspection_comments_author_id_idx":   "CREATE INDEX user_pmcs_inspection_comments_author_id_idx ON public.user_pmcs_inspection_comments USING btree (author_id)",
 	}
 
 	rows, err := db.QueryContext(ctx, `

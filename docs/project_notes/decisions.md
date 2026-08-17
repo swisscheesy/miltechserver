@@ -585,7 +585,10 @@ Based on the current project setup:
   `user_pmcs_inspection_comments` with one metadata-only PostgreSQL transaction
 - Rename the 15 table-derived constraints and two explicit secondary indexes
   without changing their definitions; allow primary-key constraint renames to
-  carry their backing index names
+  carry their backing index names. Add FK-leading indexes on
+  `user_pmcs_inspections.performed_by` and
+  `user_pmcs_inspection_comments.author_id` to satisfy the existing
+  `user_pmcs_%` schema invariant
 - Bound lock acquisition with a local timeout, acquire all three table locks in
   one deterministic order, and make a partial rename fail atomically
 - Provide an exact inverse rollback, rehearse forward/rollback/forward on
@@ -607,7 +610,8 @@ Based on the current project setup:
 - Old and new binaries require their matching schema names and cannot run
   concurrently during the cutover
 - Inspection, fault, comment, authorization, cascade, ordering, Shop aggregate,
-  route, and JSON behavior do not change
+  route, and JSON behavior do not change; the two additive indexes improve FK
+  maintenance and preserve the repository's schema-integrity contract
 - Migration `014` is data-preserving and reversible, and its rollback behavior
   is exercised only on `miltech_ng_test`; production is not part of this
   decision or migration execution

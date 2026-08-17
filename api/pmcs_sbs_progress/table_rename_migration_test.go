@@ -134,6 +134,21 @@ func TestTableRenameMigrationContract(t *testing.T) {
 		require.Equal(t, 1, strings.Count(rollback, rename.rollback), rename.rollback)
 	}
 
+	createdIndexes := []renamePair{
+		{
+			forward:  "CREATE INDEX user_pmcs_inspections_performed_by_idx ON public.user_pmcs_inspections (performed_by);",
+			rollback: "DROP INDEX public.user_pmcs_inspections_performed_by_idx;",
+		},
+		{
+			forward:  "CREATE INDEX user_pmcs_inspection_comments_author_id_idx ON public.user_pmcs_inspection_comments (author_id);",
+			rollback: "DROP INDEX public.user_pmcs_inspection_comments_author_id_idx;",
+		},
+	}
+	for _, index := range createdIndexes {
+		require.Equal(t, 1, strings.Count(normalizeWhitespace(forward), normalizeWhitespace(index.forward)), index.forward)
+		require.Equal(t, 1, strings.Count(normalizeWhitespace(rollback), normalizeWhitespace(index.rollback)), index.rollback)
+	}
+
 	for _, migration := range []string{forward, rollback} {
 		require.Contains(t, migration, "class.relkind = 'r'")
 		require.Contains(t, migration, "pg_catalog.to_regclass")

@@ -4,7 +4,9 @@
 
 **Goal:** Rename the three legacy PostgreSQL PMCS persistence tables to the approved `user_pmcs_` names in `miltech_ng_test` and `miltech_ng`, regenerate Jet, and update every server/test reference without changing data, behavior, or the HTTP contract.
 
-**Architecture:** Perform an atomic, metadata-only PostgreSQL rename with an exact inverse rollback. Rehearse forward/rollback/forward on `miltech_ng_test`, apply forward once to `miltech_ng`, regenerate Jet from migrated development, then mechanically replace internal generated identifiers and raw SQL names. Keep routes, JSON, domain DTOs, package names, guide paths, columns, constraints, index definitions, and historical migrations unchanged.
+**Architecture:** Perform an atomic PostgreSQL rename with an exact inverse rollback. Rehearse forward/rollback/forward on `miltech_ng_test`, apply forward once to `miltech_ng`, regenerate Jet from migrated development, then mechanically replace internal generated identifiers and raw SQL names. The approved implementation also creates two FK-leading indexes required by the existing `user_pmcs_%` schema invariant; table rows and column definitions remain unchanged.
+
+**Approved amendment:** The original design preserved the five existing indexes. During final integration verification, `tests/user_pmcs.TestUserPmcsSchemaIntegrity` correctly identified that the renamed inspections `performed_by` FK and comments `author_id` FK lacked leading indexes. The migration and rollback therefore add/drop `user_pmcs_inspections_performed_by_idx` and `user_pmcs_inspection_comments_author_id_idx`.
 
 **Tech Stack:** PostgreSQL 14, SQL migrations, Go 1.23, Gin, Jet v2.13, `database/sql`, `lib/pq`, Testify.
 

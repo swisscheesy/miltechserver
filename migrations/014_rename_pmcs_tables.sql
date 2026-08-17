@@ -74,4 +74,9 @@ ALTER TABLE public.user_pmcs_inspection_comments RENAME CONSTRAINT pmcs_sbs_insp
 ALTER INDEX public.idx_pmcs_sbs_inspections_equipment_performed RENAME TO user_pmcs_inspections_equipment_performed_idx;
 ALTER INDEX public.idx_pmcs_sbs_inspection_comments_pmcs_id RENAME TO user_pmcs_inspection_comments_pmcs_id_idx;
 
+CREATE INDEX user_pmcs_inspections_performed_by_idx
+    ON public.user_pmcs_inspections (performed_by);
+CREATE INDEX user_pmcs_inspection_comments_author_id_idx
+    ON public.user_pmcs_inspection_comments (author_id);
+
 COMMIT;
