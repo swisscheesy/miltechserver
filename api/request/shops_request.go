@@ -89,6 +89,12 @@ type UpdateShopVehicleRequest struct {
 	TrackedHours   *int32 `json:"tracked_hours"`
 }
 
+type AdjustShopVehicleUsageRequest struct {
+	Operation         string `json:"operation"`
+	MileageAdjustment *int32 `json:"mileage_adjustment"`
+	HoursAdjustment   *int32 `json:"hours_adjustment"`
+}
+
 type CreateVehicleNotificationRequest struct {
 	ShopID           string  `json:"shop_id" binding:"required"`
 	VehicleID        string  `json:"vehicle_id" binding:"required"`

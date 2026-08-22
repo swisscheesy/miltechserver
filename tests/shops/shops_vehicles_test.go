@@ -1,11 +1,127 @@
 package shops_test
 
 import (
+	"database/sql"
 	"net/http"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type vehicleUsageFixture struct {
+	router    *gin.Engine
+	vehicleID string
+	memberID  string
+}
+
+func TestAdjustVehicleUsageAddsAndReturnsPersistedVehicle(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 100, 50)
+
+	resp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{
+			"operation":          "add",
+			"mileage_adjustment": 10,
+			"hours_adjustment":   5,
+		},
+		fixture.memberID,
+	)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	standard := decodeStandardResponse(t, resp.Body)
+	require.Equal(t, http.StatusOK, standard.Status)
+	require.Equal(t, "Equipment usage adjusted successfully", standard.Message)
+	vehicle := decodeMap(t, standard.Data)
+	require.Equal(t, fixture.vehicleID, vehicle["id"])
+	require.Equal(t, float64(110), vehicle["tracked_mileage"])
+	require.Equal(t, float64(55), vehicle["tracked_hours"])
+}
+
+func TestAdjustVehicleUsageSubtractsForOrdinaryMember(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 100, 50)
+	seedTrackedUsage(t, testDB, fixture.vehicleID, 120, 70)
+
+	resp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{
+			"operation":          "subtract",
+			"mileage_adjustment": 20,
+			"hours_adjustment":   15,
+		},
+		fixture.memberID,
+	)
+
+	require.Equal(t, http.StatusOK, resp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	require.Equal(t, float64(100), vehicle["tracked_mileage"])
+	require.Equal(t, float64(55), vehicle["tracked_hours"])
+}
+
+func newVehicleUsageFixture(t *testing.T, mileage, hours int32) vehicleUsageFixture {
+	t.Helper()
+
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "owner")
+	ensureUser(t, testDB, "member")
+	ensureUser(t, testDB, "outsider")
+
+	router := newTestRouter(t)
+	shopID := createShop(t, router, "owner", "Usage Adjustment Shop")
+	createResp := doJSONRequest(
+		t,
+		router,
+		http.MethodPost,
+		"/api/v1/auth/shops/vehicles",
+		map[string]interface{}{
+			"shop_id": shopID,
+			"admin":   "ADMIN-001",
+			"mileage": mileage,
+			"hours":   hours,
+		},
+		"owner",
+	)
+	require.Equal(t, http.StatusCreated, createResp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, createResp.Body).Data)
+	vehicleID, ok := vehicle["id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, vehicleID)
+
+	_, inviteCode := createInviteCode(t, router, "owner", shopID)
+	joinResp := doJSONRequest(
+		t,
+		router,
+		http.MethodPost,
+		"/api/v1/auth/shops/join",
+		map[string]interface{}{"invite_code": inviteCode},
+		"member",
+	)
+	require.Equal(t, http.StatusOK, joinResp.Code)
+
+	return vehicleUsageFixture{
+		router:    router,
+		vehicleID: vehicleID,
+		memberID:  "member",
+	}
+}
+
+func seedTrackedUsage(t *testing.T, db *sql.DB, vehicleID string, mileage, hours int32) {
+	t.Helper()
+
+	_, err := db.Exec(
+		`UPDATE shop_vehicle SET tracked_mileage = $1, tracked_hours = $2 WHERE id = $3`,
+		mileage,
+		hours,
+		vehicleID,
+	)
+	require.NoError(t, err)
+}
 
 func TestVehicleCRUD(t *testing.T) {
 	clearShopTables(t, testDB)

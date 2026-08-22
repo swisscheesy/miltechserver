@@ -1,6 +1,7 @@
 package vehicles
 
 import (
+	"context"
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -20,6 +21,7 @@ type Repository interface {
 	GetShopVehicleByID(user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error)
 	UpdateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) error
 	UpdateShopVehicleUsage(user *bootstrap.User, update ShopVehicleUsageUpdate) error
+	AdjustShopVehicleUsage(ctx context.Context, adjustment UsageAdjustment) (*model.ShopVehicle, error)
 	DeleteShopVehicle(user *bootstrap.User, vehicleID string) error
 	CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error
 }

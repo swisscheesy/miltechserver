@@ -10,5 +10,6 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/shops/:shop_id/vehicles", handler.GetShopVehicles)
 	router.GET("/shops/vehicles/:vehicle_id", handler.GetShopVehicleByID)
 	router.PUT("/shops/vehicles", handler.UpdateShopVehicle)
+	router.PATCH("/shops/vehicles/:vehicle_id/usage", handler.AdjustShopVehicleUsage)
 	router.DELETE("/shops/vehicles/:vehicle_id", handler.DeleteShopVehicle)
 }

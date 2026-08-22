@@ -1,6 +1,8 @@
 package vehicles
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,8 +10,10 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"strings"
 	"time"
 
+	"github.com/go-jet/jet/v2/qrm"
 	"github.com/google/uuid"
 )
 
@@ -171,6 +175,71 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 
 	slog.Info("Shop vehicle updated", "user_id", user.UserID, "vehicle_id", vehicle.ID)
 	return nil
+}
+
+func (service *ServiceImpl) AdjustShopVehicleUsage(
+	ctx context.Context,
+	user *bootstrap.User,
+	adjustment UsageAdjustment,
+) (*model.ShopVehicle, error) {
+	if user == nil {
+		return nil, errors.New("unauthorized user")
+	}
+
+	adjustment, err := normalizeUsageAdjustment(adjustment)
+	if err != nil {
+		return nil, err
+	}
+
+	currentVehicle, err := service.repo.GetShopVehicleByID(user, adjustment.VehicleID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+			return nil, shared.ErrVehicleNotFound
+		}
+		return nil, fmt.Errorf("failed to get current vehicle: %w", err)
+	}
+
+	if err := service.auth.RequireShopMember(user, currentVehicle.ShopID); err != nil {
+		return nil, err
+	}
+
+	adjustment.LastUpdated = time.Now().UTC()
+	updatedVehicle, err := service.repo.AdjustShopVehicleUsage(ctx, adjustment)
+	if err != nil {
+		return nil, fmt.Errorf("failed to adjust shop vehicle usage: %w", err)
+	}
+
+	slog.Info("Shop vehicle usage adjusted", "user_id", user.UserID, "vehicle_id", adjustment.VehicleID)
+	return updatedVehicle, nil
+}
+
+func normalizeUsageAdjustment(adjustment UsageAdjustment) (UsageAdjustment, error) {
+	adjustment.Operation = UsageAdjustmentOperation(
+		strings.TrimSpace(string(adjustment.Operation)),
+	)
+	if adjustment.Operation == "" {
+		adjustment.Operation = UsageOperationAdd
+	}
+	if adjustment.Operation != UsageOperationAdd && adjustment.Operation != UsageOperationSubtract {
+		return UsageAdjustment{}, fmt.Errorf("%w: operation must be add or subtract", ErrInvalidUsageAdjustment)
+	}
+
+	values := []*int32{adjustment.MileageAdjustment, adjustment.HoursAdjustment}
+	hasPositive := false
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		if *value < 0 || *value > maximumUsageAdjustment {
+			return UsageAdjustment{}, fmt.Errorf("%w: adjustments must be between 0 and 10000", ErrInvalidUsageAdjustment)
+		}
+		hasPositive = hasPositive || *value > 0
+	}
+	if !hasPositive {
+		return UsageAdjustment{}, fmt.Errorf("%w: at least one adjustment must be greater than zero", ErrInvalidUsageAdjustment)
+	}
+
+	return adjustment, nil
 }
 
 func isTrackedUsageUpdate(vehicle model.ShopVehicle) bool {

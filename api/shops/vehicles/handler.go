@@ -1,17 +1,73 @@
 package vehicles
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
 	service Service
+}
+
+func authenticatedUser(c *gin.Context) (*bootstrap.User, bool) {
+	value, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return nil, false
+	}
+
+	user, ok := value.(*bootstrap.User)
+	if !ok || user == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		return nil, false
+	}
+
+	return user, true
+}
+
+func decodeStrictJSON(body io.Reader, destination interface{}) error {
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
+	}
+
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("request body must contain exactly one JSON value")
+		}
+		return err
+	}
+
+	return nil
+}
+
+func writeVehicleError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidUsageAdjustment):
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+	case errors.Is(err, shared.ErrShopAccessDenied):
+		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+	case errors.Is(err, shared.ErrVehicleNotFound):
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+	case errors.Is(err, ErrUsageOutOfRange):
+		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+	default:
+		slog.Error("Shop vehicle usage adjustment failed", "error", err)
+		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+	}
 }
 
 // Shop Vehicle Operations
@@ -162,6 +218,46 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"message": "Vehicle updated successfully"})
+}
+
+func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
+	user, ok := authenticatedUser(c)
+	if !ok {
+		return
+	}
+
+	vehicleID := c.Param("vehicle_id")
+	if vehicleID == "" {
+		writeVehicleError(c, fmt.Errorf("%w: vehicle_id is required", ErrInvalidUsageAdjustment))
+		return
+	}
+
+	var req request.AdjustShopVehicleUsageRequest
+	if err := decodeStrictJSON(c.Request.Body, &req); err != nil {
+		writeVehicleError(c, fmt.Errorf("%w: malformed request", ErrInvalidUsageAdjustment))
+		return
+	}
+
+	updated, err := handler.service.AdjustShopVehicleUsage(
+		c.Request.Context(),
+		user,
+		UsageAdjustment{
+			VehicleID:         vehicleID,
+			Operation:         UsageAdjustmentOperation(req.Operation),
+			MileageAdjustment: req.MileageAdjustment,
+			HoursAdjustment:   req.HoursAdjustment,
+		},
+	)
+	if err != nil {
+		writeVehicleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response.StandardResponse{
+		Status:  http.StatusOK,
+		Message: "Equipment usage adjusted successfully",
+		Data:    *updated,
+	})
 }
 
 // DeleteShopVehicle deletes a shop vehicle
