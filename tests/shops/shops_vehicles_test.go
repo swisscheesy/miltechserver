@@ -71,14 +71,17 @@ func TestAdjustVehicleUsageSubtractsForOrdinaryMember(t *testing.T) {
 
 func TestAdjustVehicleUsageValidation(t *testing.T) {
 	cases := []struct {
-		name       string
-		body       map[string]interface{}
-		userID     string
-		wantStatus int
+		name        string
+		body        map[string]interface{}
+		userID      string
+		wantStatus  int
+		wantMileage float64
+		wantHours   float64
+		assertUsage bool
 	}{
-		{name: "missing operation defaults add", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
-		{name: "blank operation defaults add", body: map[string]interface{}{"operation": "  ", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
-		{name: "hours only", body: map[string]interface{}{"operation": "subtract", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
+		{name: "missing operation defaults add", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "member", wantStatus: http.StatusOK, wantMileage: 11, wantHours: 10, assertUsage: true},
+		{name: "blank operation defaults add", body: map[string]interface{}{"operation": "  ", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK, wantMileage: 10, wantHours: 11, assertUsage: true},
+		{name: "hours only", body: map[string]interface{}{"operation": "subtract", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK, wantMileage: 10, wantHours: 9, assertUsage: true},
 		{name: "both omitted", body: map[string]interface{}{}, userID: "member", wantStatus: http.StatusBadRequest},
 		{name: "both zero", body: map[string]interface{}{"mileage_adjustment": 0, "hours_adjustment": 0}, userID: "member", wantStatus: http.StatusBadRequest},
 		{name: "negative magnitude", body: map[string]interface{}{"mileage_adjustment": -1}, userID: "member", wantStatus: http.StatusBadRequest},
@@ -91,6 +94,9 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			fixture := newVehicleUsageFixture(t, 10, 10)
+			if testCase.assertUsage {
+				seedTrackedUsage(t, testDB, fixture.vehicleID, 10, 10)
+			}
 
 			resp := doJSONRequest(
 				t,
@@ -102,6 +108,11 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 			)
 
 			require.Equal(t, testCase.wantStatus, resp.Code)
+			if testCase.assertUsage {
+				vehicle := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+				require.Equal(t, testCase.wantMileage, vehicle["tracked_mileage"])
+				require.Equal(t, testCase.wantHours, vehicle["tracked_hours"])
+			}
 		})
 	}
 
