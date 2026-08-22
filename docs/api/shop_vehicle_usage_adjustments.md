@@ -201,3 +201,6 @@ Deploy in this order:
 3. Deploy Flutter clients that use the PATCH transport and reconciliation rules.
 
 Do not ship the Flutter PATCH client before the migration and server are live.
+Coordinate any rollback across the migration, server, and Flutter rollout: do
+not leave deployed Flutter PATCH clients targeting a server or migration state
+that has been rolled back below this endpoint's contract.
