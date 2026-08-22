@@ -121,6 +121,9 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
+	if err := validateAbsoluteTrackedUsage(vehicle); err != nil {
+		return err
+	}
 
 	currentVehicle, err := service.repo.GetShopVehicleByID(user, vehicle.ID)
 	if err != nil {
@@ -240,6 +243,16 @@ func normalizeUsageAdjustment(adjustment UsageAdjustment) (UsageAdjustment, erro
 	}
 
 	return adjustment, nil
+}
+
+func validateAbsoluteTrackedUsage(vehicle model.ShopVehicle) error {
+	if vehicle.TrackedMileage != nil && *vehicle.TrackedMileage < 0 {
+		return fmt.Errorf("%w: tracked_mileage cannot be negative", ErrInvalidUsageAdjustment)
+	}
+	if vehicle.TrackedHours != nil && *vehicle.TrackedHours < 0 {
+		return fmt.Errorf("%w: tracked_hours cannot be negative", ErrInvalidUsageAdjustment)
+	}
+	return nil
 }
 
 func isTrackedUsageUpdate(vehicle model.ShopVehicle) bool {

@@ -1,8 +1,13 @@
 package shops_test
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
+	"math"
 	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -62,6 +67,318 @@ func TestAdjustVehicleUsageSubtractsForOrdinaryMember(t *testing.T) {
 	vehicle := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 	require.Equal(t, float64(100), vehicle["tracked_mileage"])
 	require.Equal(t, float64(55), vehicle["tracked_hours"])
+}
+
+func TestAdjustVehicleUsageValidation(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       map[string]interface{}
+		userID     string
+		wantStatus int
+	}{
+		{name: "missing operation defaults add", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
+		{name: "blank operation defaults add", body: map[string]interface{}{"operation": "  ", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
+		{name: "hours only", body: map[string]interface{}{"operation": "subtract", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK},
+		{name: "both omitted", body: map[string]interface{}{}, userID: "member", wantStatus: http.StatusBadRequest},
+		{name: "both zero", body: map[string]interface{}{"mileage_adjustment": 0, "hours_adjustment": 0}, userID: "member", wantStatus: http.StatusBadRequest},
+		{name: "negative magnitude", body: map[string]interface{}{"mileage_adjustment": -1}, userID: "member", wantStatus: http.StatusBadRequest},
+		{name: "magnitude too large", body: map[string]interface{}{"hours_adjustment": 10001}, userID: "member", wantStatus: http.StatusBadRequest},
+		{name: "unknown operation", body: map[string]interface{}{"operation": "negative", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusBadRequest},
+		{name: "outsider", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "outsider", wantStatus: http.StatusForbidden},
+		{name: "missing user", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "", wantStatus: http.StatusUnauthorized},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newVehicleUsageFixture(t, 10, 10)
+
+			resp := doJSONRequest(
+				t,
+				fixture.router,
+				http.MethodPatch,
+				"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+				testCase.body,
+				testCase.userID,
+			)
+
+			require.Equal(t, testCase.wantStatus, resp.Code)
+		})
+	}
+
+	t.Run("nonexistent vehicle", func(t *testing.T) {
+		fixture := newVehicleUsageFixture(t, 10, 10)
+		resp := doJSONRequest(
+			t,
+			fixture.router,
+			http.MethodPatch,
+			"/api/v1/auth/shops/vehicles/00000000-0000-4000-8000-000000000000/usage",
+			map[string]interface{}{"mileage_adjustment": 1},
+			fixture.memberID,
+		)
+		require.Equal(t, http.StatusNotFound, resp.Code)
+	})
+}
+
+func TestAdjustVehicleUsageRejectsUnknownFields(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		bytes.NewBufferString(`{"mileage_adjustment":1,"comment":"not allowed"}`),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", fixture.memberID)
+
+	resp := httptest.NewRecorder()
+	fixture.router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestAdjustVehicleUsageRejectsMalformedJSON(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		bytes.NewBufferString(`{"mileage_adjustment":`),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", fixture.memberID)
+
+	resp := httptest.NewRecorder()
+	fixture.router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestAdjustVehicleUsageRejectsTrailingJSON(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+
+	req, err := http.NewRequest(
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		bytes.NewBufferString(`{"mileage_adjustment":1}{"hours_adjustment":1}`),
+	)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", fixture.memberID)
+
+	resp := httptest.NewRecorder()
+	fixture.router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusBadRequest, resp.Code)
+}
+
+func TestAdjustVehicleUsageAllowsExactZero(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+
+	resp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{
+			"operation":          "subtract",
+			"mileage_adjustment": 10,
+			"hours_adjustment":   10,
+		},
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, resp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
+	require.Equal(t, float64(0), vehicle["tracked_mileage"])
+	require.Equal(t, float64(0), vehicle["tracked_hours"])
+}
+
+func TestAdjustVehicleUsageRejectsBelowZeroAtomically(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+
+	exactZeroResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{
+			"operation":          "subtract",
+			"mileage_adjustment": 10,
+			"hours_adjustment":   10,
+		},
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, exactZeroResp.Code)
+
+	belowZeroResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{
+			"operation":          "subtract",
+			"mileage_adjustment": 1,
+		},
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusConflict, belowZeroResp.Code)
+
+	getResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodGet,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID,
+		nil,
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, getResp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, getResp.Body).Data)
+	require.Equal(t, float64(0), vehicle["tracked_mileage"])
+	require.Equal(t, float64(0), vehicle["tracked_hours"])
+}
+
+func TestAdjustVehicleUsageRejectsInt32OverflowAtomically(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 10, 10)
+	seedTrackedUsage(t, testDB, fixture.vehicleID, math.MaxInt32, 10)
+
+	overflowResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPatch,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+		map[string]interface{}{"mileage_adjustment": 1},
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusConflict, overflowResp.Code)
+
+	getResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodGet,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID,
+		nil,
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, getResp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, getResp.Body).Data)
+	require.Equal(t, float64(math.MaxInt32), vehicle["tracked_mileage"])
+	require.Equal(t, float64(10), vehicle["tracked_hours"])
+}
+
+func TestAdjustVehicleUsageConcurrentAddsAreCumulative(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 100, 50)
+	seedTrackedUsage(t, testDB, fixture.vehicleID, 100, 50)
+
+	const adjustmentCount = 10
+	statuses := make(chan int, adjustmentCount)
+	requestErrors := make(chan error, adjustmentCount)
+	var waitGroup sync.WaitGroup
+
+	for index := 0; index < adjustmentCount; index++ {
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+
+			payload, err := json.Marshal(map[string]interface{}{
+				"operation":          "add",
+				"mileage_adjustment": 1,
+			})
+			if err != nil {
+				requestErrors <- err
+				return
+			}
+
+			req, err := http.NewRequest(
+				http.MethodPatch,
+				"/api/v1/auth/shops/vehicles/"+fixture.vehicleID+"/usage",
+				bytes.NewReader(payload),
+			)
+			if err != nil {
+				requestErrors <- err
+				return
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-User-ID", fixture.memberID)
+
+			resp := httptest.NewRecorder()
+			fixture.router.ServeHTTP(resp, req)
+			statuses <- resp.Code
+		}()
+	}
+
+	waitGroup.Wait()
+	close(statuses)
+	close(requestErrors)
+	require.Empty(t, requestErrors)
+	for status := range statuses {
+		require.Equal(t, http.StatusOK, status)
+	}
+
+	getResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodGet,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID,
+		nil,
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, getResp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, getResp.Body).Data)
+	require.Equal(t, float64(110), vehicle["tracked_mileage"])
+}
+
+func TestLegacyVehicleUpdateRejectsNegativeTrackedUsage(t *testing.T) {
+	fixture := newVehicleUsageFixture(t, 100, 50)
+
+	validUpdate := map[string]interface{}{
+		"vehicle_id":      fixture.vehicleID,
+		"admin":           "ADMIN-001",
+		"mileage":         100,
+		"hours":           50,
+		"tracked_mileage": 25,
+		"tracked_hours":   15,
+	}
+	validResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPut,
+		"/api/v1/auth/shops/vehicles",
+		validUpdate,
+		"owner",
+	)
+	require.Equal(t, http.StatusOK, validResp.Code)
+
+	negativeUpdate := map[string]interface{}{
+		"vehicle_id":      fixture.vehicleID,
+		"admin":           "ADMIN-001",
+		"mileage":         100,
+		"hours":           50,
+		"tracked_mileage": -1,
+		"tracked_hours":   15,
+	}
+	negativeResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodPut,
+		"/api/v1/auth/shops/vehicles",
+		negativeUpdate,
+		"owner",
+	)
+	require.Equal(t, http.StatusBadRequest, negativeResp.Code)
+
+	getResp := doJSONRequest(
+		t,
+		fixture.router,
+		http.MethodGet,
+		"/api/v1/auth/shops/vehicles/"+fixture.vehicleID,
+		nil,
+		fixture.memberID,
+	)
+	require.Equal(t, http.StatusOK, getResp.Code)
+	vehicle := decodeMap(t, decodeStandardResponse(t, getResp.Body).Data)
+	require.Equal(t, float64(25), vehicle["tracked_mileage"])
+	require.Equal(t, float64(15), vehicle["tracked_hours"])
 }
 
 func newVehicleUsageFixture(t *testing.T, mileage, hours int32) vehicleUsageFixture {

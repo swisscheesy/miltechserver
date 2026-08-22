@@ -213,6 +213,10 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	service := handler.service
 	err := service.UpdateShopVehicle(user, vehicle)
 	if err != nil {
+		if errors.Is(err, ErrInvalidUsageAdjustment) {
+			writeVehicleError(c, err)
+			return
+		}
 		c.Error(err)
 		return
 	}
