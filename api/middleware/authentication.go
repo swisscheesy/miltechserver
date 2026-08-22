@@ -3,7 +3,9 @@ package middleware
 import (
 	"context"
 	"log/slog"
+	"miltechserver/api/response"
 	"miltechserver/bootstrap"
+	"net/http"
 	"strings"
 	"time"
 
@@ -18,15 +20,13 @@ func AuthenticationMiddleware(client *auth.Client) gin.HandlerFunc {
 		header := c.Request.Header.Get("Authorization")
 		if header == "" {
 			slog.Error("", "auth_error", "no authorization header found")
-			c.JSON(401, gin.H{"message": "No Authorization header found"})
-			c.Abort()
+			abortAuthenticationFailure(c, "No Authorization header found")
 			return
 		}
 		idToken := strings.Split(header, "Bearer ")
 		if len(idToken) != 2 || len(idToken) == 0 {
 			slog.Error("", "auth_error", "invalid authorization header")
-			c.JSON(401, gin.H{"message": "Invalid Authorization header"})
-			c.Abort()
+			abortAuthenticationFailure(c, "Invalid Authorization header")
 			return
 		}
 
@@ -35,8 +35,7 @@ func AuthenticationMiddleware(client *auth.Client) gin.HandlerFunc {
 		token, err := client.VerifyIDToken(context.Background(), tokenID)
 		if err != nil {
 			slog.Error("Invalid token: ", "auth_error", err)
-			c.JSON(401, gin.H{"message": "Invalid token"})
-			c.Abort()
+			abortAuthenticationFailure(c, "Invalid token")
 			return
 		}
 
@@ -51,8 +50,7 @@ func ProcessToken(c *gin.Context, auth *auth.Client, token *auth.Token) {
 	email, ok := token.Claims["email"].(string)
 	if !ok {
 		slog.Error("", "auth_error", "email not found in token")
-		c.JSON(401, gin.H{"message": "Email not found in token"})
-		c.Abort()
+		abortAuthenticationFailure(c, "Email not found in token")
 		return
 	}
 	username, err := auth.GetUser(context.Background(), token.UID)
@@ -71,4 +69,12 @@ func ProcessToken(c *gin.Context, auth *auth.Client, token *auth.Token) {
 
 	c.Next()
 
+}
+
+func abortAuthenticationFailure(c *gin.Context, message string) {
+	c.AbortWithStatusJSON(http.StatusUnauthorized, response.StandardResponse{
+		Status:  http.StatusUnauthorized,
+		Message: message,
+		Data:    nil,
+	})
 }

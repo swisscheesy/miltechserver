@@ -78,6 +78,7 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 		wantMileage float64
 		wantHours   float64
 		assertUsage bool
+		wantMessage string
 	}{
 		{name: "missing operation defaults add", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "member", wantStatus: http.StatusOK, wantMileage: 11, wantHours: 10, assertUsage: true},
 		{name: "blank operation defaults add", body: map[string]interface{}{"operation": "  ", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusOK, wantMileage: 10, wantHours: 11, assertUsage: true},
@@ -87,7 +88,7 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 		{name: "negative magnitude", body: map[string]interface{}{"mileage_adjustment": -1}, userID: "member", wantStatus: http.StatusBadRequest},
 		{name: "magnitude too large", body: map[string]interface{}{"hours_adjustment": 10001}, userID: "member", wantStatus: http.StatusBadRequest},
 		{name: "unknown operation", body: map[string]interface{}{"operation": "negative", "hours_adjustment": 1}, userID: "member", wantStatus: http.StatusBadRequest},
-		{name: "outsider", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "outsider", wantStatus: http.StatusForbidden},
+		{name: "outsider", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "outsider", wantStatus: http.StatusForbidden, wantMessage: "shop access denied"},
 		{name: "missing user", body: map[string]interface{}{"mileage_adjustment": 1}, userID: "", wantStatus: http.StatusUnauthorized},
 	}
 
@@ -114,6 +115,13 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 				require.Equal(t, testCase.wantHours, vehicle["tracked_hours"])
 			} else {
 				requireUsageErrorEnvelope(t, resp, testCase.wantStatus)
+				if testCase.wantMessage != "" {
+					require.Equal(
+						t,
+						testCase.wantMessage,
+						decodeStandardResponse(t, resp.Body).Message,
+					)
+				}
 			}
 		})
 	}
@@ -130,6 +138,11 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 		)
 		require.Equal(t, http.StatusNotFound, resp.Code)
 		requireUsageErrorEnvelope(t, resp, http.StatusNotFound)
+		require.Equal(
+			t,
+			"shop vehicle not found",
+			decodeStandardResponse(t, resp.Body).Message,
+		)
 	})
 }
 
@@ -241,6 +254,11 @@ func TestAdjustVehicleUsageRejectsBelowZeroAtomically(t *testing.T) {
 	)
 	require.Equal(t, http.StatusConflict, belowZeroResp.Code)
 	requireUsageErrorEnvelope(t, belowZeroResp, http.StatusConflict)
+	require.Equal(
+		t,
+		"usage adjustment would move tracked usage outside the supported range",
+		decodeStandardResponse(t, belowZeroResp.Body).Message,
+	)
 
 	getResp := doJSONRequest(
 		t,
@@ -270,6 +288,11 @@ func TestAdjustVehicleUsageRejectsInt32OverflowAtomically(t *testing.T) {
 	)
 	require.Equal(t, http.StatusConflict, overflowResp.Code)
 	requireUsageErrorEnvelope(t, overflowResp, http.StatusConflict)
+	require.Equal(
+		t,
+		"usage adjustment would move tracked usage outside the supported range",
+		decodeStandardResponse(t, overflowResp.Body).Message,
+	)
 
 	getResp := doJSONRequest(
 		t,

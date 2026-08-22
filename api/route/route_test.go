@@ -2,18 +2,73 @@ package route
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"miltechserver/api/response"
 	userpmcsshared "miltechserver/api/user_pmcs/shared"
 	"miltechserver/bootstrap"
 )
+
+func TestSetupShopVehicleUsageUnauthorizedResponsesUseStandardEnvelope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name          string
+		authorization string
+		wantMessage   string
+	}{
+		{
+			name:        "missing authorization header",
+			wantMessage: "No Authorization header found",
+		},
+		{
+			name:          "malformed authorization header",
+			authorization: "Token invalid",
+			wantMessage:   "Invalid Authorization header",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			router := gin.New()
+			Setup(nil, router, nil, nil, nil)
+
+			request := httptest.NewRequest(
+				http.MethodPatch,
+				"/api/v1/auth/shops/vehicles/vehicle-1/usage",
+				strings.NewReader(`{"mileage_adjustment":1}`),
+			)
+			request.Header.Set("Content-Type", "application/json")
+			if test.authorization != "" {
+				request.Header.Set("Authorization", test.authorization)
+			}
+			responseRecorder := httptest.NewRecorder()
+
+			router.ServeHTTP(responseRecorder, request)
+
+			require.Equal(t, http.StatusUnauthorized, responseRecorder.Code)
+			var rawEnvelope map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(responseRecorder.Body.Bytes(), &rawEnvelope))
+			require.Len(t, rawEnvelope, 3)
+			require.Equal(t, "null", string(rawEnvelope["data"]))
+
+			var envelope response.StandardResponse
+			require.NoError(t, json.Unmarshal(responseRecorder.Body.Bytes(), &envelope))
+			require.Equal(t, http.StatusUnauthorized, envelope.Status)
+			require.Equal(t, test.wantMessage, envelope.Message)
+			require.Nil(t, envelope.Data)
+		})
+	}
+}
 
 func TestSetupRegistersPmcsSbsInspectionScopedFaultRoutesUnderAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)

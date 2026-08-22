@@ -75,11 +75,11 @@ func writeUsageAdjustmentError(c *gin.Context, err error) {
 	case errors.Is(err, ErrInvalidUsageAdjustment):
 		writeUsageErrorResponse(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, shared.ErrShopAccessDenied):
-		writeUsageErrorResponse(c, http.StatusForbidden, err.Error())
+		writeUsageErrorResponse(c, http.StatusForbidden, "shop access denied")
 	case errors.Is(err, shared.ErrVehicleNotFound):
-		writeUsageErrorResponse(c, http.StatusNotFound, err.Error())
+		writeUsageErrorResponse(c, http.StatusNotFound, "shop vehicle not found")
 	case errors.Is(err, ErrUsageOutOfRange):
-		writeUsageErrorResponse(c, http.StatusConflict, err.Error())
+		writeUsageErrorResponse(c, http.StatusConflict, ErrUsageOutOfRange.Error())
 	default:
 		slog.Error("Shop vehicle usage adjustment failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
