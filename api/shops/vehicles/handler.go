@@ -23,13 +23,13 @@ type Handler struct {
 func authenticatedUser(c *gin.Context) (*bootstrap.User, bool) {
 	value, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		writeUsageErrorResponse(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
 	user, ok := value.(*bootstrap.User)
 	if !ok || user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		writeUsageErrorResponse(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
@@ -68,6 +68,30 @@ func writeVehicleError(c *gin.Context, err error) {
 		slog.Error("Shop vehicle usage adjustment failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 	}
+}
+
+func writeUsageAdjustmentError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidUsageAdjustment):
+		writeUsageErrorResponse(c, http.StatusBadRequest, err.Error())
+	case errors.Is(err, shared.ErrShopAccessDenied):
+		writeUsageErrorResponse(c, http.StatusForbidden, err.Error())
+	case errors.Is(err, shared.ErrVehicleNotFound):
+		writeUsageErrorResponse(c, http.StatusNotFound, err.Error())
+	case errors.Is(err, ErrUsageOutOfRange):
+		writeUsageErrorResponse(c, http.StatusConflict, err.Error())
+	default:
+		slog.Error("Shop vehicle usage adjustment failed", "error", err)
+		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
+	}
+}
+
+func writeUsageErrorResponse(c *gin.Context, status int, message string) {
+	c.JSON(status, response.StandardResponse{
+		Status:  status,
+		Message: message,
+		Data:    nil,
+	})
 }
 
 // Shop Vehicle Operations
@@ -232,13 +256,13 @@ func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		writeVehicleError(c, fmt.Errorf("%w: vehicle_id is required", ErrInvalidUsageAdjustment))
+		writeUsageAdjustmentError(c, fmt.Errorf("%w: vehicle_id is required", ErrInvalidUsageAdjustment))
 		return
 	}
 
 	var req request.AdjustShopVehicleUsageRequest
 	if err := decodeStrictJSON(c.Request.Body, &req); err != nil {
-		writeVehicleError(c, fmt.Errorf("%w: malformed request", ErrInvalidUsageAdjustment))
+		writeUsageAdjustmentError(c, fmt.Errorf("%w: malformed request", ErrInvalidUsageAdjustment))
 		return
 	}
 
@@ -253,7 +277,7 @@ func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
 		},
 	)
 	if err != nil {
-		writeVehicleError(c, err)
+		writeUsageAdjustmentError(c, err)
 		return
 	}
 

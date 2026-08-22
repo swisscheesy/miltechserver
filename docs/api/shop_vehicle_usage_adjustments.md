@@ -103,11 +103,9 @@ success envelope. Treat the returned vehicle, including `tracked_mileage` and
 
 ## Validation and error responses
 
-The endpoint uses the project error envelope. `400`, `401`, `403`, `404`, and
-`409` return `{"message": "..."}`; the generic `500` response includes the
-standard `{status, data, message}` fields. Clients must use the HTTP status for
-control flow and may display `message` as appropriate; exact validation detail
-can vary.
+The endpoint uses the standard `{status, data, message}` envelope for every
+error. `data` is `null`. Clients must use the HTTP status for control flow and
+may display `message` as appropriate; exact validation detail can vary.
 
 `400 Bad Request` — invalid request shape or values, such as a negative
 magnitude, an unsupported operation, no positive adjustment, unknown fields,
@@ -115,6 +113,8 @@ or malformed JSON:
 
 ```json
 {
+  "status": 400,
+  "data": null,
   "message": "invalid usage adjustment: adjustments must be between 0 and 10000"
 }
 ```
@@ -123,6 +123,8 @@ or malformed JSON:
 
 ```json
 {
+  "status": 401,
+  "data": null,
   "message": "unauthorized"
 }
 ```
@@ -131,6 +133,8 @@ or malformed JSON:
 
 ```json
 {
+  "status": 403,
+  "data": null,
   "message": "shop access denied"
 }
 ```
@@ -139,6 +143,8 @@ or malformed JSON:
 
 ```json
 {
+  "status": 404,
+  "data": null,
   "message": "shop vehicle not found"
 }
 ```
@@ -148,6 +154,8 @@ would overflow the supported range. Neither field is persisted when this occurs:
 
 ```json
 {
+  "status": 409,
+  "data": null,
   "message": "usage adjustment would move tracked usage outside the supported range"
 }
 ```

@@ -112,6 +112,8 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 				vehicle := decodeMap(t, decodeStandardResponse(t, resp.Body).Data)
 				require.Equal(t, testCase.wantMileage, vehicle["tracked_mileage"])
 				require.Equal(t, testCase.wantHours, vehicle["tracked_hours"])
+			} else {
+				requireUsageErrorEnvelope(t, resp, testCase.wantStatus)
 			}
 		})
 	}
@@ -127,6 +129,7 @@ func TestAdjustVehicleUsageValidation(t *testing.T) {
 			fixture.memberID,
 		)
 		require.Equal(t, http.StatusNotFound, resp.Code)
+		requireUsageErrorEnvelope(t, resp, http.StatusNotFound)
 	})
 }
 
@@ -146,6 +149,7 @@ func TestAdjustVehicleUsageRejectsUnknownFields(t *testing.T) {
 	fixture.router.ServeHTTP(resp, req)
 
 	require.Equal(t, http.StatusBadRequest, resp.Code)
+	requireUsageErrorEnvelope(t, resp, http.StatusBadRequest)
 }
 
 func TestAdjustVehicleUsageRejectsMalformedJSON(t *testing.T) {
@@ -164,6 +168,7 @@ func TestAdjustVehicleUsageRejectsMalformedJSON(t *testing.T) {
 	fixture.router.ServeHTTP(resp, req)
 
 	require.Equal(t, http.StatusBadRequest, resp.Code)
+	requireUsageErrorEnvelope(t, resp, http.StatusBadRequest)
 }
 
 func TestAdjustVehicleUsageRejectsTrailingJSON(t *testing.T) {
@@ -182,6 +187,7 @@ func TestAdjustVehicleUsageRejectsTrailingJSON(t *testing.T) {
 	fixture.router.ServeHTTP(resp, req)
 
 	require.Equal(t, http.StatusBadRequest, resp.Code)
+	requireUsageErrorEnvelope(t, resp, http.StatusBadRequest)
 }
 
 func TestAdjustVehicleUsageAllowsExactZero(t *testing.T) {
@@ -234,6 +240,7 @@ func TestAdjustVehicleUsageRejectsBelowZeroAtomically(t *testing.T) {
 		fixture.memberID,
 	)
 	require.Equal(t, http.StatusConflict, belowZeroResp.Code)
+	requireUsageErrorEnvelope(t, belowZeroResp, http.StatusConflict)
 
 	getResp := doJSONRequest(
 		t,
@@ -262,6 +269,7 @@ func TestAdjustVehicleUsageRejectsInt32OverflowAtomically(t *testing.T) {
 		fixture.memberID,
 	)
 	require.Equal(t, http.StatusConflict, overflowResp.Code)
+	requireUsageErrorEnvelope(t, overflowResp, http.StatusConflict)
 
 	getResp := doJSONRequest(
 		t,
@@ -449,6 +457,19 @@ func seedTrackedUsage(t *testing.T, db *sql.DB, vehicleID string, mileage, hours
 		vehicleID,
 	)
 	require.NoError(t, err)
+}
+
+func requireUsageErrorEnvelope(
+	t *testing.T,
+	responseRecorder *httptest.ResponseRecorder,
+	wantStatus int,
+) {
+	t.Helper()
+
+	standard := decodeStandardResponse(t, responseRecorder.Body)
+	require.Equal(t, wantStatus, standard.Status)
+	require.NotEmpty(t, standard.Message)
+	require.Equal(t, "null", string(standard.Data))
 }
 
 func TestVehicleCRUD(t *testing.T) {
