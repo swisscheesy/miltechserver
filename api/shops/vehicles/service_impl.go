@@ -124,6 +124,14 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 	}
 
 	vehicle.ShopID = currentVehicle.ShopID
+	isMember, err := service.auth.IsUserMemberOfShop(user, currentVehicle.ShopID)
+	if err != nil {
+		return fmt.Errorf("failed to verify membership: %w", err)
+	}
+
+	if !isMember {
+		return errors.New("access denied: user is not a member of this shop")
+	}
 
 	isCreator := currentVehicle.CreatorID == user.UserID
 	isAdmin, err := service.auth.IsUserShopAdmin(user, currentVehicle.ShopID)
@@ -132,7 +140,22 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 	}
 
 	if !isCreator && !isAdmin {
-		return errors.New("access denied: only vehicle creator or shop admin can update vehicles")
+		if !isTrackedUsageUpdate(vehicle) {
+			return errors.New("access denied: only vehicle creator or shop admin can update equipment details")
+		}
+
+		usageUpdate := ShopVehicleUsageUpdate{
+			VehicleID:      vehicle.ID,
+			TrackedMileage: vehicle.TrackedMileage,
+			TrackedHours:   vehicle.TrackedHours,
+			LastUpdated:    time.Now().UTC(),
+		}
+		if err := service.repo.UpdateShopVehicleUsage(user, usageUpdate); err != nil {
+			return fmt.Errorf("failed to update shop vehicle usage: %w", err)
+		}
+
+		slog.Info("Shop vehicle usage updated", "user_id", user.UserID, "vehicle_id", vehicle.ID)
+		return nil
 	}
 
 	if vehicle.Uoc == "" {
@@ -148,6 +171,18 @@ func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 
 	slog.Info("Shop vehicle updated", "user_id", user.UserID, "vehicle_id", vehicle.ID)
 	return nil
+}
+
+func isTrackedUsageUpdate(vehicle model.ShopVehicle) bool {
+	// The usage client carries admin and base readings from its snapshot. The
+	// usage-only repository ignores them so stale values cannot overwrite details.
+	hasUsageValue := vehicle.TrackedMileage != nil || vehicle.TrackedHours != nil
+	return hasUsageValue &&
+		vehicle.Niin == "" &&
+		vehicle.Model == "" &&
+		vehicle.Serial == "" &&
+		vehicle.Uoc == "" &&
+		vehicle.Comment == ""
 }
 
 func (service *ServiceImpl) DeleteShopVehicle(user *bootstrap.User, vehicleID string) error {

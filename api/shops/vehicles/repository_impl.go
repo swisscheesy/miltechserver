@@ -119,6 +119,43 @@ func (repo *RepositoryImpl) UpdateShopVehicle(user *bootstrap.User, vehicle mode
 	return nil
 }
 
+func (repo *RepositoryImpl) UpdateShopVehicleUsage(user *bootstrap.User, update ShopVehicleUsageUpdate) error {
+	setClauses := []postgres.ColumnAssigment{
+		ShopVehicle.LastUpdated.SET(TimestampzT(update.LastUpdated)),
+	}
+
+	if update.TrackedMileage != nil {
+		setClauses = append(setClauses, ShopVehicle.TrackedMileage.SET(Int32(*update.TrackedMileage)))
+	}
+
+	if update.TrackedHours != nil {
+		setClauses = append(setClauses, ShopVehicle.TrackedHours.SET(Int32(*update.TrackedHours)))
+	}
+
+	setArgs := make([]interface{}, len(setClauses))
+	for i, clause := range setClauses {
+		setArgs[i] = clause
+	}
+
+	stmt := ShopVehicle.UPDATE().SET(setArgs[0], setArgs[1:]...).WHERE(ShopVehicle.ID.EQ(String(update.VehicleID)))
+
+	result, err := stmt.Exec(repo.db)
+	if err != nil {
+		return fmt.Errorf("failed to update shop vehicle usage: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return errors.New("vehicle not found")
+	}
+
+	return nil
+}
+
 func (repo *RepositoryImpl) DeleteShopVehicle(user *bootstrap.User, vehicleID string) error {
 	stmt := ShopVehicle.DELETE().
 		WHERE(ShopVehicle.ID.EQ(String(vehicleID)))
