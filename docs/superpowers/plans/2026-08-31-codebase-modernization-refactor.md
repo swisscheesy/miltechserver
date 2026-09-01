@@ -203,9 +203,11 @@ EOF
 - Modify: `tests/item_lookup/main_test.go`
 
 **Acceptance Criteria:**
-- [ ] No reference to `TEST_DATABASE_URL` remains in `tests/item_lookup/main_test.go`.
+- [ ] The dead `TEST_DATABASE_URL` read in `TestMain()` (the fatal-check-then-ignore pattern described in Goal) is removed.
 - [ ] The hardcoded connection string `postgres://postgres:potato123@192.168.20.70/miltech_ng_test?sslmode=disable` is unchanged.
 - [ ] `os` import is removed if it becomes unused after the deletion (check remaining usages first).
+
+**Correction (2026-08-31, found during execution's task review):** The original acceptance criteria said "no reference to `TEST_DATABASE_URL` remains" without qualification. That's inaccurate: the file also has a `loadEnv()` helper (unrelated to `TestMain()`'s dead read) that does `if os.Getenv("TEST_DATABASE_URL") != "" { return nil }` as a legitimate short-circuit before `.env` file discovery — live, correct code never in scope per this task's Goal statement. The criterion is corrected to scope specifically to `TestMain()`'s dead read; `loadEnv()`'s check is untouched by this task.
 
 **Verify:** `go test -p 1 ./tests/item_lookup/... -v` → all tests pass against the real test database, output unchanged from the pre-task baseline.
 
@@ -271,7 +273,7 @@ EOF
 ```
 
 ```json:metadata
-{"files": ["tests/item_lookup/main_test.go"], "verifyCommand": "go build ./... && go test -p 1 ./tests/item_lookup/... -v", "acceptanceCriteria": ["no TEST_DATABASE_URL reference remains", "hardcoded DSN unchanged", "unused os import removed if applicable", "all item_lookup tests pass"], "modelTier": "mechanical"}
+{"files": ["tests/item_lookup/main_test.go"], "verifyCommand": "go build ./... && go test -p 1 ./tests/item_lookup/... -v", "acceptanceCriteria": ["dead TestMain() TEST_DATABASE_URL read removed (loadEnv()'s legitimate, separate short-circuit check is out of scope and untouched)", "hardcoded DSN unchanged", "unused os import removed if applicable", "all item_lookup tests pass"], "modelTier": "mechanical"}
 ```
 
 ---
