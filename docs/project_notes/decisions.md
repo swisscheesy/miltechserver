@@ -256,7 +256,9 @@ Based on the current project setup:
 - Existing API contract remains unchanged while internal architecture is simplified
 - Full suite verification was required due wide route wiring changes (`go test ./...`)
 
-### ADR-011: Shops Performance Optimization Refactor (2026-02-01)
+### ADR-022: Shops Performance Optimization Refactor (2026-02-01)
+
+*(Originally numbered ADR-011; renumbered 2026-08-31 to resolve a duplicate heading. No content changed.)*
 
 **Context:**
 - Shops endpoints executed repeated authorization checks per request and used COUNT-based membership queries
