@@ -121,8 +121,9 @@ EOF
 
 **Acceptance Criteria:**
 - [ ] `grep -c "^### ADR-0" docs/project_notes/decisions.md` shows no number appearing twice (verify via the step below, not just the count).
-- [ ] The chronological order of ADRs by date is preserved in the renumbering.
 - [ ] No other file references the renumbered ADR by its old number (check `docs/agents/`, `CLAUDE.md`, or other docs for citations).
+
+**Correction (2026-08-31, found during execution's task review):** This section originally also listed "chronological order of ADRs by date is preserved" as an acceptance criterion. That contradicted Step 3 below, which explicitly appends the renumbered entry at the end of the sequence rather than reordering — a choice the spec (`docs/superpowers/specs/2026-08-31-codebase-modernization-refactor-design.md`, Pass 2) explicitly permits as one of two equally valid options ("insert... and bump... OR append both at the end with a numbering note"). The struck criterion is removed; append-at-end, out of strict date order but flagged by the editorial note in Step 4, is the correct and final outcome for this task.
 
 **Verify:** `grep -n "^### ADR-" docs/project_notes/decisions.md | awk -F'ADR-' '{print $2}' | awk -F: '{print $1}' | sort | uniq -d` → empty output (no duplicate numbers remain).
 
@@ -189,7 +190,7 @@ EOF
 ```
 
 ```json:metadata
-{"files": ["docs/project_notes/decisions.md"], "verifyCommand": "grep -n '^### ADR-' docs/project_notes/decisions.md | awk -F'ADR-' '{print $2}' | awk -F: '{print $1}' | sort | uniq -d", "acceptanceCriteria": ["no ADR number appears twice", "chronological order preserved", "no dangling external references to the old number"], "modelTier": "mechanical"}
+{"files": ["docs/project_notes/decisions.md"], "verifyCommand": "grep -n '^### ADR-' docs/project_notes/decisions.md | awk -F'ADR-' '{print $2}' | awk -F: '{print $1}' | sort | uniq -d", "acceptanceCriteria": ["no ADR number appears twice", "no dangling external references to the old number", "renumbered entry appended at end with editorial note (append-at-end explicitly permitted by spec, out-of-date-order is expected, not a defect)"], "modelTier": "mechanical"}
 ```
 
 ---
