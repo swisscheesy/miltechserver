@@ -16,11 +16,6 @@ var testDB *sql.DB
 func TestMain(m *testing.M) {
 	_ = loadEnv()
 
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		log.Fatal("TEST_DATABASE_URL is not set")
-	}
-
 	var err error
 	testDB, err = sql.Open("postgres", "postgres://postgres:potato123@192.168.20.70/miltech_ng_test?sslmode=disable")
 	if err != nil {
