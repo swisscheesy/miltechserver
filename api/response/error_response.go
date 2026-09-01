@@ -1,10 +1,9 @@
 package response
 
-type NoItemFoundResponse struct {
-	Status  int         `json:"status"`
-	Data    interface{} `json:"data"`
-	Message string      `json:"message"`
-}
+// NoItemFoundResponse is a type alias retained for existing call sites;
+// it is structurally identical to StandardResponse and carries no
+// distinct fields.
+type NoItemFoundResponse = StandardResponse
 
 func NoItemFoundResponseMessage() NoItemFoundResponse {
 	return NoItemFoundResponse{
@@ -14,11 +13,10 @@ func NoItemFoundResponseMessage() NoItemFoundResponse {
 	}
 }
 
-type ErrorResponse struct {
-	Status  int         `json:"status"`
-	Data    interface{} `json:"data"`
-	Message string      `json:"message"`
-}
+// ErrorResponse is a type alias retained for existing call sites; it is
+// structurally identical to StandardResponse and carries no distinct
+// fields.
+type ErrorResponse = StandardResponse
 
 func InternalErrorResponseMessage() ErrorResponse {
 	return ErrorResponse{
