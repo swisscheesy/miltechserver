@@ -80,31 +80,37 @@ have no dependencies on each other or on later passes.
 
 ### Pass 1 — Delete confirmed dead code
 
+**Correction (2026-08-31, found during execution):** This pass originally
+also named `api/middleware/error_handler.go` and `api/middleware/
+rate_limiter.go` as dead. Both are confirmed live on re-verification:
+`error_handler.go`'s `ErrorHandler` is registered globally at `api/route/
+route.go:111` (`v1Route.Use(middleware.ErrorHandler)`), and `rate_limiter.go`'s
+`RateLimiter()` is called directly in 5 route registrations
+(`api/docs_equipment/route.go` ×2, `api/library/route.go`, `api/library/
+ps_mag/route.go`, `api/library/pmcs_sbs/route.go` ×2), returning HTTP 429
+when tripped. The original audit correctly found `RateLimiter` wasn't wired
+into the *global* middleware chain in `Setup()`, but missed the 5 direct
+per-route call sites, and took `error_handler.go`'s self-doubting TODO
+comment as evidence of inactivity without confirming whether it was
+registered. This pass is corrected below to delete only the file that is
+genuinely dead. Neither `error_handler.go` nor `rate_limiter.go` is part of
+this pass, or any other pass in this document, going forward.
+
 **Current behavior:** `api/service/auth_service.go` compiles and is part of
 the binary but has zero callers anywhere in the repo (`AuthService`/
 `NewAuthService` — confirmed via repo-wide grep); its `Login` method is
 entirely commented out and its other seven methods are empty bodies. Real
 authentication runs through Firebase in `api/middleware/authentication.go`.
-`api/middleware/error_handler.go` carries its own author's doubt (`// TODO:
-Don't think this really does anything anymore.`) and does fragile
-string-matching on `err.Error()` to detect 404s — a pattern the rest of the
-codebase has moved away from in favor of `errors.Is()`. `api/middleware/
-rate_limiter.go` is fully implemented (per-IP token bucket) but never
-registered in `api/route/route.go`'s `Setup()` — `user_pmcs` has its own
-separate, actually-wired rate limiter instead.
 
-**Structural improvement:** Delete `api/service/auth_service.go`,
-`api/middleware/error_handler.go`, and `api/middleware/rate_limiter.go` (and
-its test file). Remove any now-dangling imports.
+**Structural improvement:** Delete `api/service/auth_service.go`. Remove any
+now-dangling imports.
 
 **Validation:** `go build ./...` succeeds; `go vet ./...` clean; `go test
 -p 1 ./...` passes with identical results to the pre-change baseline; grep
-confirms zero remaining references to `AuthService`, `ErrorHandler`, and
-the rate limiter's exported symbols anywhere in the repo, including
-`route.go`.
+confirms zero remaining references to `AuthService` anywhere in the repo.
 
-**Public API impact:** None. Nothing reachable through HTTP touches any of
-these three files today.
+**Public API impact:** None. Nothing reachable through HTTP touches this
+file today.
 
 ---
 

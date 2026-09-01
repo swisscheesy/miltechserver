@@ -44,25 +44,21 @@ New files this plan creates:
 
 Files modified in place: `api/response/standard_response.go`, `api/response/error_response.go` (Task 3); `api/route/route.go` (Tasks 1, 22); six `sb_700_20`/`docs_equipment`/`eic`/`tmde`/`library` handler files (Task 6); ~15 domain route files (Tasks 7–11); six repository files (Task 13); `bootstrap/env.go` untouched (context threading is service-layer only); 47 `service_impl.go` files (Task 20).
 
-Files deleted: `api/service/auth_service.go`, `api/middleware/error_handler.go`, `api/middleware/rate_limiter.go`, `api/middleware/rate_limiter_test.go` (Task 1); `api/route/shops_route.go` (Task 22).
+Files deleted: `api/service/auth_service.go` (Task 1 — corrected during execution to exclude `error_handler.go`/`rate_limiter.go`, both confirmed live; see Task 1's correction note); `api/route/shops_route.go` (Task 22).
 
 ---
 
-### Task 1: Delete dead code — auth_service, error_handler, rate_limiter
+### Task 1: Delete dead code — auth_service only
 
-**Goal:** Remove three files that compile into the binary but have no live effect: `api/service/auth_service.go` (zero callers, commented-out `Login`, no-op methods), `api/middleware/error_handler.go` (self-flagged dead by its own TODO comment), and `api/middleware/rate_limiter.go` (fully built but never registered in `route.go`).
+**Correction (2026-08-31, made during execution):** The original spec and this plan claimed `api/middleware/error_handler.go` and `api/middleware/rate_limiter.go` were also dead. Both are live: `error_handler.go`'s `ErrorHandler` is registered globally at `api/route/route.go:111` (`v1Route.Use(middleware.ErrorHandler)`), and `rate_limiter.go`'s `RateLimiter()` is called directly in 5 route registrations (`api/docs_equipment/route.go` ×2, `api/library/route.go`, `api/library/ps_mag/route.go`, `api/library/pmcs_sbs/route.go` ×2), returning HTTP 429 when tripped. The original audit checked whether `RateLimiter` was wired into the *global* middleware chain in `Setup()` and correctly found it wasn't, but missed that several domains call it directly per-route — and took `error_handler.go`'s self-doubting TODO comment as evidence of inactivity without checking whether it was actually registered. This task is corrected to delete only the one file that is genuinely dead. Neither `error_handler.go` nor `rate_limiter.go` is touched by any task in this plan.
+
+**Goal:** Remove `api/service/auth_service.go`, which compiles into the binary but has zero external references — a fully orphaned stub with a commented-out `Login` method and no-op method bodies. Real authentication runs through Firebase in `api/middleware/authentication.go`.
 
 **Files:**
 - Delete: `api/service/auth_service.go`
-- Delete: `api/middleware/error_handler.go`
-- Delete: `api/middleware/rate_limiter.go`
-- Delete: `api/middleware/rate_limiter_test.go`
-- Modify: `api/route/route.go` (remove any import/reference to the deleted symbols, if present)
 
 **Acceptance Criteria:**
 - [ ] `grep -rn "AuthService\|NewAuthService" --include="*.go" .` returns zero results.
-- [ ] `grep -rn "middleware.ErrorHandler\|ErrorHandler(" --include="*.go" .` returns zero results (outside the deleted file's own history).
-- [ ] `grep -rn "middleware.RateLimit\|NewRateLimiter\|rate_limiter" --include="*.go" .` returns zero results.
 - [ ] `go build ./...` succeeds.
 - [ ] `go vet ./...` reports no new issues.
 
@@ -73,29 +69,17 @@ Files deleted: `api/service/auth_service.go`, `api/middleware/error_handler.go`,
 - [ ] **Step 1: Confirm zero external references before deleting**
 
 ```bash
-grep -rn "AuthService\|NewAuthService" --include="*.go" . 
-grep -rn "ErrorHandler" --include="*.go" .
-grep -rn "RateLimit\|rate_limiter" --include="*.go" .
+grep -rn "AuthService\|NewAuthService" --include="*.go" .
 ```
-Expected: `AuthService` matches only inside `api/service/auth_service.go` itself. `ErrorHandler` matches only inside `api/middleware/error_handler.go` (and possibly its own test, if any — there is none). `RateLimit`/`rate_limiter` matches only inside `api/middleware/rate_limiter.go` and `api/middleware/rate_limiter_test.go`.
+Expected: matches only inside `api/service/auth_service.go` itself.
 
-- [ ] **Step 2: Delete the four files**
+- [ ] **Step 2: Delete the file**
 
 ```bash
 git rm api/service/auth_service.go
-git rm api/middleware/error_handler.go
-git rm api/middleware/rate_limiter.go
-git rm api/middleware/rate_limiter_test.go
 ```
 
-- [ ] **Step 3: Check route.go for now-dangling references**
-
-```bash
-grep -n "ErrorHandler\|RateLimit\|AuthService" api/route/route.go
-```
-Expected: no matches (confirmed by the audit that none of these three are wired into `Setup()`). If any match appears, remove that line/reference before proceeding — do not leave a dangling call to a deleted symbol.
-
-- [ ] **Step 4: Build and test**
+- [ ] **Step 3: Build and test**
 
 ```bash
 go build ./...
@@ -104,23 +88,26 @@ go test -p 1 ./...
 ```
 Expected: all pass with no new failures.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add -A
 git commit -m "$(cat <<'EOF'
-fix(cleanup): remove dead auth_service, error_handler, rate_limiter
+fix(cleanup): remove dead auth_service
 
-Three files with zero live effect on the running application:
-auth_service.go had no callers and a commented-out Login method,
-error_handler.go was self-flagged as likely non-functional, and
-rate_limiter.go was never wired into route.go's Setup().
+api/service/auth_service.go had zero external references, a fully
+commented-out Login method, and no-op bodies for every other method.
+Real authentication runs through Firebase in
+api/middleware/authentication.go. error_handler.go and
+rate_limiter.go, also considered during planning, are confirmed live
+(registered in route.go and called directly in 5 route files
+respectively) and are not touched by this change.
 EOF
 )"
 ```
 
 ```json:metadata
-{"files": ["api/service/auth_service.go", "api/middleware/error_handler.go", "api/middleware/rate_limiter.go", "api/middleware/rate_limiter_test.go", "api/route/route.go"], "verifyCommand": "go build ./... && go vet ./... && go test -p 1 ./...", "acceptanceCriteria": ["grep for AuthService/NewAuthService returns zero results", "grep for ErrorHandler returns zero results", "grep for RateLimit/rate_limiter returns zero results", "go build succeeds", "go vet reports no new issues"], "modelTier": "mechanical"}
+{"files": ["api/service/auth_service.go"], "verifyCommand": "go build ./... && go vet ./... && go test -p 1 ./...", "acceptanceCriteria": ["grep for AuthService/NewAuthService returns zero results", "go build succeeds", "go vet reports no new issues"], "modelTier": "mechanical"}
 ```
 
 ---

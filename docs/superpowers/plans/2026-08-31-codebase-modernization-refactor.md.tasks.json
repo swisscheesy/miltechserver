@@ -3,9 +3,9 @@
   "tasks": [
     {
       "id": 0,
-      "subject": "Task 1: Delete dead auth_service/error_handler/rate_limiter",
+      "subject": "Task 1: Delete dead auth_service.go only",
       "status": "pending",
-      "description": "**Goal:** Remove three files that compile into the binary but have no live effect: api/service/auth_service.go (zero callers, commented-out Login, no-op methods), api/middleware/error_handler.go (self-flagged dead by its own TODO comment), and api/middleware/rate_limiter.go (fully built but never registered in route.go).\n\n**Files:**\n- Delete: api/service/auth_service.go\n- Delete: api/middleware/error_handler.go\n- Delete: api/middleware/rate_limiter.go\n- Delete: api/middleware/rate_limiter_test.go\n- Modify: api/route/route.go (remove any dangling reference, if present)\n\n**Acceptance Criteria:**\n- [ ] grep -rn \"AuthService\\|NewAuthService\" --include=\"*.go\" . returns zero results.\n- [ ] grep -rn \"middleware.ErrorHandler\\|ErrorHandler(\" --include=\"*.go\" . returns zero results.\n- [ ] grep -rn \"middleware.RateLimit\\|NewRateLimiter\\|rate_limiter\" --include=\"*.go\" . returns zero results.\n- [ ] go build ./... succeeds.\n- [ ] go vet ./... reports no new issues.\n\n**Verify:** go build ./... && go vet ./... && go test -p 1 ./... -> all pass, identical to pre-task baseline.\n\n```json:metadata\n{\"files\": [\"api/service/auth_service.go\", \"api/middleware/error_handler.go\", \"api/middleware/rate_limiter.go\", \"api/middleware/rate_limiter_test.go\", \"api/route/route.go\"], \"verifyCommand\": \"go build ./... && go vet ./... && go test -p 1 ./...\", \"acceptanceCriteria\": [\"grep for AuthService/NewAuthService returns zero results\", \"grep for ErrorHandler returns zero results\", \"grep for RateLimit/rate_limiter returns zero results\", \"go build succeeds\", \"go vet reports no new issues\"], \"modelTier\": \"mechanical\"}\n```"
+      "description": "**Correction (2026-08-31, during execution):** error_handler.go and rate_limiter.go, originally also targeted, are confirmed LIVE \u2014 error_handler.go is registered globally at api/route/route.go:111; rate_limiter.go is called directly in 5 route registrations (docs_equipment x2, library, library/ps_mag, library/pmcs_sbs x2), returning HTTP 429. Neither is touched by this task or any other task in this plan.\n\n**Goal:** Remove api/service/auth_service.go, a fully orphaned stub with zero external references, a commented-out Login method, and no-op bodies for every other method. Real authentication runs through Firebase in api/middleware/authentication.go.\n\n**Files:**\n- Delete: api/service/auth_service.go\n\n**Acceptance Criteria:**\n- [ ] grep -rn \"AuthService\\|NewAuthService\" --include=\"*.go\" . returns zero results.\n- [ ] go build ./... succeeds.\n- [ ] go vet ./... reports no new issues.\n\n**Verify:** go build ./... && go vet ./... && go test -p 1 ./... -> all pass, identical to pre-task baseline.\n\n```json:metadata\n{\"files\": [\"api/service/auth_service.go\"], \"verifyCommand\": \"go build ./... && go vet ./... && go test -p 1 ./...\", \"acceptanceCriteria\": [\"grep for AuthService/NewAuthService returns zero results\", \"go build succeeds\", \"go vet reports no new issues\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 1,
@@ -36,42 +36,59 @@
       "id": 5,
       "subject": "Task 6: Adopt pagination helper in 5 domains",
       "status": "pending",
-      "blockedBy": [4],
+      "blockedBy": [
+        4
+      ],
       "description": "**Goal:** Replace the copy-pasted pagination parse-and-validate block in sb_700_20 (9x in handlers_apps.go), docs_equipment, eic, tmde, and library/ps_mag with calls to the shared helper from Task 5.\n\n**Files:**\n- Modify: api/sb_700_20/handlers_apps.go\n- Modify: api/sb_700_20/handlers_chps.go\n- Modify: api/docs_equipment/route.go\n- Modify: api/eic/route.go\n- Modify: api/tmde/route.go\n- Modify: api/library/ps_mag/route.go\n\n**Acceptance Criteria:**\n- [ ] Every hand-copied pagination block in the six files is replaced with a call to the shared helper.\n- [ ] grep -rn \"DefaultQuery(\\\"page\\\"\" across these files returns zero results.\n- [ ] Each domain's existing tests pass with identical status codes and response bodies for valid, missing, zero, negative, non-numeric page params.\n\n**Verify:** go test -p 1 ./tests/sb_700_20/... ./tests/docs_equipment/... ./tests/eic/... ./tests/tmde/... ./api/library/... -v -> all pass, identical to pre-task baseline.\n\n```json:metadata\n{\"files\": [\"api/sb_700_20/handlers_apps.go\", \"api/sb_700_20/handlers_chps.go\", \"api/docs_equipment/route.go\", \"api/eic/route.go\", \"api/tmde/route.go\", \"api/library/ps_mag/route.go\"], \"verifyCommand\": \"go test -p 1 ./tests/sb_700_20/... ./tests/docs_equipment/... ./tests/eic/... ./tests/tmde/... ./api/library/... -v\", \"acceptanceCriteria\": [\"all copy-pasted pagination blocks replaced\", \"zero DefaultQuery('page' matches remain in the five domains\", \"response bodies and status codes identical to pre-task baseline for all param edge cases\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 6,
       "subject": "Task 7: Response consolidation - material_images",
       "status": "pending",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** material_images has 35 raw gin.H{}/c.JSON(http.StatusOK occurrences across flags/route.go, images/route.go, votes/route.go and zero use of response.StandardResponse. Migrate to response.OK()/response.Error(), preserving every existing field name and status code exactly.\n\n**Files:**\n- Modify: api/material_images/flags/route.go\n- Modify: api/material_images/images/route.go\n- Modify: api/material_images/votes/route.go\n\n**Acceptance Criteria:**\n- [ ] Golden-fixture snapshot of every endpoint's response body matches byte-for-byte after migration (or explicitly confirmed error-to-message key changes only).\n- [ ] grep -rn \"gin.H{\" api/material_images/ returns zero results.\n- [ ] Domain-specific typed responses (ImageFlagResponse, PaginatedImagesResponse, ImageVoteResponse) preserved as-is.\n\n**Verify:** go test -p 1 ./tests/material_images/... -v -> all pass; golden-fixture diff is empty.\n\n```json:metadata\n{\"files\": [\"api/material_images/flags/route.go\", \"api/material_images/images/route.go\", \"api/material_images/votes/route.go\"], \"verifyCommand\": \"go test -p 1 ./tests/material_images/... -v\", \"acceptanceCriteria\": [\"golden-fixture diff empty or explicitly confirmed error-to-message key changes only\", \"zero raw gin.H{} constructions remain\", \"domain-specific typed responses unchanged\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 7,
       "subject": "Task 8: Response consolidation - pmcs_sbs_progress",
       "status": "pending",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** api/pmcs_sbs_progress/route.go mixes response.StandardResponse{} literals with raw gin.H{\"message\": ...} literals with no single convention even per-file. Migrate all of it to response.OK()/response.Error().\n\n**Files:**\n- Modify: api/pmcs_sbs_progress/route.go\n\n**Acceptance Criteria:**\n- [ ] Golden-fixture snapshot matches byte-for-byte after migration.\n- [ ] grep -n \"gin.H{\\|response.StandardResponse{\" api/pmcs_sbs_progress/route.go returns zero results.\n\n**Verify:** go test -p 1 ./tests/pmcs_sbs_progress/... -v -> all pass; golden-fixture diff empty.\n\n```json:metadata\n{\"files\": [\"api/pmcs_sbs_progress/route.go\"], \"verifyCommand\": \"go test -p 1 ./tests/pmcs_sbs_progress/... -v\", \"acceptanceCriteria\": [\"golden-fixture diff empty or explicitly confirmed key changes only\", \"zero raw gin.H{} or inline StandardResponse literals remain\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 8,
       "subject": "Task 9: Response consolidation - shops",
       "status": "pending",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** shops has 7 raw c.JSON(http.StatusOK calls against 13 files already using StandardResponse. Find and migrate the 7 raw calls (exact locations confirmed at task start since file:line may have shifted).\n\n**Files:**\n- Modify: files identified during the task's location step\n\n**Acceptance Criteria:**\n- [ ] Golden-fixture snapshot matches byte-for-byte after migration.\n- [ ] grep -rn \"c.JSON(http.StatusOK\" api/shops/ | grep -v \"StandardResponse\\|response\\.\" returns zero results.\n\n**Verify:** go test -p 1 ./tests/shops/... -v (mandatory -p 1, shares test DB with pmcs_sbs_progress) -> all pass; golden-fixture diff empty.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"golden-fixture diff empty\", \"zero raw c.JSON(http.StatusOK calls remain outside the response package\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 9,
       "subject": "Task 10: Response consolidation - tmde, item_lookup, eic",
       "status": "pending",
-      "blockedBy": [3, 5],
+      "blockedBy": [
+        3,
+        5,
+        6
+      ],
       "description": "**Goal:** tmde and item_lookup have a small number of remaining raw response calls; eic is believed already fully migrated. Confirm current counts (may have shifted after Task 6's pagination changes) and migrate any remaining raw calls.\n\n**Files:**\n- Modify: api/tmde/route.go (if raw calls remain)\n- Modify: files under api/item_lookup/ identified at task start (if raw calls remain)\n- Verify only: api/eic/route.go\n\n**Acceptance Criteria:**\n- [ ] Golden-fixture snapshots for tmde and item_lookup match byte-for-byte after migration.\n- [ ] eic confirmed to already have zero raw gin.H{}/c.JSON(http.StatusOK calls, or migrated if any found.\n\n**Verify:** go test -p 1 ./tests/tmde/... ./tests/item_lookup/... ./tests/eic/... -v -> all pass; golden-fixture diffs empty.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go test -p 1 ./tests/tmde/... ./tests/item_lookup/... ./tests/eic/... -v\", \"acceptanceCriteria\": [\"golden-fixture diffs empty for tmde and item_lookup\", \"eic confirmed already consistent or migrated\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 10,
       "subject": "Task 11: Response consolidation - remaining domains sweep",
       "status": "pending",
-      "blockedBy": [6, 7, 8, 9],
+      "blockedBy": [
+        6,
+        7,
+        8,
+        9
+      ],
       "description": "**Goal:** Sweep every remaining non-user_pmcs domain for leftover raw gin.H{}/c.JSON(http.StatusOK response construction not covered by Tasks 7-10, and migrate. user_pmcs is permanently excluded and must not be touched.\n\n**Files:**\n- Modify: files identified during the task's sweep, across all non-user_pmcs domains\n\n**Acceptance Criteria:**\n- [ ] grep -rln \"gin.H{\" api/ excluding tests and user_pmcs returns zero results, or every remaining match is confirmed to be a non-response inner-payload use, not an outer envelope.\n- [ ] Golden-fixture snapshots for each touched domain match byte-for-byte.\n- [ ] git diff --stat shows no api/user_pmcs/ files touched by this task.\n\n**Verify:** go test -p 1 ./... (full suite) -> all pass; per-domain golden-fixture diffs empty.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go test -p 1 ./...\", \"acceptanceCriteria\": [\"no genuine raw response-envelope construction remains outside user_pmcs\", \"golden-fixture diffs empty per domain\", \"user_pmcs completely untouched\"], \"modelTier\": \"standard\"}\n```"
     },
     {
@@ -84,7 +101,9 @@
       "id": 12,
       "subject": "Task 13: Adopt WithTx in 6 manual-transaction repos",
       "status": "pending",
-      "blockedBy": [11],
+      "blockedBy": [
+        11
+      ],
       "description": "**Goal:** Replace manual Begin/Commit/Rollback boilerplate in 6 files with db.WithTx from Task 12: api/pmcs_sbs_progress/repository_impl.go, api/shops/messages/repository_impl.go, api/shops/vehicles/repository_impl.go, api/user_general/repository_impl.go, api/user_pmcs/sync/repository_impl.go, api/user_saves/categories/repository_impl.go.\n\n**Files:**\n- Modify: api/pmcs_sbs_progress/repository_impl.go\n- Modify: api/shops/messages/repository_impl.go\n- Modify: api/shops/vehicles/repository_impl.go\n- Modify: api/user_general/repository_impl.go\n- Modify: api/user_pmcs/sync/repository_impl.go\n- Modify: api/user_saves/categories/repository_impl.go\n\n**Acceptance Criteria:**\n- [ ] Every manual .Begin()/.BeginTx() call in these six files is replaced with db.WithTx(...).\n- [ ] For each migrated method, a test forces an error mid-transaction and confirms no partial write persists.\n- [ ] Original error-wrapping message text preserved where existing tests assert on it.\n\n**Verify:** go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_general/... ./tests/user_pmcs/... ./tests/user_saves/... -v -> all pass, including rollback-path assertions.\n\n```json:metadata\n{\"files\": [\"api/pmcs_sbs_progress/repository_impl.go\", \"api/shops/messages/repository_impl.go\", \"api/shops/vehicles/repository_impl.go\", \"api/user_general/repository_impl.go\", \"api/user_pmcs/sync/repository_impl.go\", \"api/user_saves/categories/repository_impl.go\"], \"verifyCommand\": \"go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_general/... ./tests/user_pmcs/... ./tests/user_saves/... -v\", \"acceptanceCriteria\": [\"all manual Begin/Commit/Rollback replaced with db.WithTx\", \"each migrated method has a passing rollback-on-error test\", \"original error-wrapping message text preserved where tests depend on it\"], \"modelTier\": \"standard\"}\n```"
     },
     {
@@ -109,7 +128,9 @@
       "id": 16,
       "subject": "Task 17: Thread context.Context through remaining 47 service files",
       "status": "pending",
-      "blockedBy": [12],
+      "blockedBy": [
+        12
+      ],
       "description": "**Goal:** Only 7 of 54 service_impl.go files accept ctx context.Context. Add it to the other 47, threading from the handler's c.Request.Context() down to repository calls that already accept ctx. Does NOT extend context-acceptance into repository methods that don't have it yet (explicitly out of scope for this entire plan).\n\n**Files:**\n- Modify: 47 service_impl.go files and their paired service.go interface files\n- Modify: corresponding handler/route files to pass c.Request.Context()\n\n**Acceptance Criteria:**\n- [ ] Zero service_impl.go files remain without ctx as first parameter of public methods, except the 7 already-done plus this task's 47.\n- [ ] Every paired service.go interface updated to match.\n- [ ] Every handler call site passes c.Request.Context() rather than context.Background()/context.TODO().\n- [ ] At least one new test per touched domain asserts a canceled context aborts an in-flight repository call where the repository already accepts ctx.\n\n**Verify:** go build ./... (signature-only change catches every missed call site) && go test -p 1 ./... (full suite).\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go build ./... && go vet ./... && go test -p 1 ./...\", \"acceptanceCriteria\": [\"all 47 service_impl.go files (minus the 7 already done) now accept ctx as first parameter\", \"paired service.go interfaces match\", \"handler call sites pass c.Request.Context()\", \"at least one new cancellation test per domain where the repository layer supports it\"], \"modelTier\": \"standard\"}\n```"
     },
     {
