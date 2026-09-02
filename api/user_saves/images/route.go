@@ -58,7 +58,7 @@ func (handler *Handler) uploadItemImage(c *gin.Context) {
 		return
 	}
 
-	blobURL, err := handler.service.Upload(user, itemID, tableType, imageData)
+	blobURL, err := handler.service.Upload(c.Request.Context(), user, itemID, tableType, imageData)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
 		response.Error(c, 500, "failed to upload image")
@@ -95,7 +95,7 @@ func (handler *Handler) deleteItemImage(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, itemID, tableType)
+	err = handler.service.Delete(c.Request.Context(), user, itemID, tableType)
 	if err != nil {
 		slog.Error("Error deleting image from blob storage", "error", err)
 		response.Error(c, 500, "failed to delete image")
@@ -132,7 +132,7 @@ func (handler *Handler) getItemImage(c *gin.Context) {
 		return
 	}
 
-	imageData, contentType, err := handler.service.Get(user, itemID, tableType)
+	imageData, contentType, err := handler.service.Get(c.Request.Context(), user, itemID, tableType)
 	if err != nil {
 		slog.Error("Error retrieving image from blob storage", "error", err, "table_type", tableType, "item_id", itemID)
 		response.Error(c, 404, "image not found")

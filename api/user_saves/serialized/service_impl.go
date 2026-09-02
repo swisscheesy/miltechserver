@@ -1,6 +1,7 @@
 package serialized
 
 import (
+	"context"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/user_saves/images"
@@ -17,7 +18,7 @@ func NewService(repo Repository, imagesRepo images.Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo, imagesRepo: imagesRepo}
 }
 
-func (service *ServiceImpl) GetByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error) {
+func (service *ServiceImpl) GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsSerialized, error) {
 	if user == nil {
 		return nil, shared.ErrUserNotFound
 	}
@@ -25,7 +26,7 @@ func (service *ServiceImpl) GetByUser(user *bootstrap.User) ([]model.UserItemsSe
 	return service.repo.GetByUser(user)
 }
 
-func (service *ServiceImpl) Upsert(user *bootstrap.User, item model.UserItemsSerialized) error {
+func (service *ServiceImpl) Upsert(ctx context.Context, user *bootstrap.User, item model.UserItemsSerialized) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}
@@ -33,7 +34,7 @@ func (service *ServiceImpl) Upsert(user *bootstrap.User, item model.UserItemsSer
 	return service.repo.Upsert(user, item)
 }
 
-func (service *ServiceImpl) UpsertBatch(user *bootstrap.User, items []model.UserItemsSerialized) error {
+func (service *ServiceImpl) UpsertBatch(ctx context.Context, user *bootstrap.User, items []model.UserItemsSerialized) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}
@@ -41,7 +42,7 @@ func (service *ServiceImpl) UpsertBatch(user *bootstrap.User, items []model.User
 	return service.repo.UpsertBatch(user, items)
 }
 
-func (service *ServiceImpl) Delete(user *bootstrap.User, item model.UserItemsSerialized) error {
+func (service *ServiceImpl) Delete(ctx context.Context, user *bootstrap.User, item model.UserItemsSerialized) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}
@@ -56,7 +57,7 @@ func (service *ServiceImpl) Delete(user *bootstrap.User, item model.UserItemsSer
 	return service.repo.Delete(user, item)
 }
 
-func (service *ServiceImpl) DeleteAll(user *bootstrap.User) error {
+func (service *ServiceImpl) DeleteAll(ctx context.Context, user *bootstrap.User) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}

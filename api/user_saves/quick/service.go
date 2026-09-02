@@ -1,14 +1,15 @@
 package quick
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 )
 
 type Service interface {
-	GetByUser(user *bootstrap.User) ([]model.UserItemsQuick, error)
-	Upsert(user *bootstrap.User, item model.UserItemsQuick) error
-	UpsertBatch(user *bootstrap.User, items []model.UserItemsQuick) error
-	Delete(user *bootstrap.User, item model.UserItemsQuick) error
-	DeleteAll(user *bootstrap.User) error
+	GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsQuick, error)
+	Upsert(ctx context.Context, user *bootstrap.User, item model.UserItemsQuick) error
+	UpsertBatch(ctx context.Context, user *bootstrap.User, items []model.UserItemsQuick) error
+	Delete(ctx context.Context, user *bootstrap.User, item model.UserItemsQuick) error
+	DeleteAll(ctx context.Context, user *bootstrap.User) error
 }

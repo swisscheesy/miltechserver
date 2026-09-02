@@ -31,7 +31,7 @@ func (handler *Handler) getQuickSaveItemsByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -55,7 +55,7 @@ func (handler *Handler) upsertQuickSaveItemByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Upsert(user, quick)
+	err = handler.service.Upsert(c.Request.Context(), user, quick)
 	if err != nil {
 		c.Error(err)
 		return
@@ -78,7 +78,7 @@ func (handler *Handler) deleteQuickSaveItemByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, quick)
+	err = handler.service.Delete(c.Request.Context(), user, quick)
 	if err != nil {
 		c.Error(err)
 		return
@@ -95,7 +95,7 @@ func (handler *Handler) deleteAllQuickSaveItemsByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -118,7 +118,7 @@ func (handler *Handler) upsertQuickSaveItemListByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, quickItems)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, quickItems)
 	if err != nil {
 		c.Error(err)
 		return
