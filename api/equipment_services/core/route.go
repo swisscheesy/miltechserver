@@ -46,7 +46,7 @@ func (handler *Handler) create(c *gin.Context) {
 		return
 	}
 
-	createdService, err := handler.service.Create(user, req)
+	createdService, err := handler.service.Create(c.Request.Context(), user, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -82,7 +82,7 @@ func (handler *Handler) getByID(c *gin.Context) {
 		return
 	}
 
-	service, err := handler.service.GetByID(user, shopID, serviceID)
+	service, err := handler.service.GetByID(c.Request.Context(), user, shopID, serviceID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -123,7 +123,7 @@ func (handler *Handler) update(c *gin.Context) {
 
 	req.ServiceID = serviceID
 
-	updatedService, err := handler.service.Update(user, shopID, req)
+	updatedService, err := handler.service.Update(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -159,7 +159,7 @@ func (handler *Handler) delete(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, shopID, serviceID)
+	err = handler.service.Delete(c.Request.Context(), user, shopID, serviceID)
 	if err != nil {
 		c.Error(err)
 		return

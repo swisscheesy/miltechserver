@@ -44,7 +44,7 @@ func (handler *Handler) getOverdue(c *gin.Context) {
 		return
 	}
 
-	services, err := handler.service.GetOverdue(user, shopID, req)
+	services, err := handler.service.GetOverdue(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -82,7 +82,7 @@ func (handler *Handler) getDueSoon(c *gin.Context) {
 		return
 	}
 
-	services, err := handler.service.GetDueSoon(user, shopID, req)
+	services, err := handler.service.GetDueSoon(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return

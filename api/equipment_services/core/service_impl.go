@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -28,7 +29,7 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) Create(user *bootstrap.User, req request.CreateEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
+func (service *ServiceImpl) Create(ctx context.Context, user *bootstrap.User, req request.CreateEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
@@ -95,7 +96,7 @@ func (service *ServiceImpl) Create(user *bootstrap.User, req request.CreateEquip
 	return &result, nil
 }
 
-func (service *ServiceImpl) GetByID(user *bootstrap.User, shopID, serviceID string) (*response.EquipmentServiceResponse, error) {
+func (service *ServiceImpl) GetByID(ctx context.Context, user *bootstrap.User, shopID, serviceID string) (*response.EquipmentServiceResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
@@ -119,7 +120,7 @@ func (service *ServiceImpl) GetByID(user *bootstrap.User, shopID, serviceID stri
 	return &result, nil
 }
 
-func (service *ServiceImpl) Update(user *bootstrap.User, shopID string, req request.UpdateEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
+func (service *ServiceImpl) Update(ctx context.Context, user *bootstrap.User, shopID string, req request.UpdateEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
@@ -173,7 +174,7 @@ func (service *ServiceImpl) Update(user *bootstrap.User, shopID string, req requ
 	return &result, nil
 }
 
-func (service *ServiceImpl) Delete(user *bootstrap.User, shopID, serviceID string) error {
+func (service *ServiceImpl) Delete(ctx context.Context, user *bootstrap.User, shopID, serviceID string) error {
 	if user == nil {
 		return shared.ErrUnauthorizedUser
 	}

@@ -1,6 +1,7 @@
 package queries
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) GetByShop(user *bootstrap.User, shopID string, req request.GetEquipmentServicesRequest) (*response.PaginatedEquipmentServicesResponse, error) {
+func (service *ServiceImpl) GetByShop(ctx context.Context, user *bootstrap.User, shopID string, req request.GetEquipmentServicesRequest) (*response.PaginatedEquipmentServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
@@ -48,7 +49,7 @@ func (service *ServiceImpl) GetByShop(user *bootstrap.User, shopID string, req r
 	}, nil
 }
 
-func (service *ServiceImpl) GetByEquipment(user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) (*response.PaginatedEquipmentServicesResponse, error) {
+func (service *ServiceImpl) GetByEquipment(ctx context.Context, user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) (*response.PaginatedEquipmentServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}

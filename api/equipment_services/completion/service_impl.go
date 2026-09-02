@@ -1,6 +1,7 @@
 package completion
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -24,7 +25,7 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) Complete(user *bootstrap.User, shopID, serviceID string, req request.CompleteEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
+func (service *ServiceImpl) Complete(ctx context.Context, user *bootstrap.User, shopID, serviceID string, req request.CompleteEquipmentServiceRequest) (*response.EquipmentServiceResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}

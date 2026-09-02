@@ -43,7 +43,7 @@ func (handler *Handler) getCalendar(c *gin.Context) {
 		return
 	}
 
-	services, err := handler.service.GetCalendarServices(user, shopID, req)
+	services, err := handler.service.GetCalendarServices(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return

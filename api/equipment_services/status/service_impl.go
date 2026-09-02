@@ -1,6 +1,7 @@
 package status
 
 import (
+	"context"
 	"fmt"
 
 	"miltechserver/api/equipment_services/shared"
@@ -23,7 +24,7 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) GetOverdue(user *bootstrap.User, shopID string, req request.GetOverdueServicesRequest) (*response.OverdueServicesResponse, error) {
+func (service *ServiceImpl) GetOverdue(ctx context.Context, user *bootstrap.User, shopID string, req request.GetOverdueServicesRequest) (*response.OverdueServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
@@ -53,7 +54,7 @@ func (service *ServiceImpl) GetOverdue(user *bootstrap.User, shopID string, req 
 	}, nil
 }
 
-func (service *ServiceImpl) GetDueSoon(user *bootstrap.User, shopID string, req request.GetDueSoonServicesRequest) (*response.DueSoonServicesResponse, error) {
+func (service *ServiceImpl) GetDueSoon(ctx context.Context, user *bootstrap.User, shopID string, req request.GetDueSoonServicesRequest) (*response.DueSoonServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}

@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -24,7 +25,7 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) GetCalendarServices(user *bootstrap.User, shopID string, req request.GetCalendarServicesRequest) (*response.CalendarServicesResponse, error) {
+func (service *ServiceImpl) GetCalendarServices(ctx context.Context, user *bootstrap.User, shopID string, req request.GetCalendarServicesRequest) (*response.CalendarServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}

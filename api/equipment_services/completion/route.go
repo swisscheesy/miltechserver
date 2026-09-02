@@ -50,7 +50,7 @@ func (handler *Handler) complete(c *gin.Context) {
 		return
 	}
 
-	completedService, err := handler.service.Complete(user, shopID, serviceID, req)
+	completedService, err := handler.service.Complete(c.Request.Context(), user, shopID, serviceID, req)
 	if err != nil {
 		c.Error(err)
 		return

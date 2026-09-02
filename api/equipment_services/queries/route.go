@@ -45,7 +45,7 @@ func (handler *Handler) getByShop(c *gin.Context) {
 		return
 	}
 
-	services, err := handler.service.GetByShop(user, shopID, req)
+	services, err := handler.service.GetByShop(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -106,7 +106,7 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		endDate = &parsed
 	}
 
-	services, err := handler.service.GetByEquipment(user, equipmentID, req.Limit, req.Offset, startDate, endDate)
+	services, err := handler.service.GetByEquipment(c.Request.Context(), user, equipmentID, req.Limit, req.Offset, startDate, endDate)
 	if err != nil {
 		c.Error(err)
 		return
