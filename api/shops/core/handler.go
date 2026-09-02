@@ -41,6 +41,8 @@ func (handler *Handler) GetShopEquipmentOverview(c *gin.Context) {
 		equipmentCount += overview.Shops[i].EquipmentCount
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shop equipment overview retrieved successfully",

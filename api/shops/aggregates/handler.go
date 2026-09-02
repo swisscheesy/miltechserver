@@ -40,6 +40,8 @@ func (handler Handler) getListsWithItems(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shop lists with items retrieved successfully",
@@ -65,6 +67,8 @@ func (handler Handler) getVehicleMaintenanceSnapshot(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Vehicle maintenance snapshot retrieved successfully",
@@ -90,6 +94,8 @@ func (handler Handler) getShopSnapshot(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shop snapshot retrieved successfully",
@@ -115,6 +121,8 @@ func (handler Handler) getBootstrap(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shops bootstrap retrieved successfully",
@@ -134,6 +142,8 @@ func (handler Handler) getEquipmentPmcsHistory(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Equipment PMCS history retrieved successfully",

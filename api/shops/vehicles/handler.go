@@ -281,6 +281,8 @@ func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Equipment usage adjusted successfully",
