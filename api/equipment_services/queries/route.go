@@ -25,20 +25,22 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByShop(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.GetEquipmentServicesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		slog.Info("invalid query parameters", "error", err)
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
 		c.JSON(400, gin.H{"message": "invalid query parameters", "details": err.Error()})
 		return
 	}
@@ -49,6 +51,8 @@ func (handler *Handler) getByShop(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Services retrieved successfully",
@@ -59,20 +63,22 @@ func (handler *Handler) getByShop(c *gin.Context) {
 func (handler *Handler) getByEquipment(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	equipmentID := c.Param("equipment_id")
 	if equipmentID == "" {
-		c.JSON(400, gin.H{"message": "equipment_id is required"})
+		response.Error(c, 400, "equipment_id is required")
 		return
 	}
 
 	var req request.GetEquipmentServicesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		slog.Info("invalid query parameters", "error", err)
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
 		c.JSON(400, gin.H{"message": "invalid query parameters", "details": err.Error()})
 		return
 	}
@@ -81,6 +87,8 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 	if req.StartDate != nil {
 		parsed, err := time.Parse(time.RFC3339, *req.StartDate)
 		if err != nil {
+			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(400, gin.H{"message": "invalid start_date format", "details": err.Error()})
 			return
 		}
@@ -90,6 +98,8 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 	if req.EndDate != nil {
 		parsed, err := time.Parse(time.RFC3339, *req.EndDate)
 		if err != nil {
+			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(400, gin.H{"message": "invalid end_date format", "details": err.Error()})
 			return
 		}
@@ -102,6 +112,8 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Services retrieved successfully",
