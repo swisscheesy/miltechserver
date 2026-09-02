@@ -33,7 +33,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) CreateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+func (service *ServiceImpl) CreateShop(ctx context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -59,7 +59,7 @@ func (service *ServiceImpl) CreateShop(user *bootstrap.User, shop model.Shops) (
 	return createdShop, nil
 }
 
-func (service *ServiceImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+func (service *ServiceImpl) UpdateShop(ctx context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -82,7 +82,7 @@ func (service *ServiceImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (
 	return updatedShop, nil
 }
 
-func (service *ServiceImpl) DeleteShop(user *bootstrap.User, shopID string) error {
+func (service *ServiceImpl) DeleteShop(ctx context.Context, user *bootstrap.User, shopID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -96,10 +96,10 @@ func (service *ServiceImpl) DeleteShop(user *bootstrap.User, shopID string) erro
 		return errors.New("only shop administrators can delete shops")
 	}
 
-	return service.deleteShopWithBlobCleanup(user, shopID)
+	return service.deleteShopWithBlobCleanup(ctx, user, shopID)
 }
 
-func (service *ServiceImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops, error) {
+func (service *ServiceImpl) GetShopsByUser(ctx context.Context, user *bootstrap.User) ([]model.Shops, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -116,7 +116,7 @@ func (service *ServiceImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops,
 	return shops, nil
 }
 
-func (service *ServiceImpl) GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
+func (service *ServiceImpl) GetShopByID(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -138,7 +138,7 @@ func (service *ServiceImpl) GetShopByID(user *bootstrap.User, shopID string) (*r
 	return shop, nil
 }
 
-func (service *ServiceImpl) GetUserDataWithShops(user *bootstrap.User) (*response.UserShopsResponse, error) {
+func (service *ServiceImpl) GetUserDataWithShops(ctx context.Context, user *bootstrap.User) (*response.UserShopsResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -184,7 +184,7 @@ func (service *ServiceImpl) GetShopEquipmentOverview(ctx context.Context, user *
 
 // deleteShopWithBlobCleanup is a private helper that deletes a shop and cleans up associated blobs
 // This is used by both DeleteShop (admin deletion) and LeaveShop (last member deletion)
-func (service *ServiceImpl) deleteShopWithBlobCleanup(user *bootstrap.User, shopID string) error {
+func (service *ServiceImpl) deleteShopWithBlobCleanup(ctx context.Context, user *bootstrap.User, shopID string) error {
 	err := service.repo.DeleteShop(user, shopID)
 	if err != nil {
 		slog.Error("Failed to delete shop", "error", err, "user_id", user.UserID, "shop_id", shopID)

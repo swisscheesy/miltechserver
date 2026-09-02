@@ -36,7 +36,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) CreateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) (*model.ShopVehicle, error) {
+func (service *ServiceImpl) CreateShopVehicle(ctx context.Context, user *bootstrap.User, vehicle model.ShopVehicle) (*model.ShopVehicle, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -69,7 +69,7 @@ func (service *ServiceImpl) CreateShopVehicle(user *bootstrap.User, vehicle mode
 	return createdVehicle, nil
 }
 
-func (service *ServiceImpl) GetShopVehicles(user *bootstrap.User, shopID string) ([]model.ShopVehicle, error) {
+func (service *ServiceImpl) GetShopVehicles(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopVehicle, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -95,7 +95,7 @@ func (service *ServiceImpl) GetShopVehicles(user *bootstrap.User, shopID string)
 	return vehicles, nil
 }
 
-func (service *ServiceImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
+func (service *ServiceImpl) GetShopVehicleByID(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -117,7 +117,7 @@ func (service *ServiceImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID s
 	return vehicle, nil
 }
 
-func (service *ServiceImpl) UpdateShopVehicle(user *bootstrap.User, vehicle model.ShopVehicle) error {
+func (service *ServiceImpl) UpdateShopVehicle(ctx context.Context, user *bootstrap.User, vehicle model.ShopVehicle) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -267,7 +267,7 @@ func isTrackedUsageUpdate(vehicle model.ShopVehicle) bool {
 		vehicle.Comment == ""
 }
 
-func (service *ServiceImpl) DeleteShopVehicle(user *bootstrap.User, vehicleID string) error {
+func (service *ServiceImpl) DeleteShopVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

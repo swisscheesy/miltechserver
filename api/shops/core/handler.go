@@ -84,7 +84,7 @@ func (handler *Handler) CreateShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdShop, err := service.CreateShop(user, shop)
+	createdShop, err := service.CreateShop(c.Request.Context(), user, shop)
 	if err != nil {
 		c.Error(err)
 		return
@@ -117,7 +117,7 @@ func (handler *Handler) DeleteShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteShop(user, shopID)
+	err := service.DeleteShop(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -138,7 +138,7 @@ func (handler *Handler) GetUserShops(c *gin.Context) {
 	}
 
 	service := handler.service
-	shops, err := service.GetShopsByUser(user)
+	shops, err := service.GetShopsByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -159,7 +159,7 @@ func (handler *Handler) GetUserDataWithShops(c *gin.Context) {
 	}
 
 	service := handler.service
-	userShopsData, err := service.GetUserDataWithShops(user)
+	userShopsData, err := service.GetUserDataWithShops(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -192,7 +192,7 @@ func (handler *Handler) GetShopByID(c *gin.Context) {
 	}
 
 	service := handler.service
-	shop, err := service.GetShopByID(user, shopID)
+	shop, err := service.GetShopByID(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -232,7 +232,7 @@ func (handler *Handler) UpdateShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	updatedShop, err := service.UpdateShop(user, shop)
+	updatedShop, err := service.UpdateShop(c.Request.Context(), user, shop)
 	if err != nil {
 		c.Error(err)
 		return

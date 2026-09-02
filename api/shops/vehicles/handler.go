@@ -123,7 +123,7 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdVehicle, err := service.CreateShopVehicle(user, vehicle)
+	createdVehicle, err := service.CreateShopVehicle(c.Request.Context(), user, vehicle)
 	if err != nil {
 		c.Error(err)
 		return
@@ -156,7 +156,7 @@ func (handler *Handler) GetShopVehicles(c *gin.Context) {
 	}
 
 	service := handler.service
-	vehicles, err := service.GetShopVehicles(user, shopID)
+	vehicles, err := service.GetShopVehicles(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -183,7 +183,7 @@ func (handler *Handler) GetShopVehicleByID(c *gin.Context) {
 	}
 
 	service := handler.service
-	vehicle, err := service.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.GetShopVehicleByID(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -225,7 +225,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopVehicle(user, vehicle)
+	err := service.UpdateShopVehicle(c.Request.Context(), user, vehicle)
 	if err != nil {
 		if errors.Is(err, ErrInvalidUsageAdjustment) {
 			writeVehicleError(c, err)
@@ -298,7 +298,7 @@ func (handler *Handler) DeleteShopVehicle(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteShopVehicle(user, vehicleID)
+	err := service.DeleteShopVehicle(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
