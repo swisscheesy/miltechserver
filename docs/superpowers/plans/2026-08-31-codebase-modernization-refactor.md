@@ -1199,22 +1199,25 @@ EOF
 
 ### Task 13: Adopt WithTx in the six manual-transaction repository files
 
-**Goal:** Replace manual `Begin()`/wrap-error/`defer Rollback()`/`Commit()` boilerplate in six files with calls to `db.WithTx` from Task 12: `api/pmcs_sbs_progress/repository_impl.go`, `api/shops/messages/repository_impl.go`, `api/shops/vehicles/repository_impl.go`, `api/user_general/repository_impl.go`, `api/user_pmcs/sync/repository_impl.go`, `api/user_saves/categories/repository_impl.go`.
+**Correction (2026-09-02, found during execution):** `api/user_pmcs/sync/repository_impl.go`'s `loadDeltaSnapshot` uses `BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})` so its three sequential SELECTs observe one consistent snapshot. `db.WithTx` (Task 12) only wraps plain `conn.Begin()` with default `sql.TxOptions` — it cannot express custom isolation or read-only flags. Migrating this call site would silently downgrade it from `RepeatableRead`+`ReadOnly` to Postgres's default `ReadCommitted`+read-write, a real correctness change forbidden by this plan's global constraints. This file is corrected to be a **permanent, documented exception** — 5 of 6 files migrate; `user_pmcs/sync/repository_impl.go` stays on manual `BeginTx` with an explanatory code comment. `db.WithTx` is not extended to support custom `TxOptions` for this one caller.
+
+**Goal:** Replace manual `Begin()`/wrap-error/`defer Rollback()`/`Commit()` boilerplate in five files with calls to `db.WithTx` from Task 12: `api/pmcs_sbs_progress/repository_impl.go`, `api/shops/messages/repository_impl.go`, `api/shops/vehicles/repository_impl.go`, `api/user_general/repository_impl.go`, `api/user_saves/categories/repository_impl.go`. `api/user_pmcs/sync/repository_impl.go` is documented, not migrated (see correction above).
 
 **Files:**
 - Modify: `api/pmcs_sbs_progress/repository_impl.go`
 - Modify: `api/shops/messages/repository_impl.go`
 - Modify: `api/shops/vehicles/repository_impl.go`
 - Modify: `api/user_general/repository_impl.go`
-- Modify: `api/user_pmcs/sync/repository_impl.go`
+- Modify: `api/user_pmcs/sync/repository_impl.go` (comment only — documents why it's excluded, no functional change)
 - Modify: `api/user_saves/categories/repository_impl.go`
 
 **Acceptance Criteria:**
-- [ ] Every manual `.Begin()`/`.BeginTx()` call in these six files is replaced with `db.WithTx(...)`.
-- [ ] For each migrated method, an existing or new test forces an error mid-transaction and confirms no partial write persists.
-- [ ] Original error-wrapping message text is preserved where existing tests assert on it — check each file's tests for message-string assertions before migrating (Step 1).
+- [ ] Every manual `.Begin()`/`.BeginTx()` call in the five migrating files is replaced with `db.WithTx(...)`.
+- [ ] `api/user_pmcs/sync/repository_impl.go`'s `loadDeltaSnapshot` keeps its manual `BeginTx` with custom `TxOptions`, unchanged functionally, with an inline comment explaining why it's excluded from this task.
+- [ ] For each migrated method, an existing or new test forces an error mid-transaction and confirms no partial write persists. Where no natural constraint-violation scenario exists (e.g. a table whose only FK is `ON DELETE CASCADE`, so no duplicate-key/FK-violation is possible), a genuine forced deadlock (two connections locking rows in opposite order, synchronized via polling `pg_stat_activity.wait_event_type = 'Lock'` rather than fixed sleeps, to avoid a racy/flaky test) is an acceptable alternative technique.
+- [ ] Original error-wrapping message text *inside each transaction callback* is preserved where existing tests assert on it. The outer begin/commit wrapper text changing to `db.WithTx`'s generic `"begin transaction: %w"`/`"commit transaction: %w"` is expected and fine as long as no test asserts on the old per-file wrapper text specifically (confirm via repo-wide grep before migrating each file).
 
-**Verify:** `go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_general/... ./tests/user_pmcs/... ./tests/user_saves/... -v` → all pass, including rollback-path assertions.
+**Verify:** `go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_pmcs/... ./tests/user_saves/... -v` → all pass, including rollback-path assertions. (Note: `tests/user_general/` does not exist as a directory — `user_general.DeleteUser`'s rollback path is exercised from `tests/user_pmcs/account_deletion_test.go` instead; do not expect a `tests/user_general/...` path to resolve.)
 
 **Steps:**
 
@@ -1316,7 +1319,7 @@ git commit -m "refactor(user_saves): adopt shared WithTx helper in categories"
 ```
 
 ```json:metadata
-{"files": ["api/pmcs_sbs_progress/repository_impl.go", "api/shops/messages/repository_impl.go", "api/shops/vehicles/repository_impl.go", "api/user_general/repository_impl.go", "api/user_pmcs/sync/repository_impl.go", "api/user_saves/categories/repository_impl.go"], "verifyCommand": "go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_general/... ./tests/user_pmcs/... ./tests/user_saves/... -v", "acceptanceCriteria": ["all manual Begin/Commit/Rollback replaced with db.WithTx", "each migrated method has a passing rollback-on-error test", "original error-wrapping message text preserved where tests depend on it"], "modelTier": "standard"}
+{"files": ["api/pmcs_sbs_progress/repository_impl.go", "api/shops/messages/repository_impl.go", "api/shops/vehicles/repository_impl.go", "api/user_general/repository_impl.go", "api/user_pmcs/sync/repository_impl.go", "api/user_saves/categories/repository_impl.go"], "verifyCommand": "go test -p 1 ./tests/pmcs_sbs_progress/... ./tests/shops/... ./tests/user_pmcs/... ./tests/user_saves/... -v", "acceptanceCriteria": ["5 of 6 files migrated to db.WithTx (all except user_pmcs/sync)", "user_pmcs/sync/repository_impl.go documented, not migrated (RepeatableRead+ReadOnly isolation not expressible by db.WithTx)", "each migrated method has a passing rollback-on-error test (deadlock technique acceptable where no constraint-violation scenario exists)", "inner callback error-wrapping message text preserved where tests depend on it"], "modelTier": "standard"}
 ```
 
 ---
