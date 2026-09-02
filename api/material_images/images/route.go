@@ -32,24 +32,24 @@ func RegisterRoutes(publicRouter *gin.RouterGroup, authRouter *gin.RouterGroup, 
 func (h *Handler) upload(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	niin := c.PostForm("niin")
 	if niin == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "NIIN is required"})
+		response.Error(c, http.StatusBadRequest, "NIIN is required")
 		return
 	}
 
 	if len(niin) != 9 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "NIIN must be exactly 9 characters"})
+		response.Error(c, http.StatusBadRequest, "NIIN must be exactly 9 characters")
 		return
 	}
 
 	file, header, err := c.Request.FormFile("image")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get uploaded file"})
+		response.Error(c, http.StatusBadRequest, "Failed to get uploaded file")
 		return
 	}
 	defer file.Close()
@@ -57,13 +57,13 @@ func (h *Handler) upload(c *gin.Context) {
 	imageData := make([]byte, header.Size)
 	_, err = file.Read(imageData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read file data"})
+		response.Error(c, http.StatusInternalServerError, "Failed to read file data")
 		return
 	}
 
 	image, err := h.service.Upload(user, niin, imageData, header.Filename)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -92,13 +92,13 @@ func (h *Handler) upload(c *gin.Context) {
 func (h *Handler) getByNIIN(c *gin.Context) {
 	niin := c.Param("niin")
 	if len(niin) != 9 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid NIIN format"})
+		response.Error(c, http.StatusBadRequest, "Invalid NIIN format")
 		return
 	}
 
 	var req request.GetImagesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid query parameters: %v", err)})
+		response.Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid query parameters: %v", err))
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *Handler) getByNIIN(c *gin.Context) {
 
 	images, totalCount, err := h.service.GetByNIIN(niin, req.Page, req.PageSize, currentUser)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve images"})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve images")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (h *Handler) getByUser(c *gin.Context) {
 
 	var req request.GetImagesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid query parameters: %v", err)})
+		response.Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid query parameters: %v", err))
 		return
 	}
 
@@ -138,7 +138,7 @@ func (h *Handler) getByUser(c *gin.Context) {
 
 	images, totalCount, err := h.service.GetByUser(userID, req.Page, req.PageSize, currentUser)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve images"})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve images")
 		return
 	}
 
@@ -163,7 +163,7 @@ func (h *Handler) getByID(c *gin.Context) {
 
 	image, err := h.service.GetByID(imageID, currentUser)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Image not found"})
+		response.Error(c, http.StatusNotFound, "Image not found")
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *Handler) getByID(c *gin.Context) {
 func (h *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -182,12 +182,12 @@ func (h *Handler) delete(c *gin.Context) {
 	err = h.service.Delete(user, imageID)
 	if err != nil {
 		if err.Error() == "unauthorized: you can only delete your own images" {
-			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			response.Error(c, http.StatusForbidden, err.Error())
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete image"})
+		response.Error(c, http.StatusInternalServerError, "Failed to delete image")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Image deleted successfully"})
+	response.OK(c, gin.H{"success": true, "message": "Image deleted successfully"})
 }
