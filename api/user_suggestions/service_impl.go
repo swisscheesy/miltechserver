@@ -1,6 +1,7 @@
 package user_suggestions
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (s *ServiceImpl) CreateSuggestion(user *bootstrap.User, title, description string) (*SuggestionResponse, error) {
+func (s *ServiceImpl) CreateSuggestion(ctx context.Context, user *bootstrap.User, title, description string) (*SuggestionResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
@@ -51,7 +52,7 @@ func (s *ServiceImpl) CreateSuggestion(user *bootstrap.User, title, description 
 	return &resp, nil
 }
 
-func (s *ServiceImpl) GetAllSuggestions(currentUser *bootstrap.User) ([]SuggestionResponse, error) {
+func (s *ServiceImpl) GetAllSuggestions(ctx context.Context, currentUser *bootstrap.User) ([]SuggestionResponse, error) {
 	voterID := ""
 	if currentUser != nil {
 		voterID = currentUser.UserID
@@ -96,7 +97,7 @@ func (s *ServiceImpl) GetAllSuggestions(currentUser *bootstrap.User) ([]Suggesti
 	return results, nil
 }
 
-func (s *ServiceImpl) UpdateSuggestion(user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
+func (s *ServiceImpl) UpdateSuggestion(ctx context.Context, user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
@@ -136,7 +137,7 @@ func (s *ServiceImpl) UpdateSuggestion(user *bootstrap.User, suggestionID, title
 	return &resp, nil
 }
 
-func (s *ServiceImpl) DeleteSuggestion(user *bootstrap.User, suggestionID string) error {
+func (s *ServiceImpl) DeleteSuggestion(ctx context.Context, user *bootstrap.User, suggestionID string) error {
 	if user == nil {
 		return ErrUnauthorized
 	}
@@ -160,7 +161,7 @@ func (s *ServiceImpl) DeleteSuggestion(user *bootstrap.User, suggestionID string
 	return s.repo.Delete(id)
 }
 
-func (s *ServiceImpl) Vote(user *bootstrap.User, suggestionID string, direction int16) error {
+func (s *ServiceImpl) Vote(ctx context.Context, user *bootstrap.User, suggestionID string, direction int16) error {
 	if user == nil {
 		return ErrUnauthorized
 	}
@@ -196,7 +197,7 @@ func (s *ServiceImpl) Vote(user *bootstrap.User, suggestionID string, direction 
 	return s.repo.UpsertVote(id, user.UserID, direction)
 }
 
-func (s *ServiceImpl) RemoveVote(user *bootstrap.User, suggestionID string) error {
+func (s *ServiceImpl) RemoveVote(ctx context.Context, user *bootstrap.User, suggestionID string) error {
 	if user == nil {
 		return ErrUnauthorized
 	}

@@ -1,6 +1,7 @@
 package flags
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ func NewService(repo Repository, imagesRepo images.Repository) Service {
 	}
 }
 
-func (s *ServiceImpl) Flag(user *bootstrap.User, imageID string, reason string, description string) error {
+func (s *ServiceImpl) Flag(ctx context.Context, user *bootstrap.User, imageID string, reason string, description string) error {
 	validReasons := map[string]bool{
 		"Incorrect Item": true,
 		"Inappropriate":  true,
@@ -83,7 +84,7 @@ func (s *ServiceImpl) Flag(user *bootstrap.User, imageID string, reason string, 
 	return nil
 }
 
-func (s *ServiceImpl) GetByImage(imageID string) ([]model.MaterialImagesFlags, error) {
+func (s *ServiceImpl) GetByImage(ctx context.Context, imageID string) ([]model.MaterialImagesFlags, error) {
 	flags, err := s.repo.GetByImage(imageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get flags: %w", err)

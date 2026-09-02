@@ -39,7 +39,7 @@ func (h *Handler) flag(c *gin.Context) {
 		return
 	}
 
-	err = h.service.Flag(user, imageID, req.Reason, req.Description)
+	err = h.service.Flag(c.Request.Context(), user, imageID, req.Reason, req.Description)
 	if err != nil {
 		if err.Error() == "you have already flagged this image" {
 			response.Error(c, http.StatusConflict, err.Error())
@@ -49,7 +49,7 @@ func (h *Handler) flag(c *gin.Context) {
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	var flagCount int
 	var isFlagged bool
 	if err == nil {
@@ -68,7 +68,7 @@ func (h *Handler) flag(c *gin.Context) {
 func (h *Handler) getFlags(c *gin.Context) {
 	imageID := c.Param("image_id")
 
-	flags, err := h.service.GetByImage(imageID)
+	flags, err := h.service.GetByImage(c.Request.Context(), imageID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to retrieve flags")
 		return

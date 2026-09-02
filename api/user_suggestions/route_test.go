@@ -2,6 +2,7 @@ package user_suggestions
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,27 +31,27 @@ type serviceStub struct {
 	removeVoteErr error
 }
 
-func (s *serviceStub) GetAllSuggestions(currentUser *bootstrap.User) ([]SuggestionResponse, error) {
+func (s *serviceStub) GetAllSuggestions(ctx context.Context, currentUser *bootstrap.User) ([]SuggestionResponse, error) {
 	return s.suggestions, s.suggestionsErr
 }
 
-func (s *serviceStub) CreateSuggestion(user *bootstrap.User, title, description string) (*SuggestionResponse, error) {
+func (s *serviceStub) CreateSuggestion(ctx context.Context, user *bootstrap.User, title, description string) (*SuggestionResponse, error) {
 	return s.created, s.createErr
 }
 
-func (s *serviceStub) UpdateSuggestion(user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
+func (s *serviceStub) UpdateSuggestion(ctx context.Context, user *bootstrap.User, suggestionID, title, description string) (*SuggestionResponse, error) {
 	return s.updated, s.updateErr
 }
 
-func (s *serviceStub) DeleteSuggestion(user *bootstrap.User, suggestionID string) error {
+func (s *serviceStub) DeleteSuggestion(ctx context.Context, user *bootstrap.User, suggestionID string) error {
 	return s.deleteErr
 }
 
-func (s *serviceStub) Vote(user *bootstrap.User, suggestionID string, direction int16) error {
+func (s *serviceStub) Vote(ctx context.Context, user *bootstrap.User, suggestionID string, direction int16) error {
 	return s.voteErr
 }
 
-func (s *serviceStub) RemoveVote(user *bootstrap.User, suggestionID string) error {
+func (s *serviceStub) RemoveVote(ctx context.Context, user *bootstrap.User, suggestionID string) error {
 	return s.removeVoteErr
 }
 

@@ -61,7 +61,7 @@ func (h *Handler) upload(c *gin.Context) {
 		return
 	}
 
-	image, err := h.service.Upload(user, niin, imageData, header.Filename)
+	image, err := h.service.Upload(c.Request.Context(), user, niin, imageData, header.Filename)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -105,7 +105,7 @@ func (h *Handler) getByNIIN(c *gin.Context) {
 	var currentUser *bootstrap.User
 	currentUser = shared.GetOptionalUserFromContext(c)
 
-	images, totalCount, err := h.service.GetByNIIN(niin, req.Page, req.PageSize, currentUser)
+	images, totalCount, err := h.service.GetByNIIN(c.Request.Context(), niin, req.Page, req.PageSize, currentUser)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to retrieve images")
 		return
@@ -136,7 +136,7 @@ func (h *Handler) getByUser(c *gin.Context) {
 		currentUser = user.(*bootstrap.User)
 	}
 
-	images, totalCount, err := h.service.GetByUser(userID, req.Page, req.PageSize, currentUser)
+	images, totalCount, err := h.service.GetByUser(c.Request.Context(), userID, req.Page, req.PageSize, currentUser)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to retrieve images")
 		return
@@ -161,7 +161,7 @@ func (h *Handler) getByID(c *gin.Context) {
 		currentUser = user.(*bootstrap.User)
 	}
 
-	image, err := h.service.GetByID(imageID, currentUser)
+	image, err := h.service.GetByID(c.Request.Context(), imageID, currentUser)
 	if err != nil {
 		response.Error(c, http.StatusNotFound, "Image not found")
 		return
@@ -179,7 +179,7 @@ func (h *Handler) delete(c *gin.Context) {
 
 	imageID := c.Param("image_id")
 
-	err = h.service.Delete(user, imageID)
+	err = h.service.Delete(c.Request.Context(), user, imageID)
 	if err != nil {
 		if err.Error() == "unauthorized: you can only delete your own images" {
 			response.Error(c, http.StatusForbidden, err.Error())

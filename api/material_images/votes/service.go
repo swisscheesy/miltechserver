@@ -1,8 +1,11 @@
 package votes
 
-import "miltechserver/bootstrap"
+import (
+	"context"
+	"miltechserver/bootstrap"
+)
 
 type Service interface {
-	Vote(user *bootstrap.User, imageID string, voteType string) error
-	RemoveVote(user *bootstrap.User, imageID string) error
+	Vote(ctx context.Context, user *bootstrap.User, imageID string, voteType string) error
+	RemoveVote(ctx context.Context, user *bootstrap.User, imageID string) error
 }

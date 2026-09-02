@@ -1,6 +1,7 @@
 package user_suggestions
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 	"testing"
@@ -87,7 +88,7 @@ func TestUpdateSuggestion_Unauthorized(t *testing.T) {
 	repo := &mockRepository{}
 	svc := NewService(repo)
 
-	_, err := svc.UpdateSuggestion(nil, uuid.New().String(), "Title", "Desc")
+	_, err := svc.UpdateSuggestion(context.Background(), nil, uuid.New().String(), "Title", "Desc")
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
@@ -96,7 +97,7 @@ func TestUpdateSuggestion_InvalidID(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateSuggestion(user, "not-a-uuid", "Title", "Desc")
+	_, err := svc.UpdateSuggestion(context.Background(), user, "not-a-uuid", "Title", "Desc")
 	require.ErrorIs(t, err, ErrInvalidID)
 }
 
@@ -105,7 +106,7 @@ func TestUpdateSuggestion_NotFound(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateSuggestion(user, uuid.New().String(), "Title", "Desc")
+	_, err := svc.UpdateSuggestion(context.Background(), user, uuid.New().String(), "Title", "Desc")
 	require.ErrorIs(t, err, ErrSuggestionNotFound)
 }
 
@@ -121,7 +122,7 @@ func TestUpdateSuggestion_Forbidden(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateSuggestion(user, suggID.String(), "New Title", "New Desc")
+	_, err := svc.UpdateSuggestion(context.Background(), user, suggID.String(), "New Title", "New Desc")
 	require.ErrorIs(t, err, ErrForbidden)
 }
 
@@ -136,7 +137,7 @@ func TestUpdateSuggestion_InvalidTitle(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateSuggestion(user, suggID.String(), "", "Desc")
+	_, err := svc.UpdateSuggestion(context.Background(), user, suggID.String(), "", "Desc")
 	require.ErrorIs(t, err, ErrInvalidTitle)
 }
 
@@ -163,7 +164,7 @@ func TestUpdateSuggestion_Success(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
 
-	result, err := svc.UpdateSuggestion(user, suggID.String(), "New Title", "New Desc")
+	result, err := svc.UpdateSuggestion(context.Background(), user, suggID.String(), "New Title", "New Desc")
 	require.NoError(t, err)
 	require.Equal(t, "New Title", result.Title)
 	require.Equal(t, "New Desc", result.Description)
@@ -175,7 +176,7 @@ func TestDeleteSuggestion_Unauthorized(t *testing.T) {
 	repo := &mockRepository{}
 	svc := NewService(repo)
 
-	err := svc.DeleteSuggestion(nil, uuid.New().String())
+	err := svc.DeleteSuggestion(context.Background(), nil, uuid.New().String())
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
@@ -184,7 +185,7 @@ func TestDeleteSuggestion_InvalidID(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.DeleteSuggestion(user, "not-a-uuid")
+	err := svc.DeleteSuggestion(context.Background(), user, "not-a-uuid")
 	require.ErrorIs(t, err, ErrInvalidID)
 }
 
@@ -193,7 +194,7 @@ func TestDeleteSuggestion_NotFound(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.DeleteSuggestion(user, uuid.New().String())
+	err := svc.DeleteSuggestion(context.Background(), user, uuid.New().String())
 	require.ErrorIs(t, err, ErrSuggestionNotFound)
 }
 
@@ -208,7 +209,7 @@ func TestDeleteSuggestion_Forbidden(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.DeleteSuggestion(user, suggID.String())
+	err := svc.DeleteSuggestion(context.Background(), user, suggID.String())
 	require.ErrorIs(t, err, ErrForbidden)
 }
 
@@ -223,7 +224,7 @@ func TestDeleteSuggestion_Success(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.DeleteSuggestion(user, suggID.String())
+	err := svc.DeleteSuggestion(context.Background(), user, suggID.String())
 	require.NoError(t, err)
 	require.Equal(t, suggID, repo.capturedDeleteID)
 }
@@ -234,7 +235,7 @@ func TestCreateSuggestion_Unauthorized(t *testing.T) {
 	repo := &mockRepository{}
 	svc := NewService(repo)
 
-	_, err := svc.CreateSuggestion(nil, "Title", "Description")
+	_, err := svc.CreateSuggestion(context.Background(), nil, "Title", "Description")
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
@@ -243,7 +244,7 @@ func TestCreateSuggestion_InvalidTitle_Empty(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.CreateSuggestion(user, "", "Description")
+	_, err := svc.CreateSuggestion(context.Background(), user, "", "Description")
 	require.ErrorIs(t, err, ErrInvalidTitle)
 }
 
@@ -256,7 +257,7 @@ func TestCreateSuggestion_InvalidTitle_TooLong(t *testing.T) {
 	for i := range longTitle {
 		longTitle[i] = 'a'
 	}
-	_, err := svc.CreateSuggestion(user, string(longTitle), "Description")
+	_, err := svc.CreateSuggestion(context.Background(), user, string(longTitle), "Description")
 	require.ErrorIs(t, err, ErrInvalidTitle)
 }
 
@@ -265,7 +266,7 @@ func TestCreateSuggestion_InvalidDescription_Empty(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.CreateSuggestion(user, "Title", "")
+	_, err := svc.CreateSuggestion(context.Background(), user, "Title", "")
 	require.ErrorIs(t, err, ErrInvalidDescription)
 }
 
@@ -274,7 +275,7 @@ func TestCreateSuggestion_Success(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
 
-	result, err := svc.CreateSuggestion(user, "My Feature", "A great feature")
+	result, err := svc.CreateSuggestion(context.Background(), user, "My Feature", "A great feature")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "My Feature", result.Title)
@@ -289,7 +290,7 @@ func TestVote_Unauthorized(t *testing.T) {
 	repo := &mockRepository{}
 	svc := NewService(repo)
 
-	err := svc.Vote(nil, uuid.New().String(), 1)
+	err := svc.Vote(context.Background(), nil, uuid.New().String(), 1)
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
@@ -298,7 +299,7 @@ func TestVote_InvalidID(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, "not-a-uuid", 1)
+	err := svc.Vote(context.Background(), user, "not-a-uuid", 1)
 	require.ErrorIs(t, err, ErrInvalidID)
 }
 
@@ -310,10 +311,10 @@ func TestVote_InvalidDirection(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), 0)
+	err := svc.Vote(context.Background(), user, suggID.String(), 0)
 	require.ErrorIs(t, err, ErrInvalidDirection)
 
-	err = svc.Vote(user, suggID.String(), 2)
+	err = svc.Vote(context.Background(), user, suggID.String(), 2)
 	require.ErrorIs(t, err, ErrInvalidDirection)
 }
 
@@ -322,7 +323,7 @@ func TestVote_SuggestionNotFound(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, uuid.New().String(), 1)
+	err := svc.Vote(context.Background(), user, uuid.New().String(), 1)
 	require.ErrorIs(t, err, ErrSuggestionNotFound)
 }
 
@@ -334,7 +335,7 @@ func TestVote_Upvote(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), 1)
+	err := svc.Vote(context.Background(), user, suggID.String(), 1)
 	require.NoError(t, err)
 	require.Equal(t, suggID, repo.capturedSuggestionID)
 	require.Equal(t, int16(1), repo.capturedDirection)
@@ -348,7 +349,7 @@ func TestVote_Downvote(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), -1)
+	err := svc.Vote(context.Background(), user, suggID.String(), -1)
 	require.NoError(t, err)
 	require.Equal(t, int16(-1), repo.capturedDirection)
 }
@@ -359,7 +360,7 @@ func TestRemoveVote_Unauthorized(t *testing.T) {
 	repo := &mockRepository{}
 	svc := NewService(repo)
 
-	err := svc.RemoveVote(nil, uuid.New().String())
+	err := svc.RemoveVote(context.Background(), nil, uuid.New().String())
 	require.ErrorIs(t, err, ErrUnauthorized)
 }
 
@@ -369,7 +370,7 @@ func TestRemoveVote_Success(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.RemoveVote(user, suggID.String())
+	err := svc.RemoveVote(context.Background(), user, suggID.String())
 	require.NoError(t, err)
 	require.Equal(t, suggID, repo.capturedSuggestionID)
 }
@@ -398,7 +399,7 @@ func TestGetAllSuggestions_Unauthenticated(t *testing.T) {
 	}
 	svc := NewService(repo)
 
-	results, err := svc.GetAllSuggestions(nil)
+	results, err := svc.GetAllSuggestions(context.Background(), nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, "Feature A", results[0].Title)
@@ -427,7 +428,7 @@ func TestGetAllSuggestions_Authenticated(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
 
-	results, err := svc.GetAllSuggestions(user)
+	results, err := svc.GetAllSuggestions(context.Background(), user)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, int16(1), *results[0].MyVote)
@@ -440,7 +441,7 @@ func TestGetAllSuggestions_Empty(t *testing.T) {
 	}
 	svc := NewService(repo)
 
-	results, err := svc.GetAllSuggestions(nil)
+	results, err := svc.GetAllSuggestions(context.Background(), nil)
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
@@ -460,7 +461,7 @@ func TestVote_AddsVote_WhenNoExistingVote(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), 1)
+	err := svc.Vote(context.Background(), user, suggID.String(), 1)
 	require.NoError(t, err)
 	require.True(t, repo.upsertVoteCalled, "UpsertVote should be called for new vote")
 	require.False(t, repo.deleteVoteCalled, "DeleteVote should not be called for new vote")
@@ -476,7 +477,7 @@ func TestVote_TogglesOff_WhenExistingVoteSameDirection(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), 1)
+	err := svc.Vote(context.Background(), user, suggID.String(), 1)
 	require.NoError(t, err)
 	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called to toggle off")
 	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when toggling off")
@@ -491,7 +492,7 @@ func TestVote_TogglesOff_WhenExistingVoteOppositeDirection(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), -1)
+	err := svc.Vote(context.Background(), user, suggID.String(), -1)
 	require.NoError(t, err)
 	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called when switching direction")
 	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when switching direction")
@@ -502,7 +503,7 @@ func TestCreateSuggestion_SetsShowFalse(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "testuser"}
 
-	_, err := svc.CreateSuggestion(user, "My Feature", "A great feature")
+	_, err := svc.CreateSuggestion(context.Background(), user, "My Feature", "A great feature")
 	require.NoError(t, err)
 	require.NotNil(t, repo.capturedCreateSuggestion.Show, "Show must be explicitly set, not nil")
 	require.False(t, *repo.capturedCreateSuggestion.Show, "newly created suggestions must have show=false")
@@ -517,7 +518,7 @@ func TestVote_TogglesOff_WhenExistingDownvoteAndUpvoteRequested(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	err := svc.Vote(user, suggID.String(), 1)
+	err := svc.Vote(context.Background(), user, suggID.String(), 1)
 	require.NoError(t, err)
 	require.True(t, repo.deleteVoteCalled, "DeleteVote should be called when switching from downvote to upvote")
 	require.False(t, repo.upsertVoteCalled, "UpsertVote should not be called when switching direction")

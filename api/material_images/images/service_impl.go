@@ -1,6 +1,7 @@
 package images
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -46,7 +47,7 @@ func (s *ServiceImpl) canUserDeleteImage(imageUserID string, currentUser *bootst
 	return imageUserID == currentUser.UserID
 }
 
-func (s *ServiceImpl) Upload(user *bootstrap.User, niin string, imageData []byte, filename string) (*model.MaterialImages, error) {
+func (s *ServiceImpl) Upload(ctx context.Context, user *bootstrap.User, niin string, imageData []byte, filename string) (*model.MaterialImages, error) {
 	if len(niin) != 9 {
 		return nil, fmt.Errorf("NIIN must be exactly 9 characters")
 	}
@@ -118,7 +119,7 @@ func (s *ServiceImpl) Upload(user *bootstrap.User, niin string, imageData []byte
 	return createdImage, nil
 }
 
-func (s *ServiceImpl) GetByNIIN(niin string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
+func (s *ServiceImpl) GetByNIIN(ctx context.Context, niin string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
 	offset := (page - 1) * pageSize
 
 	imagesWithUsers, totalCount, err := s.repo.GetByNIIN(niin, pageSize, offset)
@@ -163,7 +164,7 @@ func (s *ServiceImpl) GetByNIIN(niin string, page int, pageSize int, currentUser
 	return responseImages, totalCount, nil
 }
 
-func (s *ServiceImpl) GetByUser(userID string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
+func (s *ServiceImpl) GetByUser(ctx context.Context, userID string, page int, pageSize int, currentUser *bootstrap.User) ([]response.MaterialImageResponse, int64, error) {
 	offset := (page - 1) * pageSize
 
 	imagesWithUsers, totalCount, err := s.repo.GetByUser(userID, pageSize, offset)
@@ -208,7 +209,7 @@ func (s *ServiceImpl) GetByUser(userID string, page int, pageSize int, currentUs
 	return responseImages, totalCount, nil
 }
 
-func (s *ServiceImpl) GetByID(imageID string, currentUser *bootstrap.User) (*response.MaterialImageResponse, error) {
+func (s *ServiceImpl) GetByID(ctx context.Context, imageID string, currentUser *bootstrap.User) (*response.MaterialImageResponse, error) {
 	image, err := s.repo.GetByID(imageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get image: %w", err)
@@ -252,7 +253,7 @@ func (s *ServiceImpl) GetByID(imageID string, currentUser *bootstrap.User) (*res
 	return responseImage, nil
 }
 
-func (s *ServiceImpl) Delete(user *bootstrap.User, imageID string) error {
+func (s *ServiceImpl) Delete(ctx context.Context, user *bootstrap.User, imageID string) error {
 	image, err := s.repo.GetByID(imageID)
 	if err != nil {
 		return fmt.Errorf("failed to get image: %w", err)

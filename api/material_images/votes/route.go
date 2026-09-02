@@ -39,13 +39,13 @@ func (h *Handler) vote(c *gin.Context) {
 		return
 	}
 
-	err = h.service.Vote(user, imageID, req.VoteType)
+	err = h.service.Vote(c.Request.Context(), user, imageID, req.VoteType)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	if err != nil {
 		response.OK(c, gin.H{"success": true, "message": "Vote recorded successfully"})
 		return
@@ -69,13 +69,13 @@ func (h *Handler) removeVote(c *gin.Context) {
 
 	imageID := c.Param("image_id")
 
-	err = h.service.RemoveVote(user, imageID)
+	err = h.service.RemoveVote(c.Request.Context(), user, imageID)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, "Failed to remove vote")
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	if err != nil {
 		response.OK(c, gin.H{"success": true, "message": "Vote removed successfully"})
 		return

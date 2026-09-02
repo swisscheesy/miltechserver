@@ -54,7 +54,7 @@ func (h *Handler) listSuggestions(c *gin.Context) {
 		}
 	}
 
-	suggestions, err := h.service.GetAllSuggestions(currentUser)
+	suggestions, err := h.service.GetAllSuggestions(c.Request.Context(), currentUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
@@ -81,7 +81,7 @@ func (h *Handler) createSuggestion(c *gin.Context) {
 		return
 	}
 
-	suggestion, err := h.service.CreateSuggestion(currentUser, req.Title, req.Description)
+	suggestion, err := h.service.CreateSuggestion(c.Request.Context(), currentUser, req.Title, req.Description)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -113,7 +113,7 @@ func (h *Handler) updateSuggestion(c *gin.Context) {
 		return
 	}
 
-	suggestion, err := h.service.UpdateSuggestion(currentUser, suggestionID, req.Title, req.Description)
+	suggestion, err := h.service.UpdateSuggestion(c.Request.Context(), currentUser, suggestionID, req.Title, req.Description)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -139,7 +139,7 @@ func (h *Handler) deleteSuggestion(c *gin.Context) {
 
 	suggestionID := c.Param("id")
 
-	err := h.service.DeleteSuggestion(currentUser, suggestionID)
+	err := h.service.DeleteSuggestion(c.Request.Context(), currentUser, suggestionID)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -170,7 +170,7 @@ func (h *Handler) vote(c *gin.Context) {
 		return
 	}
 
-	err := h.service.Vote(currentUser, suggestionID, req.Direction)
+	err := h.service.Vote(c.Request.Context(), currentUser, suggestionID, req.Direction)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -195,7 +195,7 @@ func (h *Handler) removeVote(c *gin.Context) {
 
 	suggestionID := c.Param("id")
 
-	err := h.service.RemoveVote(currentUser, suggestionID)
+	err := h.service.RemoveVote(c.Request.Context(), currentUser, suggestionID)
 	if err != nil {
 		if respondError(c, err) {
 			return
