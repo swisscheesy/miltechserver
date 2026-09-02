@@ -793,16 +793,20 @@ EOF
 
 ### Task 8: Response consolidation — pmcs_sbs_progress
 
-**Goal:** `api/pmcs_sbs_progress/route.go` mixes `response.StandardResponse{...}` literals (some lines) with raw `gin.H{"message": ...}` literals (other lines) in the same file — no single convention even per-file. Migrate all of it to `response.OK()`/`response.Error()`.
+**Correction (2026-09-02, found during execution):** Only 2 of 26 raw literal call sites in this file could actually migrate to `response.OK()`/`response.Error()`. The other 24 carry a non-empty success message alongside `data` (e.g. `StandardResponse{Message: "Inspection saved", Data: result}`), a non-200 status (`StatusCreated` for comment creation), or a flat multi-field body (`deleteFaults`'s `{message, requested_count, deleted_count}`) — none of which `response.OK`/`response.Error`'s fixed shape can represent, and `api/pmcs_sbs_progress/route_test.go` asserts several of these exact bare/non-enveloped shapes directly (`JSONEq` on `{"message": ...}` with no `status`/`data` keys, plus an explicit `NotContains(t, body, "data")` check). Forcing these through would be a real, test-breaking response-shape change, not a mechanical substitution. The AC is corrected below to reflect the outcome the user approved: accept the 2 that fit, document the 24 that don't. `response.OK`/`response.Error` are deliberately not extended to support message+data+custom-status variants — that's out of scope for this task.
+
+**Goal:** `api/pmcs_sbs_progress/route.go` mixes `response.StandardResponse{...}` literals (some lines) with raw `gin.H{"message": ...}` literals (other lines) in the same file — no single convention even per-file. Migrate whichever call sites fit `response.OK()`/`response.Error()`'s shape exactly; leave the rest on their original raw construction with an inline comment explaining why, per this plan's standing exception #2 policy.
 
 **Files:**
 - Modify: `api/pmcs_sbs_progress/route.go`
 
 **Acceptance Criteria:**
-- [ ] Golden-fixture snapshot (captured in Step 1) matches byte-for-byte after migration.
-- [ ] `grep -n "gin.H{\|response.StandardResponse{" api/pmcs_sbs_progress/route.go` returns zero results (all replaced with helper calls).
+- [ ] Golden-fixture snapshot (captured in Step 1, `tests/pmcs_sbs_progress/...`) matches byte-for-byte after migration.
+- [ ] The full repo test suite (`go test -p 1 ./...`, not just the golden fixture) passes — this file has in-package handler tests (`api/pmcs_sbs_progress/route_test.go`) that assert exact response body shapes and are not covered by the golden fixture alone; run the full suite before considering this task done.
+- [ ] Every call site whose current body shape exactly matches `response.OK`'s output (`{"status":200,"data":<x>,"message":""}`, i.e. an empty-message `StandardResponse`) is migrated to `response.OK(c, data)`.
+- [ ] Every call site whose body shape does not fit (non-empty message with data, non-200 status, or a flat multi-field body) stays on its original raw construction, with an inline comment at the call site explaining why it wasn't migrated.
 
-**Verify:** `go test -p 1 ./tests/pmcs_sbs_progress/... -v` → all pass; golden-fixture diff empty.
+**Verify:** `go test -p 1 ./...` (full suite — not just `tests/pmcs_sbs_progress/...`) → all pass; golden-fixture diff empty.
 
 **Steps:**
 
@@ -847,7 +851,7 @@ EOF
 ```
 
 ```json:metadata
-{"files": ["api/pmcs_sbs_progress/route.go"], "verifyCommand": "go test -p 1 ./tests/pmcs_sbs_progress/... -v", "acceptanceCriteria": ["golden-fixture diff empty or explicitly confirmed key changes only", "zero raw gin.H{} or inline StandardResponse literals remain"], "modelTier": "standard"}
+{"files": ["api/pmcs_sbs_progress/route.go"], "verifyCommand": "go test -p 1 ./...", "acceptanceCriteria": ["golden-fixture diff empty", "full repo test suite passes (not just tests/pmcs_sbs_progress golden fixture)", "call sites matching response.OK's exact shape migrated (2 of 26: getInspection, listInspections)", "remaining 24 call sites documented with inline comments explaining why they weren't migrated"], "modelTier": "standard"}
 ```
 
 ---
