@@ -16,7 +16,7 @@ func (h *Handler) listChp4(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data, err := h.service.GetChp4Paginated(page)
+	data, err := h.service.GetChp4Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -36,7 +36,7 @@ func (h *Handler) searchChp4(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	item, err := h.service.GetChp4ByLIN(lin)
+	item, err := h.service.GetChp4ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -55,7 +55,7 @@ func (h *Handler) listChp6(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data, err := h.service.GetChp6Paginated(page)
+	data, err := h.service.GetChp6Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -75,7 +75,7 @@ func (h *Handler) searchChp6(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	items, err := h.service.GetChp6ByLIN(lin)
+	items, err := h.service.GetChp6ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -94,7 +94,7 @@ func (h *Handler) listChp8(c *gin.Context) {
 	if !ok {
 		return
 	}
-	data, err := h.service.GetChp8Paginated(page)
+	data, err := h.service.GetChp8Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -114,7 +114,7 @@ func (h *Handler) searchChp8(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	items, err := h.service.GetChp8ByLIN(lin)
+	items, err := h.service.GetChp8ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -134,7 +134,7 @@ func (h *Handler) searchChp4ByRIC(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp4ByRIC(ric)
+	items, err := h.service.GetChp4ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -154,7 +154,7 @@ func (h *Handler) searchChp6ByRIC(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp6ByRIC(ric)
+	items, err := h.service.GetChp6ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -174,7 +174,7 @@ func (h *Handler) searchChp8ByRIC(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp8ByRIC(ric)
+	items, err := h.service.GetChp8ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
