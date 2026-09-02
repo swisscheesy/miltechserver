@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -58,11 +58,8 @@ func (h *Handler) lookupByNIIN(c *gin.Context) {
 }
 
 func (h *Handler) listAllPaginated(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
