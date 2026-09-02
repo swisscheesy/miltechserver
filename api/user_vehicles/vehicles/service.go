@@ -1,14 +1,15 @@
 package vehicles
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 )
 
 type Service interface {
-	GetByUser(user *bootstrap.User) ([]model.UserVehicle, error)
-	GetByID(user *bootstrap.User, vehicleID string) (*model.UserVehicle, error)
-	Upsert(user *bootstrap.User, vehicle model.UserVehicle) error
-	Delete(user *bootstrap.User, vehicleID string) error
-	DeleteAll(user *bootstrap.User) error
+	GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserVehicle, error)
+	GetByID(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.UserVehicle, error)
+	Upsert(ctx context.Context, user *bootstrap.User, vehicle model.UserVehicle) error
+	Delete(ctx context.Context, user *bootstrap.User, vehicleID string) error
+	DeleteAll(ctx context.Context, user *bootstrap.User) error
 }

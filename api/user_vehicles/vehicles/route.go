@@ -31,7 +31,7 @@ func (handler *Handler) getByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -54,7 +54,7 @@ func (handler *Handler) getByID(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByID(user, vehicleID)
+	result, err := handler.service.GetByID(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -78,7 +78,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Upsert(user, vehicle)
+	err = handler.service.Upsert(c.Request.Context(), user, vehicle)
 	if err != nil {
 		c.Error(err)
 		return
@@ -101,7 +101,7 @@ func (handler *Handler) delete(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, vehicleID)
+	err = handler.service.Delete(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -118,7 +118,7 @@ func (handler *Handler) deleteAll(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return

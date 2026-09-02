@@ -33,7 +33,7 @@ func (handler *Handler) getByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -56,7 +56,7 @@ func (handler *Handler) getByNotification(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByNotification(user, notificationID)
+	result, err := handler.service.GetByNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -79,7 +79,7 @@ func (handler *Handler) getByID(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByID(user, itemID)
+	result, err := handler.service.GetByID(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -103,7 +103,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Upsert(user, item)
+	err = handler.service.Upsert(c.Request.Context(), user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -127,7 +127,7 @@ func (handler *Handler) upsertBatch(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, items)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -150,7 +150,7 @@ func (handler *Handler) delete(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, itemID)
+	err = handler.service.Delete(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -173,7 +173,7 @@ func (handler *Handler) deleteAllByNotification(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.DeleteAllByNotification(user, notificationID)
+	err = handler.service.DeleteAllByNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
