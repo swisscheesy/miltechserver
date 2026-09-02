@@ -3,10 +3,10 @@ package eic
 import (
 	"database/sql"
 	"errors"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -92,16 +92,14 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 
 func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 	fsc := c.Param("fsc")
-	pageStr := c.DefaultQuery("page", "1")
 
 	if strings.TrimSpace(fsc) == "" {
 		c.JSON(400, gin.H{"error": "FSC parameter is required"})
 		return
 	}
 
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(400, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
@@ -123,12 +121,10 @@ func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 }
 
 func (handler *Handler) lookupAllPaginated(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
 	search := c.Query("search")
 
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(400, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
