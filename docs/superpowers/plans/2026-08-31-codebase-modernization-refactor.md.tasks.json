@@ -136,8 +136,8 @@
     {
       "id": 17,
       "subject": "Task 18: Extract shared testutil package",
-      "status": "pending",
-      "description": "**Goal:** 12 tests/<domain>/main_test.go files hardcode the identical DSN string; multiple domains reimplement their own fake-auth test middleware. Extract tests/testutil with a shared DSN constant, fake-auth middleware, and router-builder helper.\n\n**Files:**\n- Create: tests/testutil/testutil.go\n- Create: tests/testutil/testutil_test.go\n- Modify: 12 tests/<domain>/main_test.go files\n- Modify: tests/shops/helpers_test.go and any other domain-specific test-middleware files found\n\n**Acceptance Criteria:**\n- [ ] DSN string appears exactly once in the repo, referenced by all 12 domains.\n- [ ] Exactly one fake-auth test middleware implementation exists, referenced by every domain that previously had its own.\n- [ ] go test -p 1 ./... passes identically to pre-task baseline.\n\n**Verify:** go test -p 1 ./... (full suite) -> all pass, identical to baseline.\n\n```json:metadata\n{\"files\": [\"tests/testutil/testutil.go\", \"tests/testutil/testutil_test.go\"], \"verifyCommand\": \"go test -p 1 ./...\", \"acceptanceCriteria\": [\"DSN string appears exactly once in the repo\", \"exactly one fake-auth middleware implementation exists\", \"full test suite passes identically to baseline\"], \"modelTier\": \"mechanical\"}\n```"
+      "status": "completed",
+      "description": "**Goal:** Extract shared tests/testutil package (DSN + fake-auth middleware, 12 domains migrated).\n\nComplete \u2014 see ledger."
     },
     {
       "id": 18,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T20:23:37.824479+00:00"
+  "lastUpdated": "2026-09-02T20:55:17.875509+00:00"
 }
