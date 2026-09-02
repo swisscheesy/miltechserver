@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	sharedb "miltechserver/api/shared/db"
 	"miltechserver/bootstrap"
 	"net/http"
 	"regexp"
@@ -66,37 +67,30 @@ func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *R
 }
 
 func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
-	tx, err := repo.db.Begin()
+	createdMessage, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (response.ShopMessageResponse, error) {
+		stmt := ShopMessages.INSERT(
+			ShopMessages.ID,
+			ShopMessages.ShopID,
+			ShopMessages.UserID,
+			ShopMessages.Message,
+			ShopMessages.CreatedAt,
+			ShopMessages.UpdatedAt,
+			ShopMessages.IsEdited,
+			ShopMessages.ParentID,
+		).MODEL(message)
+
+		if _, err := stmt.Exec(tx); err != nil {
+			return response.ShopMessageResponse{}, fmt.Errorf("failed to create shop message: %w", err)
+		}
+
+		createdMessage, err := getShopMessageResponseByID(tx, message.ID)
+		if err != nil {
+			return response.ShopMessageResponse{}, fmt.Errorf("failed to get created shop message: %w", err)
+		}
+		return createdMessage, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to begin shop message transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	stmt := ShopMessages.INSERT(
-		ShopMessages.ID,
-		ShopMessages.ShopID,
-		ShopMessages.UserID,
-		ShopMessages.Message,
-		ShopMessages.CreatedAt,
-		ShopMessages.UpdatedAt,
-		ShopMessages.IsEdited,
-		ShopMessages.ParentID,
-	).MODEL(message)
-
-	_, err = stmt.Exec(tx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create shop message: %w", err)
-	}
-
-	createdMessage, err := getShopMessageResponseByID(tx, message.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get created shop message: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("failed to commit shop message transaction: %w", err)
+		return nil, err
 	}
 
 	return &createdMessage, nil
