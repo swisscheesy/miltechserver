@@ -784,6 +784,13 @@ EOF
 
 ---
 
+**Standing rulings for Tasks 8–11 (settled during Task 7, 2026-09-02 — do not re-ask):**
+
+1. **The `error`→`message` JSON key rename is the confirmed, intended standard.** `response.Error()` writes its payload under `message`, not `error`. If a domain's raw `gin.H{"error": ...}` becomes `response.Error()`, that key rename is sanctioned — do not flag it as a defect, do not treat it as requiring per-task re-approval.
+2. **If a specific call site's success response cannot be wrapped in `response.OK()` without changing its top-level body shape** (i.e., wrapping would move existing top-level fields under a new `data` key and this breaks an existing test assertion or is otherwise a real shape change), the correct resolution — established in Task 6 (`ps_mag`) and Task 7 (`material_images`'s `getFlags`) — is: **leave that one call site on its original raw construction, add an inline comment explaining why, document the exception in the commit message, and report it in DONE_WITH_CONCERNS** rather than either forcing the shape change silently or rewriting the test to match. This is not itself a reason to block the task; each such exception found in Tasks 8–11 should be surfaced in the implementer's report the same way, but does not require a fresh AskUserQuestion round — apply the same resolution pattern directly, and note it in your report for the record.
+
+---
+
 ### Task 8: Response consolidation — pmcs_sbs_progress
 
 **Goal:** `api/pmcs_sbs_progress/route.go` mixes `response.StandardResponse{...}` literals (some lines) with raw `gin.H{"message": ...}` literals (other lines) in the same file — no single convention even per-file. Migrate all of it to `response.OK()`/`response.Error()`.
