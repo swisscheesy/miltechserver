@@ -36,6 +36,12 @@ func (h *Handler) lookupByNIIN(c *gin.Context) {
 	niin := c.Param("niin")
 
 	if strings.TrimSpace(niin) == "" {
+		// Left as a raw gin.H{"error": ...} response (not response.Error()) because
+		// tests/tmde/handlers_test.go:TestTmdeBlankParams unmarshals this body into a
+		// struct with a `json:"error"` tag and asserts it is non-empty.
+		// response.Error() writes the message under a "message" key instead of "error",
+		// which would break that assertion — a genuine response-body-shape conflict,
+		// not an oversight. See Task 8/9's standing ruling for this exception class.
 		c.JSON(http.StatusBadRequest, gin.H{"error": "NIIN parameter is required"})
 		return
 	}
@@ -50,11 +56,7 @@ func (h *Handler) lookupByNIIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    item,
-	})
+	response.OK(c, item)
 }
 
 func (h *Handler) listAllPaginated(c *gin.Context) {
@@ -73,9 +75,5 @@ func (h *Handler) listAllPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    data,
-	})
+	response.OK(c, data)
 }

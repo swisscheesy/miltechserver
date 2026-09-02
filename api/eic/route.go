@@ -38,7 +38,7 @@ func (handler *Handler) lookupByNIIN(c *gin.Context) {
 	niin := c.Param("niin")
 
 	if strings.TrimSpace(niin) == "" {
-		c.JSON(400, gin.H{"error": "NIIN parameter is required"})
+		response.Error(c, 400, "NIIN parameter is required")
 		return
 	}
 
@@ -52,13 +52,9 @@ func (handler *Handler) lookupByNIIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data: response.EICSearchResponse{
-			Count: len(consolidatedData),
-			Items: consolidatedData,
-		},
+	response.OK(c, response.EICSearchResponse{
+		Count: len(consolidatedData),
+		Items: consolidatedData,
 	})
 }
 
@@ -66,7 +62,7 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 	lin := c.Param("lin")
 
 	if strings.TrimSpace(lin) == "" {
-		c.JSON(400, gin.H{"error": "LIN parameter is required"})
+		response.Error(c, 400, "LIN parameter is required")
 		return
 	}
 
@@ -80,13 +76,9 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data: response.EICSearchResponse{
-			Count: len(consolidatedData),
-			Items: consolidatedData,
-		},
+	response.OK(c, response.EICSearchResponse{
+		Count: len(consolidatedData),
+		Items: consolidatedData,
 	})
 }
 
@@ -94,7 +86,7 @@ func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 	fsc := c.Param("fsc")
 
 	if strings.TrimSpace(fsc) == "" {
-		c.JSON(400, gin.H{"error": "FSC parameter is required"})
+		response.Error(c, 400, "FSC parameter is required")
 		return
 	}
 
@@ -113,11 +105,7 @@ func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    eicData,
-	})
+	response.OK(c, eicData)
 }
 
 func (handler *Handler) lookupAllPaginated(c *gin.Context) {
@@ -138,9 +126,5 @@ func (handler *Handler) lookupAllPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    eicData,
-	})
+	response.OK(c, eicData)
 }
