@@ -1,9 +1,12 @@
 package uoc
 
-import "miltechserver/api/response"
+import (
+	"context"
+	"miltechserver/api/response"
+)
 
 type Service interface {
-	LookupByPage(page int) (response.UOCPageResponse, error)
-	LookupSpecific(uoc string) (response.UOCPageResponse, error)
-	LookupByModel(model string) (response.UOCPageResponse, error)
+	LookupByPage(ctx context.Context, page int) (response.UOCPageResponse, error)
+	LookupSpecific(ctx context.Context, uoc string) (response.UOCPageResponse, error)
+	LookupByModel(ctx context.Context, model string) (response.UOCPageResponse, error)
 }

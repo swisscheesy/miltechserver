@@ -1,6 +1,7 @@
 package lin
 
 import (
+	"context"
 	"miltechserver/api/response"
 	"strings"
 )
@@ -13,11 +14,11 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) LookupByPage(page int) (response.LINPageResponse, error) {
+func (service *ServiceImpl) LookupByPage(ctx context.Context, page int) (response.LINPageResponse, error) {
 	return service.repo.SearchByPage(page)
 }
 
-func (service *ServiceImpl) LookupByNIIN(niin string) (response.LINPageResponse, error) {
+func (service *ServiceImpl) LookupByNIIN(ctx context.Context, niin string) (response.LINPageResponse, error) {
 	linData, err := service.repo.SearchByNIIN(niin)
 	if err != nil {
 		return response.LINPageResponse{}, err
@@ -32,7 +33,7 @@ func (service *ServiceImpl) LookupByNIIN(niin string) (response.LINPageResponse,
 	}, nil
 }
 
-func (service *ServiceImpl) LookupNIINByLIN(lin string) (response.LINPageResponse, error) {
+func (service *ServiceImpl) LookupNIINByLIN(ctx context.Context, lin string) (response.LINPageResponse, error) {
 	linData, err := service.repo.SearchNIINByLIN(strings.ToUpper(lin))
 	if err != nil {
 		return response.LINPageResponse{}, err

@@ -1,7 +1,10 @@
 package substitute
 
-import "miltechserver/.gen/miltech_ng/public/model"
+import (
+	"context"
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Service interface {
-	LookupAll() ([]model.ArmySubstituteLin, error)
+	LookupAll(ctx context.Context) ([]model.ArmySubstituteLin, error)
 }
