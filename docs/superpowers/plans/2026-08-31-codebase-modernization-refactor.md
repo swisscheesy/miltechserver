@@ -603,7 +603,9 @@ EOF
 
 ### Task 6: Adopt shared pagination helper in sb_700_20, docs_equipment, eic, tmde, library/ps_mag
 
-**Goal:** Replace the copy-pasted pagination parse-and-validate block in five domains with calls to the shared helper from Task 5. `sb_700_20/handlers_apps.go` has the block 9 times in one file; `sb_700_20/handlers_chps.go`, `docs_equipment/route.go`, `eic/route.go`, `tmde/route.go`, and `library/ps_mag/route.go` each have it at least once.
+**Correction (2026-09-02, found during Task 5's execution):** `library/ps_mag/route.go`'s error response body differs from the other five domains — it writes `{"error": "Invalid request", "details": "<ErrInvalidPage message>"}`, not `{"error": "Invalid page number"}` (confirmed by reading `library/ps_mag/route.go:48-51`). `pagination.ParsePage` (from Task 5) writes its own fixed `{"error": "Invalid page number"}` body internally on failure. A bare `page, ok := pagination.ParsePage(c)` substitution in `ps_mag` would therefore silently change its error response shape — a violation of this task's own AC (unchanged response bodies) and the plan's Global Constraints. `ps_mag`'s *parsing and validation logic* (`DefaultQuery`+`Atoi`+`<1` check) is identical to the other five domains and still benefits from deduplication, but its error *response* must stay as-is. Step 3 below is corrected to handle `ps_mag` differently from the other five files.
+
+**Goal:** Replace the copy-pasted pagination parse-and-validate *logic* in five domains with calls to the shared helper from Task 5, while preserving each domain's exact existing response body on failure — four domains already match `ParsePage`'s built-in response body and can call it directly; `library/ps_mag` does not and needs a thin local wrapper that reuses `ParsePage`'s validation decision without its response-writing side effect. `sb_700_20/handlers_apps.go` has the block 9 times in one file; `sb_700_20/handlers_chps.go`, `docs_equipment/route.go`, `eic/route.go`, `tmde/route.go`, and `library/ps_mag/route.go` each have it at least once.
 
 **Files:**
 - Modify: `api/sb_700_20/handlers_apps.go`
@@ -614,9 +616,10 @@ EOF
 - Modify: `api/library/ps_mag/route.go`
 
 **Acceptance Criteria:**
-- [ ] Every hand-copied pagination block in the six files above is replaced with a call to `pagination.ParsePage(c)` (or the exact function name from Task 5).
-- [ ] `grep -rn "DefaultQuery(\"page\"" api/sb_700_20 api/docs_equipment api/eic api/tmde api/library/ps_mag` returns zero results after the change.
-- [ ] Each touched domain's existing tests (integration in `tests/<domain>/` and/or colocated `_test.go`) pass with identical status codes and response bodies for valid, missing, zero, negative, and non-numeric page params.
+- [ ] Every hand-copied pagination block in `sb_700_20`, `docs_equipment`, `eic`, and `tmde` (the four domains whose current response body already matches `pagination.ParsePage`'s: `{"error": "Invalid page number"}` at 400) is replaced with a direct call to `pagination.ParsePage(c)`.
+- [ ] `library/ps_mag/route.go`'s block is replaced with a call to a package-local helper (e.g. `parsePage(c) (int, bool)` in `ps_mag`) that performs the identical `DefaultQuery("page","1")` + `Atoi` + `<1` validation — either by calling `strconv.Atoi(c.DefaultQuery("page", "1"))` directly (simplest, no new dependency) or by importing `pagination` package internals if a validation-only variant is exposed — and on failure writes `ps_mag`'s own existing `{"error": "Invalid request", "details": ErrInvalidPage.Error()}` body, unchanged from today.
+- [ ] `grep -rn "DefaultQuery(\"page\"" api/sb_700_20 api/docs_equipment api/eic api/tmde api/library/ps_mag` returns zero direct occurrences of the *duplicated block pattern* in the four migrated files; `ps_mag` may still contain a `DefaultQuery("page"` call inside its own local helper, which is expected and not a defect.
+- [ ] Each touched domain's existing tests (integration in `tests/<domain>/` and/or colocated `_test.go`) pass with identical status codes and response bodies — including `ps_mag`'s — for valid, missing, zero, negative, and non-numeric page params.
 
 **Verify:** `go test -p 1 ./tests/sb_700_20/... ./tests/docs_equipment/... ./tests/eic/... ./tests/tmde/... ./api/library/... -v` → all pass, identical to pre-task baseline.
 
@@ -636,16 +639,34 @@ grep -n "DefaultQuery(\"page\"\|Query(\"page\")" api/sb_700_20/handlers_apps.go 
 ```
 Confirm the count matches the audit's finding (9 in `handlers_apps.go`, plus the others) before editing.
 
-- [ ] **Step 3: Replace each block with a call to the shared helper, one file at a time**
+- [ ] **Step 3a: Replace the block in `sb_700_20`, `docs_equipment`, `eic`, `tmde` — these four match `ParsePage`'s response body exactly**
 
-For each occurrence, replace the multi-line `c.DefaultQuery("page", "1")` → `strconv.Atoi` → 400-response block with:
+For each occurrence in these four domains, replace the multi-line `c.DefaultQuery("page", "1")` → `strconv.Atoi` → 400-response block with:
 ```go
 page, ok := pagination.ParsePage(c)
 if !ok {
 	return
 }
 ```
-(Adjust to match Task 5's actual function signature — if it returns an error instead of a bool, or writes the response itself vs. expecting the caller to, match that exact contract.) Add the import `"miltechserver/api/shared/pagination"` to each file. Remove the now-unused `strconv` import if nothing else in the file uses it — check with `goimports -l <file>` before removing.
+Add the import `"miltechserver/api/shared/pagination"` to each file. Remove the now-unused `strconv` import if nothing else in the file uses it — check with `goimports -l <file>` before removing.
+
+- [ ] **Step 3b: Handle `library/ps_mag/route.go` separately — its response body must stay unchanged**
+
+`ps_mag` writes `{"error": "Invalid request", "details": ErrInvalidPage.Error()}` on failure, not `ParsePage`'s `{"error": "Invalid page number"}`. Do NOT call `pagination.ParsePage(c)` directly here, since that would silently change the response body. Instead, add a small package-local helper to `library/ps_mag/route.go` (or a nearby file in the same package) that performs the identical validation without writing `ParsePage`'s response:
+```go
+func parsePage(c *gin.Context) (int, bool) {
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "Invalid request",
+			"details": ErrInvalidPage.Error(),
+		})
+		return 0, false
+	}
+	return page, true
+}
+```
+This keeps `ps_mag`'s exact existing response shape while still centralizing the validation rule's *logic* to one place within the package (each of `ps_mag`'s two call sites calls this instead of repeating the block). It does not import `api/shared/pagination` — that package's `ParsePage` is not reusable here without changing the response body, which is out of scope. If a future task wants to standardize `ps_mag`'s error body to match the other five domains, that is an explicit, separate, approved behavior change — not something to fold into this mechanical refactor.
 
 - [ ] **Step 4: Build and test after each file, comparing against the Step 1 baseline**
 
@@ -676,7 +697,7 @@ git commit -m "refactor(library): adopt shared pagination helper in ps_mag"
 ```
 
 ```json:metadata
-{"files": ["api/sb_700_20/handlers_apps.go", "api/sb_700_20/handlers_chps.go", "api/docs_equipment/route.go", "api/eic/route.go", "api/tmde/route.go", "api/library/ps_mag/route.go"], "verifyCommand": "go test -p 1 ./tests/sb_700_20/... ./tests/docs_equipment/... ./tests/eic/... ./tests/tmde/... ./api/library/... -v", "acceptanceCriteria": ["all copy-pasted pagination blocks replaced", "zero DefaultQuery(\"page\" matches remain in the five domains", "response bodies and status codes identical to pre-task baseline for all param edge cases"], "modelTier": "standard"}
+{"files": ["api/sb_700_20/handlers_apps.go", "api/sb_700_20/handlers_chps.go", "api/docs_equipment/route.go", "api/eic/route.go", "api/tmde/route.go", "api/library/ps_mag/route.go"], "verifyCommand": "go test -p 1 ./tests/sb_700_20/... ./tests/docs_equipment/... ./tests/eic/... ./tests/tmde/... ./api/library/... -v", "acceptanceCriteria": ["sb_700_20/docs_equipment/eic/tmde call pagination.ParsePage directly (matching response body)", "library/ps_mag uses its own local parsePage helper preserving its distinct {\"error\":\"Invalid request\",\"details\":...} response body, NOT pagination.ParsePage directly", "response bodies and status codes identical to pre-task baseline for all param edge cases, including ps_mag's"], "modelTier": "standard"}
 ```
 
 ---
