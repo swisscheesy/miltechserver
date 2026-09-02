@@ -25,7 +25,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getItemCategoriesByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -36,24 +36,20 @@ func (handler *Handler) getItemCategoriesByUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsertItemCategoryByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var itemCategory model.UserItemCategory
 	if err := c.BindJSON(&itemCategory); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -69,14 +65,14 @@ func (handler *Handler) upsertItemCategoryByUser(c *gin.Context) {
 func (handler *Handler) deleteItemCategory(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var itemCategory model.UserItemCategory
 	if err := c.BindJSON(&itemCategory); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -92,7 +88,7 @@ func (handler *Handler) deleteItemCategory(c *gin.Context) {
 func (handler *Handler) deleteAllItemCategories(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}

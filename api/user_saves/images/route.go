@@ -25,27 +25,27 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) uploadItemImage(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	tableType := c.Param("table_type")
 	if tableType == "" {
-		c.JSON(400, gin.H{"message": "table_type is required"})
+		response.Error(c, 400, "table_type is required")
 		return
 	}
 
 	itemID := c.Query("item_id")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item_id is required"})
+		response.Error(c, 400, "item_id is required")
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		slog.Error("Error getting uploaded file", "error", err)
-		c.JSON(400, gin.H{"message": "failed to get uploaded file"})
+		response.Error(c, 400, "failed to get uploaded file")
 		return
 	}
 	defer file.Close()
@@ -54,17 +54,19 @@ func (handler *Handler) uploadItemImage(c *gin.Context) {
 	_, err = file.Read(imageData)
 	if err != nil {
 		slog.Error("Error reading file data", "error", err)
-		c.JSON(500, gin.H{"message": "failed to read file data"})
+		response.Error(c, 500, "failed to read file data")
 		return
 	}
 
 	blobURL, err := handler.service.Upload(user, itemID, tableType, imageData)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
-		c.JSON(500, gin.H{"message": "failed to upload image"})
+		response.Error(c, 500, "failed to upload image")
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Image uploaded successfully",
@@ -76,30 +78,32 @@ func (handler *Handler) uploadItemImage(c *gin.Context) {
 func (handler *Handler) deleteItemImage(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	tableType := c.Param("table_type")
 	if tableType == "" {
-		c.JSON(400, gin.H{"message": "table_type is required"})
+		response.Error(c, 400, "table_type is required")
 		return
 	}
 
 	itemID := c.Query("item_id")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item_id is required"})
+		response.Error(c, 400, "item_id is required")
 		return
 	}
 
 	err = handler.service.Delete(user, itemID, tableType)
 	if err != nil {
 		slog.Error("Error deleting image from blob storage", "error", err)
-		c.JSON(500, gin.H{"message": "failed to delete image"})
+		response.Error(c, 500, "failed to delete image")
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Image deleted successfully",
@@ -111,27 +115,27 @@ func (handler *Handler) deleteItemImage(c *gin.Context) {
 func (handler *Handler) getItemImage(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	tableType := c.Param("table_type")
 	if tableType == "" {
-		c.JSON(400, gin.H{"message": "table_type is required"})
+		response.Error(c, 400, "table_type is required")
 		return
 	}
 
 	itemID := c.Query("item_id")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item_id is required"})
+		response.Error(c, 400, "item_id is required")
 		return
 	}
 
 	imageData, contentType, err := handler.service.Get(user, itemID, tableType)
 	if err != nil {
 		slog.Error("Error retrieving image from blob storage", "error", err, "table_type", tableType, "item_id", itemID)
-		c.JSON(404, gin.H{"message": "image not found"})
+		response.Error(c, 404, "image not found")
 		return
 	}
 

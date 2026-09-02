@@ -27,14 +27,14 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getCategorizedItemsByCategory(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var itemCategory model.UserItemCategory
 	if err := c.BindJSON(&itemCategory); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -44,17 +44,13 @@ func (handler *Handler) getCategorizedItemsByCategory(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getCategorizedItemsByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -65,24 +61,20 @@ func (handler *Handler) getCategorizedItemsByUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) deleteCategorizedItemByCategoryId(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var categorizedItem model.UserItemsCategorized
 	if err := c.BindJSON(&categorizedItem); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -98,7 +90,7 @@ func (handler *Handler) deleteCategorizedItemByCategoryId(c *gin.Context) {
 func (handler *Handler) deleteAllCategorizedItems(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -115,14 +107,14 @@ func (handler *Handler) deleteAllCategorizedItems(c *gin.Context) {
 func (handler *Handler) upsertCategorizedItemByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var categorizedItem model.UserItemsCategorized
 	if err := c.BindJSON(&categorizedItem); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -138,14 +130,14 @@ func (handler *Handler) upsertCategorizedItemByUser(c *gin.Context) {
 func (handler *Handler) upsertCategorizedItemListByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var categorizedItems []model.UserItemsCategorized
 	if err := c.BindJSON(&categorizedItems); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
