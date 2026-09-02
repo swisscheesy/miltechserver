@@ -121,8 +121,8 @@
     {
       "id": 15,
       "subject": "Task 16: Split user_pmcs/community/repository_impl.go",
-      "status": "pending",
-      "description": "**Goal:** api/user_pmcs/community/repository_impl.go (909 lines) mixes voting logic and browse/discovery logic. Split into repository_voting.go and repository_browse.go, leaving release/retire lifecycle methods in the original file if they serve neither concern.\n\n**Files:**\n- Modify: api/user_pmcs/community/repository_impl.go\n- Create: api/user_pmcs/community/repository_voting.go\n- Create: api/user_pmcs/community/repository_browse.go\n\n**Acceptance Criteria:**\n- [ ] go build ./... succeeds.\n- [ ] Every moved function retains its exact original body.\n- [ ] go test -p 1 ./tests/user_pmcs/... -v and colocated api/user_pmcs/community/*_test.go pass identically to pre-split baseline.\n\n**Verify:** go test -p 1 ./tests/user_pmcs/... ./api/user_pmcs/community/... -v -> all pass, identical output.\n\n```json:metadata\n{\"files\": [\"api/user_pmcs/community/repository_impl.go\", \"api/user_pmcs/community/repository_voting.go\", \"api/user_pmcs/community/repository_browse.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/user_pmcs/... ./api/user_pmcs/community/... -v\", \"acceptanceCriteria\": [\"go build succeeds\", \"every function body identical pre/post split\", \"full user_pmcs/community test coverage passes unchanged\"], \"modelTier\": \"standard\"}\n```"
+      "status": "completed",
+      "description": "**Goal:** Split user_pmcs/community/repository_impl.go into repository_impl.go/repository_voting.go/repository_browse.go.\n\nComplete \u2014 see ledger."
     },
     {
       "id": 16,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T18:39:48.745689+00:00"
+  "lastUpdated": "2026-09-02T19:11:56.006273+00:00"
 }
