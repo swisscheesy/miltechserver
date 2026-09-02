@@ -453,31 +453,31 @@ EOF
 
 ### Task 5: Promote shared pagination helper
 
-**Goal:** A working pagination parser already exists at `api/item_lookup/shared/pagination.go` but is only used within `item_lookup`. Promote it to a shared, domain-agnostic location so Task 6 can adopt it across `sb_700_20`, `docs_equipment`, `eic`, `tmde`, and `library/ps_mag`.
+**Correction (2026-09-01, found during execution):** This task originally said the source of the duplicated pattern was `api/item_lookup/shared/pagination.go`. That file contains only pure math helpers (`CalculateTotalPages`, `CalculateOffset`, `DefaultPageSize`, `PagedResponse`) — no request-parsing function exists there or anywhere in `item_lookup` as a shared unit. `item_lookup`'s actual inline pagination code (in `lin/route.go` and `uoc/route.go`) uses a different, weaker pattern than the rest of the codebase: `c.Query("page")` with no default (empty query is rejected as invalid, not defaulted to 1), and no explicit zero/negative check (both currently pass through unvalidated). The real, byte-identical duplicated block this task should extract — `page, err := strconv.Atoi(c.DefaultQuery("page", "1")); if err != nil || page < 1 { 400 }` — independently confirmed present in `api/sb_700_20/handlers_apps.go` (9×), `api/sb_700_20/handlers_chps.go`, `api/docs_equipment/route.go`, `api/eic/route.go`, `api/tmde/route.go`, and `api/library/ps_mag/route.go`. This task is corrected to source from those domains (using `api/docs_equipment/route.go:54-58` as the canonical example, since it's the cleanest single-block instance) and to exclude `item_lookup` entirely — its different inline pattern is left untouched, not silently changed to add validation it never had (deliberately adding that validation would be a `fix`, not a `refactor`, and is out of scope here). Task 6, which adopts this task's output, was already correctly scoped to the 5 domains that share the real pattern and needs no file-list change — only its description below is updated to stop referencing `item_lookup` as a source.
+
+**Goal:** The same pagination parse-and-validate block — `strconv.Atoi(c.DefaultQuery("page", "1"))` then `if err != nil || page < 1` → 400 — is hand-copied 15+ times across `sb_700_20`, `docs_equipment`, `eic`, `tmde`, and `library/ps_mag`. Extract it once into a shared, domain-agnostic package so Task 6 can replace every copy with a single call.
 
 **Files:**
 - Create: `api/shared/pagination/pagination.go`
 - Test: `api/shared/pagination/pagination_test.go`
-- Modify: `api/item_lookup/shared/pagination.go` (re-export from the new location, or update its callers to import the new package directly — decide based on Step 1's findings)
 
 **Acceptance Criteria:**
-- [ ] The promoted helper parses `page` and `page_size` (or the existing parameter names used by `item_lookup/shared/pagination.go` — confirmed in Step 1) from `*gin.Context`, returning validated ints or writing a 400 response and returning `false`/an error the caller checks.
-- [ ] Table-driven test covers: valid page, missing page (defaults), zero page, negative page, non-numeric page.
-- [ ] `item_lookup`'s existing callers continue to produce identical behavior — this task does not change `item_lookup`'s response bodies.
+- [ ] The promoted helper accepts `*gin.Context`, returns `(page int, ok bool)`: on success, `page` is the parsed value (`c.DefaultQuery("page", "1")` parsed as int) and `ok` is `true`; on failure (non-numeric, or numeric but `< 1`), it writes `c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})` and returns `(0, false)` — matching the exact behavior found in `docs_equipment/route.go:54-58` byte-for-byte (message text included).
+- [ ] Table-driven test covers: valid page, missing page (defaults to 1 via `DefaultQuery`), zero page (rejected), negative page (rejected), non-numeric page (rejected).
+- [ ] `api/item_lookup/` is not touched by this task in any way — confirm via `git diff --stat` showing zero files under `api/item_lookup/`.
 
-**Verify:** `go test ./api/shared/pagination/... ./api/item_lookup/... -v` → all pass, `item_lookup` route tests unchanged.
+**Verify:** `go test ./api/shared/pagination/... -v` → all pass. `go build ./...` succeeds with no other file needing changes (this task only adds a new package; nothing yet imports it — that's Task 6).
 
 **Steps:**
 
-- [ ] **Step 1: Read the existing helper to capture its exact current signature and behavior**
+- [ ] **Step 1: Re-confirm the exact duplicated pattern and its message text across the 5 real source domains**
 
 ```bash
-cat api/item_lookup/shared/pagination.go
-grep -rn "shared.Parse\|shared\.Pag" api/item_lookup/ --include="*.go"
+grep -n "DefaultQuery(\"page\"" api/sb_700_20/handlers_apps.go api/sb_700_20/handlers_chps.go api/docs_equipment/route.go api/eic/route.go api/tmde/route.go api/library/ps_mag/route.go
 ```
-Note the exact function name, parameter names, default values, and error-response format it currently produces — the promoted version must be byte-identical in behavior.
+Confirm the block is identical in shape (some use `c.JSON(http.StatusBadRequest, ...)`, `eic/route.go` uses the literal `c.JSON(400, ...)` — note this minor status-code-literal-vs-constant difference, both mean the same thing but confirm the exact error message text `"Invalid page number"` is identical across all six call sites before generalizing).
 
-- [ ] **Step 2: Write the table-driven test first, based on the captured behavior from Step 1**
+- [ ] **Step 2: Write the table-driven test first**
 
 ```go
 // api/shared/pagination/pagination_test.go
@@ -492,7 +492,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParse(t *testing.T) {
+func TestParsePage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -515,7 +515,7 @@ func TestParse(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/test"+tt.queryString, nil)
 			c.Request = req
 
-			page, ok := Parse(c)
+			page, ok := ParsePage(c)
 
 			require.Equal(t, tt.wantOK, ok)
 			if tt.wantOK {
@@ -528,8 +528,6 @@ func TestParse(t *testing.T) {
 }
 ```
 
-Note: adjust the function name (`Parse`), field names, and default/error behavior in this test to exactly match what Step 1 found in the existing `item_lookup/shared/pagination.go` — do not invent new defaults or validation rules.
-
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
@@ -537,16 +535,31 @@ go test ./api/shared/pagination/... -v
 ```
 Expected: FAIL — package doesn't exist yet.
 
-- [ ] **Step 4: Create the promoted package, copying the exact logic found in Step 1**
+- [ ] **Step 4: Create the promoted package**
 
 ```go
 // api/shared/pagination/pagination.go
 package pagination
 
-// (Exact contents copied from api/item_lookup/shared/pagination.go,
-// package name changed to `pagination`, with identical function
-// signature, defaults, and error-response behavior as verified in
-// Step 1.)
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
+
+// ParsePage reads the "page" query parameter, defaulting to 1 if absent,
+// and validates it is a positive integer. On invalid input it writes a
+// 400 response and returns (0, false); callers must return immediately
+// when ok is false.
+func ParsePage(c *gin.Context) (page int, ok bool) {
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+		return 0, false
+	}
+	return page, true
+}
 ```
 
 - [ ] **Step 5: Run test to verify it passes**
@@ -556,46 +569,34 @@ go test ./api/shared/pagination/... -v
 ```
 Expected: PASS for all five table cases.
 
-- [ ] **Step 6: Point `item_lookup/shared/pagination.go` at the promoted package**
-
-Replace the body of `api/item_lookup/shared/pagination.go` with a thin re-export so `item_lookup`'s existing callers need no changes in this task:
-```go
-package shared
-
-import "miltechserver/api/shared/pagination"
-
-// Parse is kept here as a re-export for existing item_lookup callers.
-// New code should import miltechserver/api/shared/pagination directly.
-var Parse = pagination.Parse
-```
-(Adjust the exact re-export shape to match whatever the real function signature turned out to be in Step 1 — if it's not a simple `var = func` reference due to generics or multiple return values needing a wrapper, write a one-line wrapper function instead.)
-
-- [ ] **Step 7: Run full test suite for both packages**
+- [ ] **Step 6: Confirm item_lookup is untouched and the build is clean**
 
 ```bash
 go build ./...
-go test ./api/shared/pagination/... ./api/item_lookup/... -v
+git diff --stat
 ```
-Expected: all pass, `item_lookup` behavior is provably unchanged since it now calls through to the exact same logic.
+Expected: `git diff --stat` shows only the two new files under `api/shared/pagination/`; zero files under `api/item_lookup/` appear.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add api/shared/pagination/ api/item_lookup/shared/pagination.go
+git add api/shared/pagination/
 git commit -m "$(cat <<'EOF'
-refactor(pagination): promote item_lookup pagination helper to shared pkg
+refactor(pagination): extract shared page-parsing helper
 
-The pagination parse-and-validate helper was item_lookup-specific
-despite the same block being hand-copied 15+ times across other
-domains. Promotes it to api/shared/pagination, re-exported from its
-original location so item_lookup's existing callers are unaffected.
-Adoption by other domains follows in a separate task.
+The same parse-and-validate block (DefaultQuery+Atoi+400) is
+hand-copied 15+ times across sb_700_20, docs_equipment, eic, tmde,
+and library/ps_mag. Extracts it into api/shared/pagination.ParsePage,
+matching the exact behavior and error message found in those
+domains. item_lookup uses a different, unrelated inline pattern and
+is not touched — Task 6 adopts this helper in the 5 domains that
+actually share the duplicated block.
 EOF
 )"
 ```
 
 ```json:metadata
-{"files": ["api/shared/pagination/pagination.go", "api/shared/pagination/pagination_test.go", "api/item_lookup/shared/pagination.go"], "verifyCommand": "go build ./... && go test ./api/shared/pagination/... ./api/item_lookup/... -v", "acceptanceCriteria": ["promoted helper behavior matches original exactly", "table-driven test covers valid/missing/zero/negative/non-numeric page", "item_lookup callers unaffected"], "modelTier": "standard"}
+{"files": ["api/shared/pagination/pagination.go", "api/shared/pagination/pagination_test.go"], "verifyCommand": "go build ./... && go test ./api/shared/pagination/... -v", "acceptanceCriteria": ["ParsePage behavior matches the real duplicated block exactly (message text included)", "table-driven test covers valid/missing/zero/negative/non-numeric page", "api/item_lookup/ untouched by this task"], "modelTier": "standard"}
 ```
 
 ---
@@ -613,7 +614,7 @@ EOF
 - Modify: `api/library/ps_mag/route.go`
 
 **Acceptance Criteria:**
-- [ ] Every hand-copied pagination block in the six files above is replaced with a call to `pagination.Parse(c)` (or the exact function name from Task 5).
+- [ ] Every hand-copied pagination block in the six files above is replaced with a call to `pagination.ParsePage(c)` (or the exact function name from Task 5).
 - [ ] `grep -rn "DefaultQuery(\"page\"" api/sb_700_20 api/docs_equipment api/eic api/tmde api/library/ps_mag` returns zero results after the change.
 - [ ] Each touched domain's existing tests (integration in `tests/<domain>/` and/or colocated `_test.go`) pass with identical status codes and response bodies for valid, missing, zero, negative, and non-numeric page params.
 
@@ -639,7 +640,7 @@ Confirm the count matches the audit's finding (9 in `handlers_apps.go`, plus the
 
 For each occurrence, replace the multi-line `c.DefaultQuery("page", "1")` → `strconv.Atoi` → 400-response block with:
 ```go
-page, ok := pagination.Parse(c)
+page, ok := pagination.ParsePage(c)
 if !ok {
 	return
 }
@@ -1896,6 +1897,6 @@ EOF
 
 **2. Placeholder scan:** Checked every task for "TBD"/vague instructions. Tasks 6, 9, 10, 11, 14, 15, 16, 17, 18, 19 include explicit "re-confirm current state, since line numbers may have shifted" steps rather than hardcoding possibly-stale audit line numbers as fact — this is a deliberate design choice given several numbers were already found wrong during planning (Task 12/13's transaction-file count, corrected from 18 to 6), not a placeholder. Every code-writing step contains real Go code, not descriptions of code. Test steps contain real test bodies, adjusted-in-place where the exact underlying contract (e.g., testutil's header names, pagination's exact function name) must be confirmed from the existing file before being copied verbatim — flagged explicitly at each such point rather than invented.
 
-**3. Type consistency:** `response.OK`/`response.Error` signatures introduced in Task 4 are used identically in Tasks 7–11. `db.WithTx[T any]` introduced in Task 12 is used identically in Task 13. `pagination.Parse` introduced in Task 5 is used identically in Task 6. `testutil.TestDSN`/`testutil.FakeAuthMiddleware()` introduced in Task 18 are self-contained to that task. No later task references a function name that differs from its introducing task.
+**3. Type consistency:** `response.OK`/`response.Error` signatures introduced in Task 4 are used identically in Tasks 7–11. `db.WithTx[T any]` introduced in Task 12 is used identically in Task 13. `pagination.ParsePage` introduced in Task 5 is used identically in Task 6. `testutil.TestDSN`/`testutil.FakeAuthMiddleware()` introduced in Task 18 are self-contained to that task. No later task references a function name that differs from its introducing task.
 
 **Known deviation from the spec's literal Pass 6 description:** the spec said to "extract" `user_pmcs/owned`'s transaction helper; verification during planning found the real reusable helper is `persistence.WithWriteTx` in `user_pmcs/persistence/retry.go` (a different file than the spec named), and it already exists rather than needing extraction — Task 12 promotes it (in simplified form, without retry semantics the target files never had) rather than extracting it from scratch. This is called out in the plan header's "Corrections made during planning" section so it isn't mistaken for silent scope drift.
