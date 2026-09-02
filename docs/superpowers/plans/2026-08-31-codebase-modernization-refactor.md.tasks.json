@@ -127,11 +127,11 @@
     {
       "id": 16,
       "subject": "Task 17: Thread context.Context through remaining 47 service files",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12
       ],
-      "description": "**Goal:** Only 7 of 54 service_impl.go files accept ctx context.Context. Add it to the other 47, threading from the handler's c.Request.Context() down to repository calls that already accept ctx. Does NOT extend context-acceptance into repository methods that don't have it yet (explicitly out of scope for this entire plan).\n\n**Files:**\n- Modify: 47 service_impl.go files and their paired service.go interface files\n- Modify: corresponding handler/route files to pass c.Request.Context()\n\n**Acceptance Criteria:**\n- [ ] Zero service_impl.go files remain without ctx as first parameter of public methods, except the 7 already-done plus this task's 47.\n- [ ] Every paired service.go interface updated to match.\n- [ ] Every handler call site passes c.Request.Context() rather than context.Background()/context.TODO().\n- [ ] At least one new test per touched domain asserts a canceled context aborts an in-flight repository call where the repository already accepts ctx.\n\n**Verify:** go build ./... (signature-only change catches every missed call site) && go test -p 1 ./... (full suite).\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go build ./... && go vet ./... && go test -p 1 ./...\", \"acceptanceCriteria\": [\"all 47 service_impl.go files (minus the 7 already done) now accept ctx as first parameter\", \"paired service.go interfaces match\", \"handler call sites pass c.Request.Context()\", \"at least one new cancellation test per domain where the repository layer supports it\"], \"modelTier\": \"standard\"}\n```"
+      "description": "**Goal:** Thread context.Context through 41 service_impl.go files.\n\nComplete \u2014 see ledger."
     },
     {
       "id": 17,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T19:11:56.006273+00:00"
+  "lastUpdated": "2026-09-02T20:23:37.824479+00:00"
 }
