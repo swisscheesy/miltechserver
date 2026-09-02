@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestIncrementPSMagDownload_StandardFilename(t *testing.T) {
 	repo := &repoStub{}
 	svc := NewService(repo)
 
-	err := svc.IncrementPSMagDownload("PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.IncrementPSMagDownload(context.Background(), "PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.NoError(t, err)
 	require.Equal(t, "ps_mag_download", repo.capturedEventType)
@@ -77,7 +78,7 @@ func TestIncrementPSMagDownload_EmptyFilename(t *testing.T) {
 	repo := &repoStub{}
 	svc := NewService(repo)
 
-	err := svc.IncrementPSMagDownload("")
+	err := svc.IncrementPSMagDownload(context.Background(), "")
 
 	require.NoError(t, err)
 	require.Empty(t, repo.capturedEventType) // repo must not be called for empty input
@@ -87,7 +88,7 @@ func TestIncrementPSMagDownload_WhitespaceOnlyFilename(t *testing.T) {
 	repo := &repoStub{}
 	svc := NewService(repo)
 
-	err := svc.IncrementPSMagDownload("   ")
+	err := svc.IncrementPSMagDownload(context.Background(), "   ")
 
 	require.NoError(t, err)
 	require.Empty(t, repo.capturedEventType) // repo must not be called for whitespace-only input
@@ -97,7 +98,7 @@ func TestIncrementPSMagDownload_RepoError(t *testing.T) {
 	repo := &repoStub{err: errors.New("db down")}
 	svc := NewService(repo)
 
-	err := svc.IncrementPSMagDownload("PS_Magazine_Issue_001_January_1951.pdf")
+	err := svc.IncrementPSMagDownload(context.Background(), "PS_Magazine_Issue_001_January_1951.pdf")
 
 	require.Error(t, err)
 }

@@ -340,10 +340,10 @@ type analyticsStub struct {
 	err              error
 }
 
-func (a *analyticsStub) IncrementItemSearchSuccess(_, _ string) error  { return nil }
-func (a *analyticsStub) IncrementPMCSManualDownload(_, _ string) error { return nil }
-func (a *analyticsStub) IncrementCounter(_, _, _ string) error         { return nil }
-func (a *analyticsStub) IncrementPSMagDownload(filename string) error {
+func (a *analyticsStub) IncrementItemSearchSuccess(context.Context, string, string) error  { return nil }
+func (a *analyticsStub) IncrementPMCSManualDownload(context.Context, string, string) error { return nil }
+func (a *analyticsStub) IncrementCounter(context.Context, string, string, string) error    { return nil }
+func (a *analyticsStub) IncrementPSMagDownload(ctx context.Context, filename string) error {
 	a.capturedFilename = filename
 	return a.err
 }
@@ -358,7 +358,7 @@ func TestTrackPSMagDownload_CallsAnalytics(t *testing.T) {
 		cache:     newIssueCache(5 * time.Minute),
 	}
 
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.NoError(t, err)
 	require.Equal(t, "PS_Magazine_Issue_004_September_1951.pdf", stub.capturedFilename)
@@ -368,7 +368,7 @@ func TestTrackPSMagDownload_NilAnalytics(t *testing.T) {
 	svc := &ServiceImpl{cache: newIssueCache(5 * time.Minute)}
 
 	// Must not panic when analytics is nil.
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.NoError(t, err)
 }
@@ -380,7 +380,7 @@ func TestTrackPSMagDownload_EmptyFilename(t *testing.T) {
 		cache:     newIssueCache(5 * time.Minute),
 	}
 
-	err := svc.trackPSMagDownload("ps-mag/")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/")
 
 	require.NoError(t, err)
 	require.Empty(t, stub.capturedFilename) // analytics must not be called for empty filename
@@ -394,7 +394,7 @@ func TestTrackPSMagDownload_AnalyticsReturnsError(t *testing.T) {
 	}
 
 	// trackPSMagDownload surfaces the error so GenerateDownloadURL can log it.
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.Error(t, err)
 }

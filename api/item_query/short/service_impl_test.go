@@ -52,7 +52,7 @@ type analyticsStub struct {
 	fail  bool
 }
 
-func (a *analyticsStub) IncrementItemSearchSuccess(niin string, nomenclature string) error {
+func (a *analyticsStub) IncrementItemSearchSuccess(ctx context.Context, niin string, nomenclature string) error {
 	a.calls = append(a.calls, niin+":"+nomenclature)
 	if a.fail {
 		return errors.New("analytics down")

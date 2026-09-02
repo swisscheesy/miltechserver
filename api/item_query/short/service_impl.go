@@ -32,9 +32,11 @@ func NewService(repo Repository, analytics shared.AnalyticsTracker) *ServiceImpl
 }
 
 // processAnalytics runs in the background, processing analytics events without blocking requests.
+// It uses context.Background() rather than the originating request's context because events are
+// queued asynchronously and processed after the request has already returned to the caller.
 func (s *ServiceImpl) processAnalytics() {
 	for event := range s.analyticsQ {
-		if err := s.analytics.IncrementItemSearchSuccess(event.niin, event.nomenclature); err != nil {
+		if err := s.analytics.IncrementItemSearchSuccess(context.Background(), event.niin, event.nomenclature); err != nil {
 			slog.Warn("Failed to increment analytics for item search", "niin", event.niin, "error", err)
 		}
 	}

@@ -228,7 +228,7 @@ func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) 
 		"blobPath", blobPath,
 		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
-	if analyticsErr := s.trackPMCSDownload(blobPath); analyticsErr != nil {
+	if analyticsErr := s.trackPMCSDownload(ctx, blobPath); analyticsErr != nil {
 		slog.Warn("Failed to increment analytics for PMCS download", "blobPath", blobPath, "error", analyticsErr)
 	}
 
@@ -249,7 +249,7 @@ func extractFileName(blobPath string) string {
 	return parts[len(parts)-1]
 }
 
-func (s *ServiceImpl) trackPMCSDownload(blobPath string) error {
+func (s *ServiceImpl) trackPMCSDownload(ctx context.Context, blobPath string) error {
 	if s.analytics == nil {
 		return nil
 	}
@@ -273,7 +273,7 @@ func (s *ServiceImpl) trackPMCSDownload(blobPath string) error {
 		displayName = baseName
 	}
 
-	return s.analytics.IncrementPMCSManualDownload(baseName, displayName)
+	return s.analytics.IncrementPMCSManualDownload(ctx, baseName, displayName)
 }
 
 func extractPMCSEquipmentName(blobPath string) (string, bool) {
