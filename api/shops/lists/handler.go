@@ -40,7 +40,7 @@ func (handler *Handler) CreateShopList(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdList, err := service.CreateShopList(user, list)
+	createdList, err := service.CreateShopList(c.Request.Context(), user, list)
 	if err != nil {
 		c.Error(err)
 		return
@@ -73,7 +73,7 @@ func (handler *Handler) GetShopLists(c *gin.Context) {
 	}
 
 	service := handler.service
-	lists, err := service.GetShopLists(user, shopID)
+	lists, err := service.GetShopLists(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -100,7 +100,7 @@ func (handler *Handler) GetShopListByID(c *gin.Context) {
 	}
 
 	service := handler.service
-	list, err := service.GetShopListByID(user, listID)
+	list, err := service.GetShopListByID(c.Request.Context(), user, listID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -133,7 +133,7 @@ func (handler *Handler) UpdateShopList(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopList(user, list)
+	err := service.UpdateShopList(c.Request.Context(), user, list)
 	if err != nil {
 		c.Error(err)
 		return
@@ -161,7 +161,7 @@ func (handler *Handler) DeleteShopList(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteShopList(user, req.ListID)
+	err := service.DeleteShopList(c.Request.Context(), user, req.ListID)
 	if err != nil {
 		c.Error(err)
 		return

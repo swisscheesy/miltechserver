@@ -34,7 +34,7 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.JoinShopViaInviteCode(user, req.InviteCode)
+	err := service.JoinShopViaInviteCode(c.Request.Context(), user, req.InviteCode)
 	if err != nil {
 		c.Error(err)
 		return
@@ -61,7 +61,7 @@ func (handler *Handler) LeaveShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.LeaveShop(user, shopID)
+	err := service.LeaveShop(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -89,7 +89,7 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveMemberFromShop(user, req.ShopID, req.TargetUserID)
+	err := service.RemoveMemberFromShop(c.Request.Context(), user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -117,7 +117,7 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.PromoteMemberToAdmin(user, req.ShopID, req.TargetUserID)
+	err := service.PromoteMemberToAdmin(c.Request.Context(), user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -144,7 +144,7 @@ func (handler *Handler) GetShopMembers(c *gin.Context) {
 	}
 
 	service := handler.service
-	members, err := service.GetShopMembers(user, shopID)
+	members, err := service.GetShopMembers(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return

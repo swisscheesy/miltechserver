@@ -34,7 +34,7 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 	}
 
 	service := handler.service
-	code, err := service.GenerateInviteCode(user, req.ShopID)
+	code, err := service.GenerateInviteCode(c.Request.Context(), user, req.ShopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -67,7 +67,7 @@ func (handler *Handler) GetInviteCodesByShop(c *gin.Context) {
 	}
 
 	service := handler.service
-	codes, err := service.GetInviteCodesByShop(user, shopID)
+	codes, err := service.GetInviteCodesByShop(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -94,7 +94,7 @@ func (handler *Handler) DeactivateInviteCode(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeactivateInviteCode(user, codeID)
+	err := service.DeactivateInviteCode(c.Request.Context(), user, codeID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -121,7 +121,7 @@ func (handler *Handler) DeleteInviteCode(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteInviteCode(user, codeID)
+	err := service.DeleteInviteCode(c.Request.Context(), user, codeID)
 	if err != nil {
 		c.Error(err)
 		return

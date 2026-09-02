@@ -1,6 +1,7 @@
 package items
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,7 +41,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
+func (service *ServiceImpl) AddListItem(ctx context.Context, user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -82,7 +83,7 @@ func (service *ServiceImpl) AddListItem(user *bootstrap.User, item model.ShopLis
 	return createdItem, nil
 }
 
-func (service *ServiceImpl) GetListItems(user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error) {
+func (service *ServiceImpl) GetListItems(ctx context.Context, user *bootstrap.User, listID string) ([]response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -113,7 +114,7 @@ func (service *ServiceImpl) GetListItems(user *bootstrap.User, listID string) ([
 	return items, nil
 }
 
-func (service *ServiceImpl) UpdateListItem(user *bootstrap.User, item model.ShopListItems) error {
+func (service *ServiceImpl) UpdateListItem(ctx context.Context, user *bootstrap.User, item model.ShopListItems) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -156,7 +157,7 @@ func (service *ServiceImpl) UpdateListItem(user *bootstrap.User, item model.Shop
 	return nil
 }
 
-func (service *ServiceImpl) RemoveListItem(user *bootstrap.User, itemID string) error {
+func (service *ServiceImpl) RemoveListItem(ctx context.Context, user *bootstrap.User, itemID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -197,7 +198,7 @@ func (service *ServiceImpl) RemoveListItem(user *bootstrap.User, itemID string) 
 	return nil
 }
 
-func (service *ServiceImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error) {
+func (service *ServiceImpl) AddListItemBatch(ctx context.Context, user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -245,7 +246,7 @@ func (service *ServiceImpl) AddListItemBatch(user *bootstrap.User, items []model
 	return createdItems, nil
 }
 
-func (service *ServiceImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error {
+func (service *ServiceImpl) RemoveListItemBatch(ctx context.Context, user *bootstrap.User, itemIDs []string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

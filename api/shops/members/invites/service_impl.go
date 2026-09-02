@@ -1,6 +1,7 @@
 package invites
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -34,7 +35,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error) {
+func (service *ServiceImpl) GenerateInviteCode(ctx context.Context, user *bootstrap.User, shopID string) (*model.ShopInviteCodes, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -73,7 +74,7 @@ func (service *ServiceImpl) GenerateInviteCode(user *bootstrap.User, shopID stri
 	return createdCode, nil
 }
 
-func (service *ServiceImpl) GetInviteCodesByShop(user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error) {
+func (service *ServiceImpl) GetInviteCodesByShop(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopInviteCodes, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -99,7 +100,7 @@ func (service *ServiceImpl) GetInviteCodesByShop(user *bootstrap.User, shopID st
 	return codes, nil
 }
 
-func (service *ServiceImpl) DeactivateInviteCode(user *bootstrap.User, codeID string) error {
+func (service *ServiceImpl) DeactivateInviteCode(ctx context.Context, user *bootstrap.User, codeID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -127,7 +128,7 @@ func (service *ServiceImpl) DeactivateInviteCode(user *bootstrap.User, codeID st
 	return nil
 }
 
-func (service *ServiceImpl) DeleteInviteCode(user *bootstrap.User, codeID string) error {
+func (service *ServiceImpl) DeleteInviteCode(ctx context.Context, user *bootstrap.User, codeID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

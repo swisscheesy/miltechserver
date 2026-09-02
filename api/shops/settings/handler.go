@@ -33,7 +33,7 @@ func (handler *Handler) GetShopAdminOnlyListsSetting(c *gin.Context) {
 	}
 
 	service := handler.service
-	adminOnlyLists, err := service.GetShopAdminOnlyListsSetting(user, shopID)
+	adminOnlyLists, err := service.GetShopAdminOnlyListsSetting(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -76,7 +76,7 @@ func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopAdminOnlyListsSetting(user, shopID, req.AdminOnlyLists)
+	err := service.UpdateShopAdminOnlyListsSetting(c.Request.Context(), user, shopID, req.AdminOnlyLists)
 	if err != nil {
 		c.Error(err)
 		return
@@ -112,7 +112,7 @@ func (handler *Handler) CheckUserIsShopAdmin(c *gin.Context) {
 	}
 
 	service := handler.service
-	isAdmin, err := service.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.IsUserShopAdmin(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -151,7 +151,7 @@ func (handler *Handler) GetShopSettings(c *gin.Context) {
 	}
 
 	service := handler.service
-	settings, err := service.GetShopSettings(user, shopID)
+	settings, err := service.GetShopSettings(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -198,7 +198,7 @@ func (handler *Handler) UpdateShopSettings(c *gin.Context) {
 	}
 
 	service := handler.service
-	updatedSettings, err := service.UpdateShopSettings(user, shopID, req)
+	updatedSettings, err := service.UpdateShopSettings(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,7 +31,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 
 // GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
 // Any shop member can read this setting
-func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error) {
+func (service *ServiceImpl) GetShopAdminOnlyListsSetting(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	if user == nil {
 		return false, errors.New("unauthorized user")
 	}
@@ -55,7 +56,7 @@ func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, s
 
 // UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
 // Only shop admins can modify this setting
-func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error {
+func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context, user *bootstrap.User, shopID string, adminOnlyLists bool) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -79,7 +80,7 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User
 }
 
 // IsUserShopAdmin checks if the authenticated user is an admin for the specified shop
-func (service *ServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (service *ServiceImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	if user == nil {
 		return false, errors.New("unauthorized user")
 	}
@@ -103,7 +104,7 @@ func (service *ServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string)
 
 // GetShopSettings returns all settings for a shop
 // Any shop member can read settings
-func (service *ServiceImpl) GetShopSettings(user *bootstrap.User, shopID string) (*request.ShopSettings, error) {
+func (service *ServiceImpl) GetShopSettings(ctx context.Context, user *bootstrap.User, shopID string) (*request.ShopSettings, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -128,7 +129,7 @@ func (service *ServiceImpl) GetShopSettings(user *bootstrap.User, shopID string)
 
 // UpdateShopSettings updates one or more shop settings (admin only)
 // Supports partial updates - only provided fields are modified
-func (service *ServiceImpl) UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error) {
+func (service *ServiceImpl) UpdateShopSettings(ctx context.Context, user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}

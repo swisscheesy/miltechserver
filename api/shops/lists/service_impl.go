@@ -1,6 +1,7 @@
 package lists
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -36,7 +37,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error) {
+func (service *ServiceImpl) CreateShopList(ctx context.Context, user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -73,7 +74,7 @@ func (service *ServiceImpl) CreateShopList(user *bootstrap.User, list model.Shop
 	return createdList, nil
 }
 
-func (service *ServiceImpl) GetShopLists(user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error) {
+func (service *ServiceImpl) GetShopLists(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopListWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -99,7 +100,7 @@ func (service *ServiceImpl) GetShopLists(user *bootstrap.User, shopID string) ([
 	return lists, nil
 }
 
-func (service *ServiceImpl) GetShopListByID(user *bootstrap.User, listID string) (*response.ShopListWithUsername, error) {
+func (service *ServiceImpl) GetShopListByID(ctx context.Context, user *bootstrap.User, listID string) (*response.ShopListWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -121,7 +122,7 @@ func (service *ServiceImpl) GetShopListByID(user *bootstrap.User, listID string)
 	return list, nil
 }
 
-func (service *ServiceImpl) UpdateShopList(user *bootstrap.User, list model.ShopLists) error {
+func (service *ServiceImpl) UpdateShopList(ctx context.Context, user *bootstrap.User, list model.ShopLists) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -150,7 +151,7 @@ func (service *ServiceImpl) UpdateShopList(user *bootstrap.User, list model.Shop
 	return nil
 }
 
-func (service *ServiceImpl) DeleteShopList(user *bootstrap.User, listID string) error {
+func (service *ServiceImpl) DeleteShopList(ctx context.Context, user *bootstrap.User, listID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

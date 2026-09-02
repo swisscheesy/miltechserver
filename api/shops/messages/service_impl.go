@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -37,7 +38,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
+func (service *ServiceImpl) CreateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -67,7 +68,7 @@ func (service *ServiceImpl) CreateShopMessage(user *bootstrap.User, message mode
 	return createdMessage, nil
 }
 
-func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error) {
+func (service *ServiceImpl) GetShopMessages(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -93,7 +94,7 @@ func (service *ServiceImpl) GetShopMessages(user *bootstrap.User, shopID string)
 	return messages, nil
 }
 
-func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error) {
+func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -201,7 +202,7 @@ func (service *ServiceImpl) GetShopMessagesPaginated(user *bootstrap.User, shopI
 	return paginatedResponse, nil
 }
 
-func (service *ServiceImpl) UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error {
+func (service *ServiceImpl) UpdateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -220,7 +221,7 @@ func (service *ServiceImpl) UpdateShopMessage(user *bootstrap.User, message mode
 	return nil
 }
 
-func (service *ServiceImpl) DeleteShopMessage(user *bootstrap.User, messageID string) error {
+func (service *ServiceImpl) DeleteShopMessage(ctx context.Context, user *bootstrap.User, messageID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -249,7 +250,7 @@ func (service *ServiceImpl) DeleteShopMessage(user *bootstrap.User, messageID st
 	return nil
 }
 
-func (service *ServiceImpl) UploadMessageImage(user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error) {
+func (service *ServiceImpl) UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error) {
 	if user == nil {
 		return "", "", "", errors.New("unauthorized user")
 	}
@@ -273,7 +274,7 @@ func (service *ServiceImpl) UploadMessageImage(user *bootstrap.User, shopID stri
 	return messageID, fileExtension, imageURL, nil
 }
 
-func (service *ServiceImpl) DeleteMessageImage(user *bootstrap.User, shopID string, messageID string) error {
+func (service *ServiceImpl) DeleteMessageImage(ctx context.Context, user *bootstrap.User, shopID string, messageID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

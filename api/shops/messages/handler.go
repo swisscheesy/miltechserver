@@ -42,7 +42,7 @@ func (handler *Handler) CreateShopMessage(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdMessage, err := service.CreateShopMessage(user, message)
+	createdMessage, err := service.CreateShopMessage(c.Request.Context(), user, message)
 	if err != nil {
 		c.Error(err)
 		return
@@ -75,7 +75,7 @@ func (handler *Handler) GetShopMessages(c *gin.Context) {
 	}
 
 	service := handler.service
-	messages, err := service.GetShopMessages(user, shopID)
+	messages, err := service.GetShopMessages(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -121,7 +121,7 @@ func (handler *Handler) GetShopMessagesPaginated(c *gin.Context) {
 	}
 
 	service := handler.service
-	paginatedMessages, err := service.GetShopMessagesPaginated(user, shopID, req)
+	paginatedMessages, err := service.GetShopMessagesPaginated(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
@@ -154,7 +154,7 @@ func (handler *Handler) UpdateShopMessage(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopMessage(user, message)
+	err := service.UpdateShopMessage(c.Request.Context(), user, message)
 	if err != nil {
 		c.Error(err)
 		return
@@ -181,7 +181,7 @@ func (handler *Handler) DeleteShopMessage(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteShopMessage(user, messageID)
+	err := service.DeleteShopMessage(c.Request.Context(), user, messageID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -240,7 +240,7 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 
 	// Upload to blob storage
 	service := handler.service
-	messageID, fileExtension, imageURL, err := service.UploadMessageImage(user, shopID, imageData, contentType)
+	messageID, fileExtension, imageURL, err := service.UploadMessageImage(c.Request.Context(), user, shopID, imageData, contentType)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
 		response.Error(c, 500, fmt.Sprintf("failed to upload image: %v", err))
@@ -286,7 +286,7 @@ func (handler *Handler) DeleteMessageImage(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteMessageImage(user, shopID, messageID)
+	err := service.DeleteMessageImage(c.Request.Context(), user, shopID, messageID)
 	if err != nil {
 		c.Error(err)
 		return

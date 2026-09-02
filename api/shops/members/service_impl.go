@@ -1,6 +1,7 @@
 package members
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -32,7 +33,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) JoinShopViaInviteCode(user *bootstrap.User, inviteCode string) error {
+func (service *ServiceImpl) JoinShopViaInviteCode(ctx context.Context, user *bootstrap.User, inviteCode string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -64,7 +65,7 @@ func (service *ServiceImpl) JoinShopViaInviteCode(user *bootstrap.User, inviteCo
 	return nil
 }
 
-func (service *ServiceImpl) LeaveShop(user *bootstrap.User, shopID string) error {
+func (service *ServiceImpl) LeaveShop(ctx context.Context, user *bootstrap.User, shopID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -100,7 +101,7 @@ func (service *ServiceImpl) LeaveShop(user *bootstrap.User, shopID string) error
 	return nil
 }
 
-func (service *ServiceImpl) RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error {
+func (service *ServiceImpl) RemoveMemberFromShop(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -127,7 +128,7 @@ func (service *ServiceImpl) RemoveMemberFromShop(user *bootstrap.User, shopID st
 	return nil
 }
 
-func (service *ServiceImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
+func (service *ServiceImpl) GetShopMembers(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -153,7 +154,7 @@ func (service *ServiceImpl) GetShopMembers(user *bootstrap.User, shopID string) 
 	return members, nil
 }
 
-func (service *ServiceImpl) PromoteMemberToAdmin(user *bootstrap.User, shopID string, targetUserID string) error {
+func (service *ServiceImpl) PromoteMemberToAdmin(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

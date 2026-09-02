@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
@@ -8,11 +9,11 @@ import (
 )
 
 type Service interface {
-	CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error)
-	GetShopMessages(user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error)
-	GetShopMessagesPaginated(user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
-	UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error
-	DeleteShopMessage(user *bootstrap.User, messageID string) error
-	UploadMessageImage(user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error)
-	DeleteMessageImage(user *bootstrap.User, shopID string, messageID string) error
+	CreateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error)
+	GetShopMessages(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopMessageResponse, error)
+	GetShopMessagesPaginated(ctx context.Context, user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
+	UpdateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) error
+	DeleteShopMessage(ctx context.Context, user *bootstrap.User, messageID string) error
+	UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error)
+	DeleteMessageImage(ctx context.Context, user *bootstrap.User, shopID string, messageID string) error
 }

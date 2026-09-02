@@ -44,7 +44,7 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItem, err := service.AddListItem(user, item)
+	createdItem, err := service.AddListItem(c.Request.Context(), user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -77,7 +77,7 @@ func (handler *Handler) GetListItems(c *gin.Context) {
 	}
 
 	service := handler.service
-	items, err := service.GetListItems(user, listID)
+	items, err := service.GetListItems(c.Request.Context(), user, listID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -114,7 +114,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateListItem(user, item)
+	err := service.UpdateListItem(c.Request.Context(), user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -142,7 +142,7 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveListItem(user, req.ItemID)
+	err := service.RemoveListItem(c.Request.Context(), user, req.ItemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -183,7 +183,7 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItems, err := service.AddListItemBatch(user, items)
+	createdItems, err := service.AddListItemBatch(c.Request.Context(), user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -217,7 +217,7 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveListItemBatch(user, req.ItemIDs)
+	err := service.RemoveListItemBatch(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return
