@@ -3,19 +3,17 @@ package sb_700_20
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) listAppB(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppBPaginated(page)
@@ -53,10 +51,8 @@ func (h *Handler) searchAppB(c *gin.Context) {
 }
 
 func (h *Handler) listAppC(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppCPaginated(page)
@@ -94,10 +90,8 @@ func (h *Handler) searchAppC(c *gin.Context) {
 }
 
 func (h *Handler) listAppD(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppDPaginated(page)
@@ -135,10 +129,8 @@ func (h *Handler) searchAppD(c *gin.Context) {
 }
 
 func (h *Handler) listAppE(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppEPaginated(page)
@@ -176,10 +168,8 @@ func (h *Handler) searchAppE(c *gin.Context) {
 }
 
 func (h *Handler) listAppF(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppFPaginated(page)
@@ -217,10 +207,8 @@ func (h *Handler) searchAppF(c *gin.Context) {
 }
 
 func (h *Handler) listAppG(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppGPaginated(page)
@@ -258,10 +246,8 @@ func (h *Handler) searchAppG(c *gin.Context) {
 }
 
 func (h *Handler) listAppH1(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppH1Paginated(page)
@@ -299,10 +285,8 @@ func (h *Handler) searchAppH1(c *gin.Context) {
 }
 
 func (h *Handler) listAppH2(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppH2Paginated(page)
@@ -340,10 +324,8 @@ func (h *Handler) searchAppH2(c *gin.Context) {
 }
 
 func (h *Handler) listAppI(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppIPaginated(page)
@@ -381,10 +363,8 @@ func (h *Handler) searchAppI(c *gin.Context) {
 }
 
 func (h *Handler) listAppJ(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetAppJPaginated(page)

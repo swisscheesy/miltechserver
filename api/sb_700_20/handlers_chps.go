@@ -3,19 +3,17 @@ package sb_700_20
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) listChp4(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetChp4Paginated(page)
@@ -53,10 +51,8 @@ func (h *Handler) searchChp4(c *gin.Context) {
 }
 
 func (h *Handler) listChp6(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetChp6Paginated(page)
@@ -94,10 +90,8 @@ func (h *Handler) searchChp6(c *gin.Context) {
 }
 
 func (h *Handler) listChp8(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 	data, err := h.service.GetChp8Paginated(page)
