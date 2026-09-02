@@ -82,14 +82,14 @@
     {
       "id": 10,
       "subject": "Task 11: Response consolidation - remaining domains sweep",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         6,
         7,
         8,
         9
       ],
-      "description": "**Goal:** Sweep every remaining non-user_pmcs domain for leftover raw gin.H{}/c.JSON(http.StatusOK response construction not covered by Tasks 7-10, and migrate. user_pmcs is permanently excluded and must not be touched.\n\n**Files:**\n- Modify: files identified during the task's sweep, across all non-user_pmcs domains\n\n**Acceptance Criteria:**\n- [ ] grep -rln \"gin.H{\" api/ excluding tests and user_pmcs returns zero results, or every remaining match is confirmed to be a non-response inner-payload use, not an outer envelope.\n- [ ] Golden-fixture snapshots for each touched domain match byte-for-byte.\n- [ ] git diff --stat shows no api/user_pmcs/ files touched by this task.\n\n**Verify:** go test -p 1 ./... (full suite) -> all pass; per-domain golden-fixture diffs empty.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"go test -p 1 ./...\", \"acceptanceCriteria\": [\"no genuine raw response-envelope construction remains outside user_pmcs\", \"golden-fixture diffs empty per domain\", \"user_pmcs completely untouched\"], \"modelTier\": \"standard\"}\n```"
+      "description": "**Goal:** Response consolidation sweep across remaining 14 domains, including shops (found not pre-covered by Task 9).\n\nComplete \u2014 see ledger."
     },
     {
       "id": 11,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T08:24:31.973596+00:00"
+  "lastUpdated": "2026-09-02T09:18:30.638028+00:00"
 }
