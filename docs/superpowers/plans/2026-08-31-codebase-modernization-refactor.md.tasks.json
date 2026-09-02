@@ -142,9 +142,9 @@
     {
       "id": 18,
       "subject": "Task 19: Remove vestigial shops_route.go indirection",
-      "status": "pending",
-      "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
+      "status": "completed",
+      "description": "**Goal:** Remove vestigial shops_route.go indirection.\n\nComplete \u2014 see ledger."
     }
   ],
-  "lastUpdated": "2026-09-02T20:55:17.875509+00:00"
+  "lastUpdated": "2026-09-02T21:03:26.180038+00:00"
 }
