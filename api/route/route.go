@@ -21,6 +21,7 @@ import (
 	"miltechserver/api/quick_lists"
 	"miltechserver/api/response"
 	"miltechserver/api/sb_700_20"
+	"miltechserver/api/shops"
 	"miltechserver/api/tmde"
 	"miltechserver/api/user_general"
 	"miltechserver/api/user_pmcs"
@@ -151,7 +152,11 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	}, authRoutes)
 	user_general.RegisterRoutes(user_general.Dependencies{DB: db}, authRoutes)
 	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
-	NewShopsRouter(db, blobClient, env, authRoutes)
+	shops.RegisterRoutes(shops.Dependencies{
+		DB:         db,
+		BlobClient: blobClient,
+		Env:        env,
+	}, authRoutes)
 	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
 	pmcs_sbs_progress.RegisterRoutes(pmcs_sbs_progress.Dependencies{DB: db}, authRoutes)
 	item_comments.RegisterRoutes(item_comments.Dependencies{DB: db}, v1Route, authRoutes)
