@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/shops/shared"
+	sharedb "miltechserver/api/shared/db"
 	"miltechserver/bootstrap"
 
 	"github.com/go-jet/jet/v2/postgres"
@@ -161,76 +162,73 @@ func (repo *RepositoryImpl) UpdateShopVehicleUsage(user *bootstrap.User, update 
 }
 
 func (repo *RepositoryImpl) AdjustShopVehicleUsage(ctx context.Context, adjustment UsageAdjustment) (*model.ShopVehicle, error) {
-	tx, err := repo.db.BeginTx(ctx, nil)
+	updatedVehicle, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (*model.ShopVehicle, error) {
+		lockedVehicleStmt := SELECT(ShopVehicle.AllColumns).
+			FROM(ShopVehicle).
+			WHERE(ShopVehicle.ID.EQ(String(adjustment.VehicleID))).
+			FOR(UPDATE())
+
+		var currentVehicle model.ShopVehicle
+		if err := lockedVehicleStmt.QueryContext(ctx, tx, &currentVehicle); err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+				return nil, shared.ErrVehicleNotFound
+			}
+			return nil, fmt.Errorf("lock shop vehicle for usage adjustment: %w", err)
+		}
+
+		setClauses := []postgres.ColumnAssigment{
+			ShopVehicle.LastUpdated.SET(TimestampzT(adjustment.LastUpdated)),
+		}
+		if adjustment.MileageAdjustment != nil {
+			currentMileage := currentVehicle.Mileage
+			if currentVehicle.TrackedMileage != nil {
+				currentMileage = *currentVehicle.TrackedMileage
+			}
+
+			adjustedMileage, err := applyUsageAdjustment(currentMileage, *adjustment.MileageAdjustment, adjustment.Operation)
+			if err != nil {
+				return nil, err
+			}
+			setClauses = append(setClauses, ShopVehicle.TrackedMileage.SET(Int32(adjustedMileage)))
+		}
+		if adjustment.HoursAdjustment != nil {
+			currentHours := currentVehicle.Hours
+			if currentVehicle.TrackedHours != nil {
+				currentHours = *currentVehicle.TrackedHours
+			}
+
+			adjustedHours, err := applyUsageAdjustment(currentHours, *adjustment.HoursAdjustment, adjustment.Operation)
+			if err != nil {
+				return nil, err
+			}
+			setClauses = append(setClauses, ShopVehicle.TrackedHours.SET(Int32(adjustedHours)))
+		}
+
+		setArgs := make([]interface{}, len(setClauses))
+		for index, clause := range setClauses {
+			setArgs[index] = clause
+		}
+
+		stmt := ShopVehicle.UPDATE().
+			SET(setArgs[0], setArgs[1:]...).
+			WHERE(ShopVehicle.ID.EQ(String(adjustment.VehicleID))).
+			RETURNING(ShopVehicle.AllColumns)
+
+		var updatedVehicle model.ShopVehicle
+		if err := stmt.QueryContext(ctx, tx, &updatedVehicle); err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
+				return nil, shared.ErrVehicleNotFound
+			}
+			return nil, fmt.Errorf("update shop vehicle usage: %w", err)
+		}
+
+		return &updatedVehicle, nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("begin vehicle usage adjustment transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	lockedVehicleStmt := SELECT(ShopVehicle.AllColumns).
-		FROM(ShopVehicle).
-		WHERE(ShopVehicle.ID.EQ(String(adjustment.VehicleID))).
-		FOR(UPDATE())
-
-	var currentVehicle model.ShopVehicle
-	if err := lockedVehicleStmt.QueryContext(ctx, tx, &currentVehicle); err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
-			return nil, shared.ErrVehicleNotFound
-		}
-		return nil, fmt.Errorf("lock shop vehicle for usage adjustment: %w", err)
+		return nil, err
 	}
 
-	setClauses := []postgres.ColumnAssigment{
-		ShopVehicle.LastUpdated.SET(TimestampzT(adjustment.LastUpdated)),
-	}
-	if adjustment.MileageAdjustment != nil {
-		currentMileage := currentVehicle.Mileage
-		if currentVehicle.TrackedMileage != nil {
-			currentMileage = *currentVehicle.TrackedMileage
-		}
-
-		adjustedMileage, err := applyUsageAdjustment(currentMileage, *adjustment.MileageAdjustment, adjustment.Operation)
-		if err != nil {
-			return nil, err
-		}
-		setClauses = append(setClauses, ShopVehicle.TrackedMileage.SET(Int32(adjustedMileage)))
-	}
-	if adjustment.HoursAdjustment != nil {
-		currentHours := currentVehicle.Hours
-		if currentVehicle.TrackedHours != nil {
-			currentHours = *currentVehicle.TrackedHours
-		}
-
-		adjustedHours, err := applyUsageAdjustment(currentHours, *adjustment.HoursAdjustment, adjustment.Operation)
-		if err != nil {
-			return nil, err
-		}
-		setClauses = append(setClauses, ShopVehicle.TrackedHours.SET(Int32(adjustedHours)))
-	}
-
-	setArgs := make([]interface{}, len(setClauses))
-	for index, clause := range setClauses {
-		setArgs[index] = clause
-	}
-
-	stmt := ShopVehicle.UPDATE().
-		SET(setArgs[0], setArgs[1:]...).
-		WHERE(ShopVehicle.ID.EQ(String(adjustment.VehicleID))).
-		RETURNING(ShopVehicle.AllColumns)
-
-	var updatedVehicle model.ShopVehicle
-	if err := stmt.QueryContext(ctx, tx, &updatedVehicle); err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
-			return nil, shared.ErrVehicleNotFound
-		}
-		return nil, fmt.Errorf("update shop vehicle usage: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit vehicle usage adjustment transaction: %w", err)
-	}
-
-	return &updatedVehicle, nil
+	return updatedVehicle, nil
 }
 
 func applyUsageAdjustment(current int32, magnitude int32, operation UsageAdjustmentOperation) (int32, error) {
