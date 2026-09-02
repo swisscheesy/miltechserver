@@ -42,7 +42,7 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItem, err := service.AddNotificationItem(user, item)
+	createdItem, err := service.AddNotificationItem(c.Request.Context(), user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -75,7 +75,7 @@ func (handler *Handler) GetNotificationItems(c *gin.Context) {
 	}
 
 	service := handler.service
-	items, err := service.GetNotificationItems(user, notificationID)
+	items, err := service.GetNotificationItems(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -102,7 +102,7 @@ func (handler *Handler) GetShopNotificationItems(c *gin.Context) {
 	}
 
 	service := handler.service
-	items, err := service.GetShopNotificationItems(user, shopID)
+	items, err := service.GetShopNotificationItems(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -141,7 +141,7 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItems, err := service.AddNotificationItemList(user, items)
+	createdItems, err := service.AddNotificationItemList(c.Request.Context(), user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -174,7 +174,7 @@ func (handler *Handler) RemoveNotificationItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveNotificationItem(user, itemID)
+	err := service.RemoveNotificationItem(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -202,7 +202,7 @@ func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveNotificationItemList(user, req.ItemIDs)
+	err := service.RemoveNotificationItemList(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return

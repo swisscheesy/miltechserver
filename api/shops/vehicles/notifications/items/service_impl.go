@@ -1,6 +1,7 @@
 package items
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,7 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) AddNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
+func (service *ServiceImpl) AddNotificationItem(ctx context.Context, user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -75,7 +76,7 @@ func (service *ServiceImpl) AddNotificationItem(user *bootstrap.User, item model
 	return createdItem, nil
 }
 
-func (service *ServiceImpl) GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {
+func (service *ServiceImpl) GetNotificationItems(ctx context.Context, user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -106,7 +107,7 @@ func (service *ServiceImpl) GetNotificationItems(user *bootstrap.User, notificat
 	return items, nil
 }
 
-func (service *ServiceImpl) GetShopNotificationItems(user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
+func (service *ServiceImpl) GetShopNotificationItems(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -132,7 +133,7 @@ func (service *ServiceImpl) GetShopNotificationItems(user *bootstrap.User, shopI
 	return items, nil
 }
 
-func (service *ServiceImpl) AddNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
+func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -194,7 +195,7 @@ func (service *ServiceImpl) AddNotificationItemList(user *bootstrap.User, items 
 	return createdItems, nil
 }
 
-func (service *ServiceImpl) RemoveNotificationItem(user *bootstrap.User, itemID string) error {
+func (service *ServiceImpl) RemoveNotificationItem(ctx context.Context, user *bootstrap.User, itemID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -250,7 +251,7 @@ func (service *ServiceImpl) RemoveNotificationItem(user *bootstrap.User, itemID 
 	return nil
 }
 
-func (service *ServiceImpl) RemoveNotificationItemList(user *bootstrap.User, itemIDs []string) error {
+func (service *ServiceImpl) RemoveNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

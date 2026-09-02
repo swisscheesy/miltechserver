@@ -45,7 +45,7 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdNotification, err := service.CreateVehicleNotification(user, notification)
+	createdNotification, err := service.CreateVehicleNotification(c.Request.Context(), user, notification)
 	if err != nil {
 		c.Error(err)
 		return
@@ -78,7 +78,7 @@ func (handler *Handler) GetVehicleNotifications(c *gin.Context) {
 	}
 
 	service := handler.service
-	notifications, err := service.GetVehicleNotifications(user, vehicleID)
+	notifications, err := service.GetVehicleNotifications(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -105,7 +105,7 @@ func (handler *Handler) GetVehicleNotificationsWithItems(c *gin.Context) {
 	}
 
 	service := handler.service
-	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(user, vehicleID)
+	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -132,7 +132,7 @@ func (handler *Handler) GetShopNotifications(c *gin.Context) {
 	}
 
 	service := handler.service
-	notifications, err := service.GetShopNotifications(user, shopID)
+	notifications, err := service.GetShopNotifications(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -159,7 +159,7 @@ func (handler *Handler) GetVehicleNotificationByID(c *gin.Context) {
 	}
 
 	service := handler.service
-	notification, err := service.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.GetVehicleNotificationByID(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -199,7 +199,7 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateVehicleNotification(user, update)
+	err := service.UpdateVehicleNotification(c.Request.Context(), user, update)
 	if err != nil {
 		c.Error(err)
 		return
@@ -226,7 +226,7 @@ func (handler *Handler) DeleteVehicleNotification(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.DeleteVehicleNotification(user, notificationID)
+	err := service.DeleteVehicleNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return

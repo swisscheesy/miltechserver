@@ -1,6 +1,7 @@
 package changes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"miltechserver/api/response"
@@ -15,10 +16,8 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) GetNotificationChangeHistory(
-	user *bootstrap.User,
-	notificationID string,
-) ([]response.NotificationChangeWithUsername, error) {
+func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, user *bootstrap.User,
+	notificationID string,) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -45,11 +44,9 @@ func (service *ServiceImpl) GetNotificationChangeHistory(
 	return changes, nil
 }
 
-func (service *ServiceImpl) GetShopNotificationChanges(
-	user *bootstrap.User,
+func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user *bootstrap.User,
 	shopID string,
-	limit int,
-) ([]response.NotificationChangeWithUsername, error) {
+	limit int,) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -71,10 +68,8 @@ func (service *ServiceImpl) GetShopNotificationChanges(
 	return changes, nil
 }
 
-func (service *ServiceImpl) GetVehicleNotificationChanges(
-	user *bootstrap.User,
-	vehicleID string,
-) ([]response.NotificationChangeWithUsername, error) {
+func (service *ServiceImpl) GetVehicleNotificationChanges(ctx context.Context, user *bootstrap.User,
+	vehicleID string,) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}

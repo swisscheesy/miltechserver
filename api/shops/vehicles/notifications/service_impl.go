@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,7 +56,7 @@ func (service *ServiceImpl) validateAttachedShopList(user *bootstrap.User, shopI
 	return nil
 }
 
-func (service *ServiceImpl) CreateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
+func (service *ServiceImpl) CreateVehicleNotification(ctx context.Context, user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -117,7 +118,7 @@ func (service *ServiceImpl) CreateVehicleNotification(user *bootstrap.User, noti
 	return createdNotification, nil
 }
 
-func (service *ServiceImpl) GetVehicleNotifications(user *bootstrap.User, vehicleID string) ([]model.ShopVehicleNotifications, error) {
+func (service *ServiceImpl) GetVehicleNotifications(ctx context.Context, user *bootstrap.User, vehicleID string) ([]model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -148,7 +149,7 @@ func (service *ServiceImpl) GetVehicleNotifications(user *bootstrap.User, vehicl
 	return notifications, nil
 }
 
-func (service *ServiceImpl) GetVehicleNotificationsWithItems(user *bootstrap.User, vehicleID string) ([]response.VehicleNotificationWithItems, error) {
+func (service *ServiceImpl) GetVehicleNotificationsWithItems(ctx context.Context, user *bootstrap.User, vehicleID string) ([]response.VehicleNotificationWithItems, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -179,7 +180,7 @@ func (service *ServiceImpl) GetVehicleNotificationsWithItems(user *bootstrap.Use
 	return notificationsWithItems, nil
 }
 
-func (service *ServiceImpl) GetShopNotifications(user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
+func (service *ServiceImpl) GetShopNotifications(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -205,7 +206,7 @@ func (service *ServiceImpl) GetShopNotifications(user *bootstrap.User, shopID st
 	return notifications, nil
 }
 
-func (service *ServiceImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
+func (service *ServiceImpl) GetVehicleNotificationByID(ctx context.Context, user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -227,7 +228,7 @@ func (service *ServiceImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	return notification, nil
 }
 
-func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error {
+func (service *ServiceImpl) UpdateVehicleNotification(ctx context.Context, user *bootstrap.User, update VehicleNotificationUpdate) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
@@ -295,7 +296,7 @@ func (service *ServiceImpl) UpdateVehicleNotification(user *bootstrap.User, upda
 	return nil
 }
 
-func (service *ServiceImpl) DeleteVehicleNotification(user *bootstrap.User, notificationID string) error {
+func (service *ServiceImpl) DeleteVehicleNotification(ctx context.Context, user *bootstrap.User, notificationID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}

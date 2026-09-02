@@ -33,7 +33,7 @@ func (handler *Handler) GetNotificationChangeHistory(c *gin.Context) {
 	}
 
 	service := handler.service
-	changes, err := service.GetNotificationChangeHistory(user, notificationID)
+	changes, err := service.GetNotificationChangeHistory(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -69,7 +69,7 @@ func (handler *Handler) GetShopNotificationChanges(c *gin.Context) {
 	}
 
 	service := handler.service
-	changes, err := service.GetShopNotificationChanges(user, shopID, limit)
+	changes, err := service.GetShopNotificationChanges(c.Request.Context(), user, shopID, limit)
 	if err != nil {
 		c.Error(err)
 		return
@@ -96,7 +96,7 @@ func (handler *Handler) GetVehicleNotificationChanges(c *gin.Context) {
 	}
 
 	service := handler.service
-	changes, err := service.GetVehicleNotificationChanges(user, vehicleID)
+	changes, err := service.GetVehicleNotificationChanges(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
