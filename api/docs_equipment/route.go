@@ -66,7 +66,7 @@ func (h *Handler) getAllPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) getFamilies(c *gin.Context) {
@@ -76,13 +76,13 @@ func (h *Handler) getFamilies(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) getByFamily(c *gin.Context) {
 	family := c.Param("family")
 	if strings.TrimSpace(family) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+		response.Error(c, http.StatusBadRequest, "Family parameter is required")
 		return
 	}
 
@@ -101,13 +101,13 @@ func (h *Handler) getByFamily(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) search(c *gin.Context) {
 	q := c.Query("q")
 	if strings.TrimSpace(q) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Search query (q) is required"})
+		response.Error(c, http.StatusBadRequest, "Search query (q) is required")
 		return
 	}
 
@@ -126,13 +126,16 @@ func (h *Handler) search(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) listImageFamilies(c *gin.Context) {
 	data, err := h.service.ListImageFamilies()
 	if err != nil {
 		slog.Error("Failed to list image families", "error", err)
+		// Kept as a raw gin.H{} response: this is a flat multi-field body
+		// ("error" + "details"), which response.Error() cannot represent
+		// (it only carries a single message string).
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to list image families",
 			"details": err.Error(),
@@ -140,19 +143,21 @@ func (h *Handler) listImageFamilies(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) listFamilyImages(c *gin.Context) {
 	family := c.Param("family")
 	if strings.TrimSpace(family) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+		response.Error(c, http.StatusBadRequest, "Family parameter is required")
 		return
 	}
 
 	data, err := h.service.ListFamilyImages(family)
 	if err != nil {
 		slog.Error("Failed to list family images", "error", err, "family", family)
+		// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+		// "details") that response.Error()'s single message string cannot represent.
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to list images",
 			"details": err.Error(),
@@ -160,22 +165,24 @@ func (h *Handler) listFamilyImages(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) getFamilyImageURLs(c *gin.Context) {
 	family := c.Param("family")
 	if strings.TrimSpace(family) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+		response.Error(c, http.StatusBadRequest, "Family parameter is required")
 		return
 	}
 
 	data, err := h.service.GetFamilyImageURLs(c.Request.Context(), family)
 	if err != nil {
 		if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Family parameter is required"})
+			response.Error(c, http.StatusBadRequest, "Family parameter is required")
 		} else {
 			slog.Error("Failed to get family image URLs", "error", err, "family", family)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "Failed to generate image URLs",
 				"details": err.Error(),
@@ -184,7 +191,7 @@ func (h *Handler) getFamilyImageURLs(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) generateImageDownloadURL(c *gin.Context) {
@@ -194,6 +201,8 @@ func (h *Handler) generateImageDownloadURL(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrImageNotFound):
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Image not found",
 				"details": "The requested image does not exist",
@@ -212,5 +221,5 @@ func (h *Handler) generateImageDownloadURL(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
+	response.OK(c, result)
 }
