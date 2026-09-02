@@ -19,6 +19,7 @@ import (
 	"miltechserver/api/pmcs_sbs_progress"
 	"miltechserver/api/pol_products"
 	"miltechserver/api/quick_lists"
+	"miltechserver/api/response"
 	"miltechserver/api/sb_700_20"
 	"miltechserver/api/tmde"
 	"miltechserver/api/user_general"
@@ -190,7 +191,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	router.NoRoute(func(c *gin.Context) {
 		// Don't serve the SPA for API routes
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+			response.Error(c, http.StatusNotFound, "API route not found")
 			return
 		}
 		// Serve the SPA for all other routes
