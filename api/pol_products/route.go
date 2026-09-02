@@ -35,9 +35,5 @@ func (handler *Handler) getPolProducts(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    data,
-	})
+	response.OK(c, data)
 }

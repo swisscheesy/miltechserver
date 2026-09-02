@@ -38,11 +38,7 @@ func (handler *Handler) queryQuickListClothing(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    clothingData,
-	})
+	response.OK(c, clothingData)
 }
 
 func (handler *Handler) queryQuickListWheels(c *gin.Context) {
@@ -52,11 +48,7 @@ func (handler *Handler) queryQuickListWheels(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    wheelsData,
-	})
+	response.OK(c, wheelsData)
 }
 
 func (handler *Handler) queryQuickListBatteries(c *gin.Context) {
@@ -66,9 +58,5 @@ func (handler *Handler) queryQuickListBatteries(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    batteriesData,
-	})
+	response.OK(c, batteriesData)
 }
