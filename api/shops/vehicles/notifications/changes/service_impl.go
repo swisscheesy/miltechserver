@@ -17,7 +17,7 @@ func NewService(repo Repository) *ServiceImpl {
 }
 
 func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, user *bootstrap.User,
-	notificationID string,) ([]response.NotificationChangeWithUsername, error) {
+	notificationID string) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -46,7 +46,7 @@ func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, us
 
 func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user *bootstrap.User,
 	shopID string,
-	limit int,) ([]response.NotificationChangeWithUsername, error) {
+	limit int) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -69,7 +69,7 @@ func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user
 }
 
 func (service *ServiceImpl) GetVehicleNotificationChanges(ctx context.Context, user *bootstrap.User,
-	vehicleID string,) ([]response.NotificationChangeWithUsername, error) {
+	vehicleID string) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}

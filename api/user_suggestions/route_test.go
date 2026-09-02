@@ -20,15 +20,15 @@ func init() {
 }
 
 type serviceStub struct {
-	suggestions   []SuggestionResponse
+	suggestions    []SuggestionResponse
 	suggestionsErr error
-	created       *SuggestionResponse
-	createErr     error
-	updated       *SuggestionResponse
-	updateErr     error
-	deleteErr     error
-	voteErr       error
-	removeVoteErr error
+	created        *SuggestionResponse
+	createErr      error
+	updated        *SuggestionResponse
+	updateErr      error
+	deleteErr      error
+	voteErr        error
+	removeVoteErr  error
 }
 
 func (s *serviceStub) GetAllSuggestions(ctx context.Context, currentUser *bootstrap.User) ([]SuggestionResponse, error) {

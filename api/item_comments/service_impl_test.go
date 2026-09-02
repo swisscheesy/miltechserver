@@ -12,11 +12,11 @@ import (
 )
 
 type captureRepository struct {
-	getNiin       string
-	commentByID   *model.ItemComments
+	getNiin        string
+	commentByID    *model.ItemComments
 	commentByIDErr error
-	created       *model.ItemComments
-	updated       *model.ItemComments
+	created        *model.ItemComments
+	updated        *model.ItemComments
 }
 
 func (repo *captureRepository) GetCommentsByNiin(niin string) ([]CommentWithAuthor, error) {

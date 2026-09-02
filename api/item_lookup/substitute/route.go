@@ -8,7 +8,7 @@ import (
 
 func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/substitute-lin", func(c *gin.Context) {
-		substituteData, err := service.LookupAll(c.Request.Context(), )
+		substituteData, err := service.LookupAll(c.Request.Context())
 		if err != nil {
 			shared.HandleError(c, err)
 			return

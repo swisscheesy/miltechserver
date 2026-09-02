@@ -32,7 +32,7 @@ func registerHandlers(router *gin.RouterGroup, svc Service) {
 }
 
 func (handler *Handler) queryQuickListClothing(c *gin.Context) {
-	clothingData, err := handler.service.GetQuickListClothing(c.Request.Context(), )
+	clothingData, err := handler.service.GetQuickListClothing(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
@@ -42,7 +42,7 @@ func (handler *Handler) queryQuickListClothing(c *gin.Context) {
 }
 
 func (handler *Handler) queryQuickListWheels(c *gin.Context) {
-	wheelsData, err := handler.service.GetQuickListWheels(c.Request.Context(), )
+	wheelsData, err := handler.service.GetQuickListWheels(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
@@ -52,7 +52,7 @@ func (handler *Handler) queryQuickListWheels(c *gin.Context) {
 }
 
 func (handler *Handler) queryQuickListBatteries(c *gin.Context) {
-	batteriesData, err := handler.service.GetQuickListBatteries(c.Request.Context(), )
+	batteriesData, err := handler.service.GetQuickListBatteries(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return

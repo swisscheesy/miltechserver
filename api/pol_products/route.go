@@ -29,7 +29,7 @@ func registerHandlers(router *gin.RouterGroup, svc Service) {
 }
 
 func (handler *Handler) getPolProducts(c *gin.Context) {
-	data, err := handler.service.GetPolProducts(c.Request.Context(), )
+	data, err := handler.service.GetPolProducts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return

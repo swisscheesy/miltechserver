@@ -340,9 +340,11 @@ type analyticsStub struct {
 	err              error
 }
 
-func (a *analyticsStub) IncrementItemSearchSuccess(context.Context, string, string) error  { return nil }
-func (a *analyticsStub) IncrementPMCSManualDownload(context.Context, string, string) error { return nil }
-func (a *analyticsStub) IncrementCounter(context.Context, string, string, string) error    { return nil }
+func (a *analyticsStub) IncrementItemSearchSuccess(context.Context, string, string) error { return nil }
+func (a *analyticsStub) IncrementPMCSManualDownload(context.Context, string, string) error {
+	return nil
+}
+func (a *analyticsStub) IncrementCounter(context.Context, string, string, string) error { return nil }
 func (a *analyticsStub) IncrementPSMagDownload(ctx context.Context, filename string) error {
 	a.capturedFilename = filename
 	return a.err
