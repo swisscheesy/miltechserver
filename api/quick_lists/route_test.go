@@ -1,6 +1,7 @@
 package quick_lists
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -19,15 +20,15 @@ type serviceStub struct {
 	batteriesErr  error
 }
 
-func (s *serviceStub) GetQuickListClothing() (QuickListsClothingResponse, error) {
+func (s *serviceStub) GetQuickListClothing(ctx context.Context) (QuickListsClothingResponse, error) {
 	return s.clothingResp, s.clothingErr
 }
 
-func (s *serviceStub) GetQuickListWheels() (QuickListsWheelsResponse, error) {
+func (s *serviceStub) GetQuickListWheels(ctx context.Context) (QuickListsWheelsResponse, error) {
 	return s.wheelsResp, s.wheelsErr
 }
 
-func (s *serviceStub) GetQuickListBatteries() (QuickListsBatteryResponse, error) {
+func (s *serviceStub) GetQuickListBatteries(ctx context.Context) (QuickListsBatteryResponse, error) {
 	return s.batteriesResp, s.batteriesErr
 }
 

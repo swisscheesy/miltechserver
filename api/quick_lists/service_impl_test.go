@@ -1,6 +1,7 @@
 package quick_lists
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestServiceReturnsClothing(t *testing.T) {
 	repo := &repoStub{clothingResp: QuickListsClothingResponse{Count: 1}}
 	svc := NewService(repo)
 
-	resp, err := svc.GetQuickListClothing()
+	resp, err := svc.GetQuickListClothing(context.Background(), )
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.Count)
 }
@@ -41,6 +42,6 @@ func TestServiceReturnsError(t *testing.T) {
 	repo := &repoStub{wheelsErr: errors.New("db down")}
 	svc := NewService(repo)
 
-	_, err := svc.GetQuickListWheels()
+	_, err := svc.GetQuickListWheels(context.Background(), )
 	require.Error(t, err)
 }

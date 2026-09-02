@@ -38,7 +38,7 @@ func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
 
 func (handler *Handler) getCommentsByNiin(c *gin.Context) {
 	niin := c.Param("niin")
-	comments, err := handler.service.GetCommentsByNiin(niin)
+	comments, err := handler.service.GetCommentsByNiin(c.Request.Context(), niin)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -72,7 +72,7 @@ func (handler *Handler) createComment(c *gin.Context) {
 		return
 	}
 
-	comment, err := handler.service.CreateComment(currentUser, niin, req.Text, req.ParentID)
+	comment, err := handler.service.CreateComment(c.Request.Context(), currentUser, niin, req.Text, req.ParentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -110,7 +110,7 @@ func (handler *Handler) updateComment(c *gin.Context) {
 		return
 	}
 
-	comment, err := handler.service.UpdateComment(currentUser, niin, commentID, req.Text)
+	comment, err := handler.service.UpdateComment(c.Request.Context(), currentUser, niin, commentID, req.Text)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -143,7 +143,7 @@ func (handler *Handler) deleteComment(c *gin.Context) {
 	niin := c.Param("niin")
 	commentID := c.Param("comment_id")
 
-	comment, err := handler.service.DeleteComment(currentUser, niin, commentID)
+	comment, err := handler.service.DeleteComment(c.Request.Context(), currentUser, niin, commentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -175,7 +175,7 @@ func (handler *Handler) flagComment(c *gin.Context) {
 	niin := c.Param("niin")
 	commentID := c.Param("comment_id")
 
-	err := handler.service.FlagComment(currentUser, niin, commentID)
+	err := handler.service.FlagComment(c.Request.Context(), currentUser, niin, commentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},

@@ -42,7 +42,7 @@ func (handler *Handler) lookupByNIIN(c *gin.Context) {
 		return
 	}
 
-	consolidatedData, err := handler.service.LookupByNIIN(niin)
+	consolidatedData, err := handler.service.LookupByNIIN(c.Request.Context(), niin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -66,7 +66,7 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 		return
 	}
 
-	consolidatedData, err := handler.service.LookupByLIN(lin)
+	consolidatedData, err := handler.service.LookupByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -95,7 +95,7 @@ func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 		return
 	}
 
-	eicData, err := handler.service.LookupByFSCPaginated(fsc, page)
+	eicData, err := handler.service.LookupByFSCPaginated(c.Request.Context(), fsc, page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -116,7 +116,7 @@ func (handler *Handler) lookupAllPaginated(c *gin.Context) {
 		return
 	}
 
-	eicData, err := handler.service.LookupAllPaginated(page, search)
+	eicData, err := handler.service.LookupAllPaginated(c.Request.Context(), page, search)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())

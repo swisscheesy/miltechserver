@@ -46,7 +46,7 @@ func (h *Handler) lookupByNIIN(c *gin.Context) {
 		return
 	}
 
-	item, err := h.service.LookupByNIIN(niin)
+	item, err := h.service.LookupByNIIN(c.Request.Context(), niin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -65,7 +65,7 @@ func (h *Handler) listAllPaginated(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.GetAllPaginated(page)
+	data, err := h.service.GetAllPaginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
