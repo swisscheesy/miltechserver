@@ -37,18 +37,35 @@ func registerHandlers(publicGroup *gin.RouterGroup, svc Service) {
 	publicGroup.GET("/library/ps-mag/download", middleware.RateLimiter(), handler.generateDownloadURL)
 }
 
-// listIssues returns a paginated list of PS Magazine issues.
-// GET /library/ps-mag/issues?page=1&order=asc&year=1994&issue=495
-func (h *Handler) listIssues(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	order := c.DefaultQuery("order", "asc")
-
-	page, err := strconv.Atoi(pageStr)
+// parsePage reads the "page" query parameter, defaulting to 1 if absent,
+// and validates it is a positive integer. On invalid input it writes
+// ps_mag's own {"error": "Invalid request", "details": ...} response and
+// returns (0, false); callers must return immediately when ok is false.
+//
+// This intentionally duplicates pagination.ParsePage's validation logic
+// rather than calling it directly: ps_mag's error response body differs
+// from ParsePage's built-in {"error": "Invalid page number"} body, and
+// ParsePage writes its response as a side effect, so calling it here would
+// silently change ps_mag's response shape.
+func parsePage(c *gin.Context) (int, bool) {
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
 	if err != nil || page < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "Invalid request",
 			"details": ErrInvalidPage.Error(),
 		})
+		return 0, false
+	}
+	return page, true
+}
+
+// listIssues returns a paginated list of PS Magazine issues.
+// GET /library/ps-mag/issues?page=1&order=asc&year=1994&issue=495
+func (h *Handler) listIssues(c *gin.Context) {
+	order := c.DefaultQuery("order", "asc")
+
+	page, ok := parsePage(c)
+	if !ok {
 		return
 	}
 
@@ -118,13 +135,8 @@ func (h *Handler) searchSummaries(c *gin.Context) {
 		return
 	}
 
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "Invalid request",
-			"details": ErrInvalidPage.Error(),
-		})
+	page, ok := parsePage(c)
+	if !ok {
 		return
 	}
 
