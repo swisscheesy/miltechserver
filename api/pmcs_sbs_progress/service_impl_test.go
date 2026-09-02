@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -166,7 +167,7 @@ func samplePmcsID() uuid.UUID {
 func TestEnsureInspectionRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.EnsureInspection(nil, "vehicle-1", samplePmcsIDStr, InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now()})
+	_, err := svc.EnsureInspection(context.Background(), nil, "vehicle-1", samplePmcsIDStr, InspectionRequest{InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now()})
 
 	requireServiceError(t, err, ErrUnauthorized)
 }
@@ -411,7 +412,7 @@ func TestEnsureInspectionRejectsInvalidValues(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.EnsureInspection(requireUser(), tc.equipmentID, tc.pmcsID, tc.req)
+			_, err := svc.EnsureInspection(context.Background(), requireUser(), tc.equipmentID, tc.pmcsID, tc.req)
 			requireServiceError(t, err, tc.want)
 		})
 	}
@@ -429,7 +430,7 @@ func TestEnsureInspectionMapsResponse(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	resp, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	resp, err := svc.EnsureInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
 		PerformedDate:           time.Now(),
 	})
@@ -487,7 +488,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameFromCallerWithoutLookup(t *t
 	svc := NewService(stub)
 	user := &bootstrap.User{UserID: "user-1", Username: "jsmith"}
 
-	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	resp, err := svc.EnsureInspection(context.Background(), user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
 		PerformedDate:           time.Now(),
 	})
@@ -514,7 +515,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiff
 	svc := NewService(stub)
 	user := &bootstrap.User{UserID: "editor-user", Username: "editor"}
 
-	resp, err := svc.EnsureInspection(user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	resp, err := svc.EnsureInspection(context.Background(), user, "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"},
 		PerformedDate:           time.Now(),
 	})
@@ -529,7 +530,7 @@ func TestEnsureInspectionResolvesPerformedByUsernameViaLookupWhenStickyOwnerDiff
 func TestGetInspectionRejectsInvalidPmcsID(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.GetInspection(requireUser(), "vehicle-1", "not-a-uuid")
+	_, err := svc.GetInspection(context.Background(), requireUser(), "vehicle-1", "not-a-uuid")
 
 	requireServiceError(t, err, ErrInvalidPmcsID)
 }
@@ -544,7 +545,7 @@ func TestGetInspectionMapsFaults(t *testing.T) {
 	}
 	svc := NewService(stub)
 
-	resp, err := svc.GetInspection(requireUser(), "vehicle-1", samplePmcsIDStr)
+	resp, err := svc.GetInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr)
 
 	require.NoError(t, err)
 	require.Equal(t, samplePmcsID(), stub.capturedPmcsID)
@@ -556,7 +557,7 @@ func TestListInspectionsAppliesDefaultLimitAndOffset(t *testing.T) {
 	stub := &repoStub{summaries: []InspectionSummary{}}
 	svc := NewService(stub)
 
-	_, err := svc.ListInspections(requireUser(), "vehicle-1", ListInspectionsRequest{})
+	_, err := svc.ListInspections(context.Background(), requireUser(), "vehicle-1", ListInspectionsRequest{})
 
 	require.NoError(t, err)
 	require.Equal(t, 1000, stub.capturedLimit)
@@ -566,7 +567,7 @@ func TestListInspectionsAppliesDefaultLimitAndOffset(t *testing.T) {
 func TestListInspectionsValidatesGuideManualFilterWhenProvided(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.ListInspections(requireUser(), "vehicle-1", ListInspectionsRequest{GuideManual: "pmcs/hmmwv/file.json"})
+	_, err := svc.ListInspections(context.Background(), requireUser(), "vehicle-1", ListInspectionsRequest{GuideManual: "pmcs/hmmwv/file.json"})
 
 	requireServiceError(t, err, ErrInvalidGuideManual)
 }
@@ -587,7 +588,7 @@ func TestListInspectionsMapsGuideAndCustomSummaries(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	resp, err := svc.ListInspections(requireUser(), "vehicle-1", ListInspectionsRequest{Limit: 10, Offset: 0})
+	resp, err := svc.ListInspections(context.Background(), requireUser(), "vehicle-1", ListInspectionsRequest{Limit: 10, Offset: 0})
 
 	require.NoError(t, err)
 	require.Equal(t, 2, resp.Count)
@@ -613,7 +614,7 @@ func TestListInspectionsMapsGuideAndCustomSummaries(t *testing.T) {
 func TestDeleteInspectionValidatesPmcsID(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	err := svc.DeleteInspection(requireUser(), "vehicle-1", "not-a-uuid")
+	err := svc.DeleteInspection(context.Background(), requireUser(), "vehicle-1", "not-a-uuid")
 
 	requireServiceError(t, err, ErrInvalidPmcsID)
 }
@@ -622,7 +623,7 @@ func TestDeleteInspectionPassesParsedID(t *testing.T) {
 	stub := &repoStub{}
 	svc := NewService(stub)
 
-	err := svc.DeleteInspection(requireUser(), " vehicle-1 ", samplePmcsIDStr)
+	err := svc.DeleteInspection(context.Background(), requireUser(), " vehicle-1 ", samplePmcsIDStr)
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
@@ -657,7 +658,7 @@ func TestUpsertFaultRejectsInvalidValues(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.UpsertFault(requireUser(), tc.equipmentID, tc.pmcsID, tc.mutate(baseReq()))
+			_, err := svc.UpsertFault(context.Background(), requireUser(), tc.equipmentID, tc.pmcsID, tc.mutate(baseReq()))
 			requireServiceError(t, err, tc.want)
 		})
 	}
@@ -680,7 +681,7 @@ func TestUpsertFaultAcceptsAllowedStatuses(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.input, func(t *testing.T) {
-			_, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
+			_, err := svc.UpsertFault(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
 				InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: tc.input, FaultText: "leak",
 			})
 			require.NoError(t, err)
@@ -694,7 +695,7 @@ func TestUpsertFaultAcceptsCustomSource(t *testing.T) {
 	svc := NewService(stub)
 	revisionNumber := int32(0)
 
-	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
+	resp, err := svc.UpsertFault(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
 		InspectionSourceRequest: InspectionSourceRequest{
 			SourceType:           "custom",
 			CustomChecklistID:    "22222222-2222-2222-2222-222222222222",
@@ -757,7 +758,7 @@ func TestUpsertFaultValidatesSectionTitle(t *testing.T) {
 			request := baseRequest()
 			request.SectionTitle = tc.title
 
-			_, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, request)
+			_, err := svc.UpsertFault(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, request)
 			if tc.want != nil {
 				requireServiceError(t, err, tc.want)
 				return
@@ -784,7 +785,7 @@ func TestUpsertFaultReturnsMappedResponse(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	resp, err := svc.UpsertFault(requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
+	resp, err := svc.UpsertFault(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, FaultRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: now, SectionID: "before", ItemIndex: 0, ItemNo: "1", Status: "X", FaultText: "leak",
 	})
 
@@ -799,7 +800,7 @@ func TestDeleteFaultPassesValidatedKey(t *testing.T) {
 	stub := &repoStub{}
 	svc := NewService(stub)
 
-	err := svc.DeleteFault(requireUser(), " vehicle-1 ", samplePmcsIDStr, DeleteFaultRequest{SectionID: " before ", ItemIndex: 0})
+	err := svc.DeleteFault(context.Background(), requireUser(), " vehicle-1 ", samplePmcsIDStr, DeleteFaultRequest{SectionID: " before ", ItemIndex: 0})
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
@@ -811,7 +812,7 @@ func TestDeleteFaultsPassesValidatedKeysAndCounts(t *testing.T) {
 	stub := &repoStub{deletedCount: 1}
 	svc := NewService(stub)
 
-	resp, err := svc.DeleteFaults(requireUser(), " vehicle-1 ", samplePmcsIDStr, BulkDeleteFaultRequest{
+	resp, err := svc.DeleteFaults(context.Background(), requireUser(), " vehicle-1 ", samplePmcsIDStr, BulkDeleteFaultRequest{
 		Faults: []BulkDeleteFaultItemRequest{
 			{SectionID: " before ", ItemIndex: 0},
 			{SectionID: " after ", ItemIndex: 2},
@@ -831,7 +832,7 @@ func TestDeleteFaultsPassesValidatedKeysAndCounts(t *testing.T) {
 func TestDeleteFaultsRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.DeleteFaults(nil, "vehicle-1", samplePmcsIDStr, BulkDeleteFaultRequest{
+	_, err := svc.DeleteFaults(context.Background(), nil, "vehicle-1", samplePmcsIDStr, BulkDeleteFaultRequest{
 		Faults: []BulkDeleteFaultItemRequest{{SectionID: "before", ItemIndex: 0}},
 	})
 
@@ -875,7 +876,7 @@ func TestEnsureInspectionTrimsAndClearsNotes(t *testing.T) {
 	svc := NewService(stub)
 
 	blank := "   "
-	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	_, err := svc.EnsureInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &blank,
 	})
 
@@ -883,7 +884,7 @@ func TestEnsureInspectionTrimsAndClearsNotes(t *testing.T) {
 	require.Nil(t, stub.capturedInspection.Notes)
 
 	padded := "  looks fine  "
-	_, err = svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	_, err = svc.EnsureInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &padded,
 	})
 
@@ -896,7 +897,7 @@ func TestEnsureInspectionRejectsOverlongNotes(t *testing.T) {
 	svc := NewService(&repoStub{})
 	tooLong := strings.Repeat("a", maxNotesLength+1)
 
-	_, err := svc.EnsureInspection(requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
+	_, err := svc.EnsureInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, InspectionRequest{
 		InspectionSourceRequest: InspectionSourceRequest{GuideManual: "pmcs_sbs/hmmwv/file.json"}, PerformedDate: time.Now(), Notes: &tooLong,
 	})
 
@@ -916,7 +917,7 @@ func TestGetInspectionMapsNotesAndComments(t *testing.T) {
 	}
 	svc := NewService(stub)
 
-	resp, err := svc.GetInspection(requireUser(), "vehicle-1", samplePmcsIDStr)
+	resp, err := svc.GetInspection(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr)
 
 	require.NoError(t, err)
 	require.NotNil(t, resp.Notes)
@@ -930,7 +931,7 @@ func TestGetInspectionMapsNotesAndComments(t *testing.T) {
 func TestCreateCommentRequiresAuth(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.CreateComment(nil, "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "hello"})
+	_, err := svc.CreateComment(context.Background(), nil, "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "hello"})
 
 	requireServiceError(t, err, ErrUnauthorized)
 }
@@ -948,7 +949,7 @@ func TestCreateCommentRejectsInvalidText(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.CreateComment(requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: tc.text})
+			_, err := svc.CreateComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: tc.text})
 			requireServiceError(t, err, ErrInvalidCommentText)
 		})
 	}
@@ -958,7 +959,7 @@ func TestCreateCommentTrimsTextAndPassesThrough(t *testing.T) {
 	stub := &repoStub{}
 	svc := NewService(stub)
 
-	resp, err := svc.CreateComment(requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "  looks good  "})
+	resp, err := svc.CreateComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, CreateCommentRequest{Text: "  looks good  "})
 
 	require.NoError(t, err)
 	require.Equal(t, "looks good", stub.capturedCommentText)
@@ -972,7 +973,7 @@ func TestUpdateCommentRequiresAuthorship(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.UpdateComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+	_, err := svc.UpdateComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
 
 	requireServiceError(t, err, ErrForbidden)
 }
@@ -983,7 +984,7 @@ func TestUpdateCommentSucceedsForAuthor(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.UpdateComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
+	_, err := svc.UpdateComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr, UpdateCommentRequest{Text: "edited"})
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
@@ -997,7 +998,7 @@ func TestDeleteCommentRequiresAuthorshipAndUsesSentinelText(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.DeleteComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
+	_, err := svc.DeleteComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
 
 	require.NoError(t, err)
 	require.Equal(t, "vehicle-1", stub.capturedEquipmentID)
@@ -1011,7 +1012,7 @@ func TestDeleteCommentRejectsNonAuthor(t *testing.T) {
 	}}
 	svc := NewService(stub)
 
-	_, err := svc.DeleteComment(requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
+	_, err := svc.DeleteComment(context.Background(), requireUser(), "vehicle-1", samplePmcsIDStr, samplePmcsIDStr)
 
 	requireServiceError(t, err, ErrForbidden)
 }

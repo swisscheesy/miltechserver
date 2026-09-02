@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -32,7 +33,7 @@ type serviceStub struct {
 	capturedRequest     interface{}
 }
 
-func (s *serviceStub) EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
+func (s *serviceStub) EnsureInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -40,28 +41,28 @@ func (s *serviceStub) EnsureInspection(user *bootstrap.User, equipmentID string,
 	return s.inspectionResp, s.err
 }
 
-func (s *serviceStub) GetInspection(user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
+func (s *serviceStub) GetInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
 	return s.inspectionResp, s.err
 }
 
-func (s *serviceStub) ListInspections(user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error) {
+func (s *serviceStub) ListInspections(ctx context.Context, user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedRequest = req
 	return s.listResp, s.err
 }
 
-func (s *serviceStub) DeleteInspection(user *bootstrap.User, equipmentID string, pmcsID string) error {
+func (s *serviceStub) DeleteInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string) error {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
 	return s.err
 }
 
-func (s *serviceStub) UpsertFault(user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error) {
+func (s *serviceStub) UpsertFault(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -69,7 +70,7 @@ func (s *serviceStub) UpsertFault(user *bootstrap.User, equipmentID string, pmcs
 	return s.faultResp, s.err
 }
 
-func (s *serviceStub) DeleteFault(user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error {
+func (s *serviceStub) DeleteFault(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -77,7 +78,7 @@ func (s *serviceStub) DeleteFault(user *bootstrap.User, equipmentID string, pmcs
 	return s.err
 }
 
-func (s *serviceStub) DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
+func (s *serviceStub) DeleteFaults(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -85,7 +86,7 @@ func (s *serviceStub) DeleteFaults(user *bootstrap.User, equipmentID string, pmc
 	return s.bulkDeleteResp, s.err
 }
 
-func (s *serviceStub) CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
+func (s *serviceStub) CreateComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -93,7 +94,7 @@ func (s *serviceStub) CreateComment(user *bootstrap.User, equipmentID string, pm
 	return s.commentResp, s.err
 }
 
-func (s *serviceStub) UpdateComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+func (s *serviceStub) UpdateComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID
@@ -102,7 +103,7 @@ func (s *serviceStub) UpdateComment(user *bootstrap.User, equipmentID string, pm
 	return s.commentResp, s.err
 }
 
-func (s *serviceStub) DeleteComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
+func (s *serviceStub) DeleteComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
 	s.capturedUser = user
 	s.capturedEquipmentID = equipmentID
 	s.capturedPmcsID = pmcsID

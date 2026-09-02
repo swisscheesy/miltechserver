@@ -67,7 +67,7 @@ func (handler Handler) upsertInspection(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.EnsureInspection(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.EnsureInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -89,7 +89,7 @@ func (handler Handler) getInspection(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetInspection(user, c.Param("equipment_id"), c.Param("pmcs_id"))
+	result, err := handler.service.GetInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"))
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -104,7 +104,7 @@ func (handler Handler) deleteInspection(c *gin.Context) {
 		return
 	}
 
-	if err := handler.service.DeleteInspection(user, c.Param("equipment_id"), c.Param("pmcs_id")); err != nil {
+	if err := handler.service.DeleteInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id")); err != nil {
 		respondServiceError(c, err)
 		return
 	}
@@ -133,7 +133,7 @@ func (handler Handler) listInspections(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.ListInspections(user, c.Param("equipment_id"), req)
+	result, err := handler.service.ListInspections(c.Request.Context(), user, c.Param("equipment_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -156,7 +156,7 @@ func (handler Handler) upsertFault(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.UpsertFault(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.UpsertFault(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -184,7 +184,7 @@ func (handler Handler) deleteFault(c *gin.Context) {
 		return
 	}
 
-	if err := handler.service.DeleteFault(user, c.Param("equipment_id"), c.Param("pmcs_id"), req); err != nil {
+	if err := handler.service.DeleteFault(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req); err != nil {
 		respondServiceError(c, err)
 		return
 	}
@@ -211,7 +211,7 @@ func (handler Handler) deleteFaults(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.DeleteFaults(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.DeleteFaults(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -245,7 +245,7 @@ func (handler Handler) createComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.CreateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.CreateComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -273,7 +273,7 @@ func (handler Handler) updateComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.UpdateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"), req)
+	result, err := handler.service.UpdateComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
@@ -293,7 +293,7 @@ func (handler Handler) deleteComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.DeleteComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"))
+	result, err := handler.service.DeleteComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"))
 	if err != nil {
 		respondServiceError(c, err)
 		return

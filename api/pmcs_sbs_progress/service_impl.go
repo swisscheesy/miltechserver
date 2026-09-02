@@ -1,6 +1,7 @@
 package pmcs_sbs_progress
 
 import (
+	"context"
 	"strings"
 
 	"miltechserver/bootstrap"
@@ -24,7 +25,7 @@ const maxShortFieldGraphemes = 200
 const maxShortFieldBytes = 8 * 1024
 const deletedCommentText = "Deleted by user"
 
-func (service *ServiceImpl) EnsureInspection(user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
+func (service *ServiceImpl) EnsureInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req InspectionRequest) (*InspectionResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -60,7 +61,7 @@ func (service *ServiceImpl) resolvePerformedByUsername(user *bootstrap.User, per
 	return service.repository.LookupUsername(*performedBy)
 }
 
-func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
+func (service *ServiceImpl) GetInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string) (*InspectionResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -81,7 +82,7 @@ func (service *ServiceImpl) GetInspection(user *bootstrap.User, equipmentID stri
 	return &resp, nil
 }
 
-func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error) {
+func (service *ServiceImpl) ListInspections(ctx context.Context, user *bootstrap.User, equipmentID string, req ListInspectionsRequest) (*InspectionListResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -133,7 +134,7 @@ func (service *ServiceImpl) ListInspections(user *bootstrap.User, equipmentID st
 	return &InspectionListResponse{Inspections: responses, Count: len(responses)}, nil
 }
 
-func (service *ServiceImpl) DeleteInspection(user *bootstrap.User, equipmentID string, pmcsID string) error {
+func (service *ServiceImpl) DeleteInspection(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string) error {
 	if !hasAuthenticatedUser(user) {
 		return ErrUnauthorized
 	}
@@ -148,7 +149,7 @@ func (service *ServiceImpl) DeleteInspection(user *bootstrap.User, equipmentID s
 	return service.repository.DeleteInspection(user, trimmedEquipmentID, parsedPmcsID)
 }
 
-func (service *ServiceImpl) UpsertFault(user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error) {
+func (service *ServiceImpl) UpsertFault(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req FaultRequest) (*FaultResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -164,7 +165,7 @@ func (service *ServiceImpl) UpsertFault(user *bootstrap.User, equipmentID string
 	return &resp, nil
 }
 
-func (service *ServiceImpl) DeleteFault(user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error {
+func (service *ServiceImpl) DeleteFault(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req DeleteFaultRequest) error {
 	if !hasAuthenticatedUser(user) {
 		return ErrUnauthorized
 	}
@@ -179,7 +180,7 @@ func (service *ServiceImpl) DeleteFault(user *bootstrap.User, equipmentID string
 	return service.repository.DeleteFault(user, trimmedEquipmentID, key)
 }
 
-func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
+func (service *ServiceImpl) DeleteFaults(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req BulkDeleteFaultRequest) (*BulkDeleteFaultResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -194,7 +195,7 @@ func (service *ServiceImpl) DeleteFaults(user *bootstrap.User, equipmentID strin
 	return &BulkDeleteFaultResponse{RequestedCount: len(keys), DeletedCount: int(deletedCount)}, nil
 }
 
-func (service *ServiceImpl) CreateComment(user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
+func (service *ServiceImpl) CreateComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, req CreateCommentRequest) (*CommentResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -219,7 +220,7 @@ func (service *ServiceImpl) CreateComment(user *bootstrap.User, equipmentID stri
 	return &resp, nil
 }
 
-func (service *ServiceImpl) UpdateComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
+func (service *ServiceImpl) UpdateComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, commentID string, req UpdateCommentRequest) (*CommentResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
@@ -256,7 +257,7 @@ func (service *ServiceImpl) UpdateComment(user *bootstrap.User, equipmentID stri
 	return &resp, nil
 }
 
-func (service *ServiceImpl) DeleteComment(user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
+func (service *ServiceImpl) DeleteComment(ctx context.Context, user *bootstrap.User, equipmentID string, pmcsID string, commentID string) (*CommentResponse, error) {
 	if !hasAuthenticatedUser(user) {
 		return nil, ErrUnauthorized
 	}
