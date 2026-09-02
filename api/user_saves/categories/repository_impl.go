@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
+	sharedb "miltechserver/api/shared/db"
 	"miltechserver/bootstrap"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -65,31 +66,26 @@ func (repo *RepositoryImpl) Upsert(user *bootstrap.User, itemCategory model.User
 }
 
 func (repo *RepositoryImpl) Delete(user *bootstrap.User, itemCategory model.UserItemCategory) error {
-	tx, err := repo.db.Begin()
+	_, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (struct{}, error) {
+		itemsStmt := UserItemsCategorized.DELETE().
+			WHERE(UserItemsCategorized.CategoryID.EQ(String(itemCategory.ID)))
+
+		if _, err := itemsStmt.Exec(tx); err != nil {
+			return struct{}{}, errors.New("error deleting categorized items")
+		}
+
+		catStmt := UserItemCategory.DELETE().
+			WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
+				AND(UserItemCategory.ID.EQ(String(itemCategory.ID))))
+
+		if _, err := catStmt.Exec(tx); err != nil {
+			return struct{}{}, errors.New("error deleting item category")
+		}
+
+		return struct{}{}, nil
+	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	itemsStmt := UserItemsCategorized.DELETE().
-		WHERE(UserItemsCategorized.CategoryID.EQ(String(itemCategory.ID)))
-
-	_, err = itemsStmt.Exec(tx)
-	if err != nil {
-		return errors.New("error deleting categorized items")
-	}
-
-	catStmt := UserItemCategory.DELETE().
-		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)).
-			AND(UserItemCategory.ID.EQ(String(itemCategory.ID))))
-
-	_, err = catStmt.Exec(tx)
-	if err != nil {
-		return errors.New("error deleting item category")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return err
 	}
 
 	slog.Info("item category and categorized items deleted", "user_id", user.UserID, "category_uuid", itemCategory.ID)
@@ -97,30 +93,25 @@ func (repo *RepositoryImpl) Delete(user *bootstrap.User, itemCategory model.User
 }
 
 func (repo *RepositoryImpl) DeleteAll(user *bootstrap.User) error {
-	tx, err := repo.db.Begin()
+	_, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (struct{}, error) {
+		itemsStmt := UserItemsCategorized.DELETE().
+			WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
+
+		if _, err := itemsStmt.Exec(tx); err != nil {
+			return struct{}{}, errors.New("error deleting all categorized items: " + err.Error())
+		}
+
+		catStmt := UserItemCategory.DELETE().
+			WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))
+
+		if _, err := catStmt.Exec(tx); err != nil {
+			return struct{}{}, errors.New("error deleting all item categories: " + err.Error())
+		}
+
+		return struct{}{}, nil
+	})
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	itemsStmt := UserItemsCategorized.DELETE().
-		WHERE(UserItemsCategorized.UserID.EQ(String(user.UserID)))
-
-	_, err = itemsStmt.Exec(tx)
-	if err != nil {
-		return errors.New("error deleting all categorized items: " + err.Error())
-	}
-
-	catStmt := UserItemCategory.DELETE().
-		WHERE(UserItemCategory.UserUID.EQ(String(user.UserID)))
-
-	_, err = catStmt.Exec(tx)
-	if err != nil {
-		return errors.New("error deleting all item categories: " + err.Error())
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return err
 	}
 
 	slog.Info("all item categories and categorized items deleted", "user_id", user.UserID)
