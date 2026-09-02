@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -13,6 +12,7 @@ import (
 
 	"miltechserver/api/middleware"
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 )
 
 // Dependencies holds external resources needed by this package.
@@ -51,9 +51,8 @@ func registerHandlers(router *gin.RouterGroup, svc Service) {
 }
 
 func (h *Handler) getAllPaginated(c *gin.Context) {
-	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
@@ -87,9 +86,8 @@ func (h *Handler) getByFamily(c *gin.Context) {
 		return
 	}
 
-	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
@@ -113,9 +111,8 @@ func (h *Handler) search(c *gin.Context) {
 		return
 	}
 
-	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
