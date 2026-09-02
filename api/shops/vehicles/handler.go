@@ -57,13 +57,13 @@ func decodeStrictJSON(body io.Reader, destination interface{}) error {
 func writeVehicleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidUsageAdjustment):
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, shared.ErrShopAccessDenied):
-		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, shared.ErrVehicleNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, ErrUsageOutOfRange):
-		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusConflict, err.Error())
 	default:
 		slog.Error("Shop vehicle usage adjustment failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
@@ -87,11 +87,7 @@ func writeUsageAdjustmentError(c *gin.Context, err error) {
 }
 
 func writeUsageErrorResponse(c *gin.Context, status int, message string) {
-	c.JSON(status, response.StandardResponse{
-		Status:  status,
-		Message: message,
-		Data:    nil,
-	})
+	response.Error(c, status, message)
 }
 
 // Shop Vehicle Operations
@@ -102,7 +98,7 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -110,7 +106,7 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	var req request.CreateShopVehicleRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -133,6 +129,8 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Vehicle created successfully",
@@ -146,14 +144,14 @@ func (handler *Handler) GetShopVehicles(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -164,11 +162,7 @@ func (handler *Handler) GetShopVehicles(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    vehicles,
-	})
+	response.OK(c, vehicles)
 }
 
 // GetShopVehicleByID returns a specific vehicle by ID
@@ -177,14 +171,14 @@ func (handler *Handler) GetShopVehicleByID(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
@@ -195,11 +189,7 @@ func (handler *Handler) GetShopVehicleByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *vehicle,
-	})
+	response.OK(c, *vehicle)
 }
 
 // UpdateShopVehicle updates an existing shop vehicle
@@ -208,7 +198,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -216,7 +206,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	var req request.UpdateShopVehicleRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -245,7 +235,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Vehicle updated successfully"})
+	response.OK(c, gin.H{"message": "Vehicle updated successfully"})
 }
 
 func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
@@ -296,14 +286,14 @@ func (handler *Handler) DeleteShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
@@ -314,5 +304,5 @@ func (handler *Handler) DeleteShopVehicle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Vehicle deleted successfully"})
+	response.OK(c, gin.H{"message": "Vehicle deleted successfully"})
 }

@@ -21,7 +21,7 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -29,7 +29,7 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 	var req request.GenerateInviteCodeRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -40,6 +40,8 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Invite code generated successfully",
@@ -53,14 +55,14 @@ func (handler *Handler) GetInviteCodesByShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -71,11 +73,7 @@ func (handler *Handler) GetInviteCodesByShop(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    codes,
-	})
+	response.OK(c, codes)
 }
 
 // DeactivateInviteCode deactivates an invite code
@@ -84,14 +82,14 @@ func (handler *Handler) DeactivateInviteCode(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	codeID := c.Param("code_id")
 	if codeID == "" {
-		c.JSON(400, gin.H{"message": "code_id is required"})
+		response.Error(c, 400, "code_id is required")
 		return
 	}
 
@@ -102,7 +100,7 @@ func (handler *Handler) DeactivateInviteCode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Invite code deactivated successfully"})
+	response.OK(c, gin.H{"message": "Invite code deactivated successfully"})
 }
 
 // DeleteInviteCode permanently deletes an invite code
@@ -111,14 +109,14 @@ func (handler *Handler) DeleteInviteCode(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	codeID := c.Param("code_id")
 	if codeID == "" {
-		c.JSON(400, gin.H{"message": "code_id is required"})
+		response.Error(c, 400, "code_id is required")
 		return
 	}
 
@@ -129,5 +127,5 @@ func (handler *Handler) DeleteInviteCode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Invite code deleted successfully"})
+	response.OK(c, gin.H{"message": "Invite code deleted successfully"})
 }

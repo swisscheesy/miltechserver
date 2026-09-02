@@ -21,7 +21,7 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -29,7 +29,7 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	var req request.JoinShopRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -40,7 +40,7 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Successfully joined shop"})
+	response.OK(c, gin.H{"message": "Successfully joined shop"})
 }
 
 // LeaveShop allows a user to leave a shop
@@ -49,14 +49,14 @@ func (handler *Handler) LeaveShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -67,7 +67,7 @@ func (handler *Handler) LeaveShop(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Successfully left shop"})
+	response.OK(c, gin.H{"message": "Successfully left shop"})
 }
 
 // RemoveMemberFromShop allows admins to remove members from a shop
@@ -76,7 +76,7 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -84,7 +84,7 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	var req request.RemoveMemberRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Member removed successfully"})
+	response.OK(c, gin.H{"message": "Member removed successfully"})
 }
 
 // PromoteMemberToAdmin allows admins to promote members to admin role
@@ -104,7 +104,7 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -112,7 +112,7 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	var req request.PromoteMemberRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -123,7 +123,7 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Member promoted to admin successfully"})
+	response.OK(c, gin.H{"message": "Member promoted to admin successfully"})
 }
 
 // GetShopMembers returns all members of a shop
@@ -132,14 +132,14 @@ func (handler *Handler) GetShopMembers(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -150,9 +150,5 @@ func (handler *Handler) GetShopMembers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    members,
-	})
+	response.OK(c, members)
 }

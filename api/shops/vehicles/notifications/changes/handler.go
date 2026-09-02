@@ -21,14 +21,14 @@ func (handler *Handler) GetNotificationChangeHistory(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notification_id")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification_id is required"})
+		response.Error(c, 400, "notification_id is required")
 		return
 	}
 
@@ -39,11 +39,7 @@ func (handler *Handler) GetNotificationChangeHistory(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    changes,
-	})
+	response.OK(c, changes)
 }
 
 // GetShopNotificationChanges returns recent notification changes for all notifications in a shop
@@ -52,14 +48,14 @@ func (handler *Handler) GetShopNotificationChanges(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -79,11 +75,7 @@ func (handler *Handler) GetShopNotificationChanges(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    changes,
-	})
+	response.OK(c, changes)
 }
 
 // GetVehicleNotificationChanges returns all notification changes for a specific vehicle
@@ -92,14 +84,14 @@ func (handler *Handler) GetVehicleNotificationChanges(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
@@ -110,9 +102,5 @@ func (handler *Handler) GetVehicleNotificationChanges(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    changes,
-	})
+	response.OK(c, changes)
 }

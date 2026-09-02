@@ -22,7 +22,7 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -30,7 +30,7 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	var req request.AddListItemRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -50,6 +50,8 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Item added successfully",
@@ -63,14 +65,14 @@ func (handler *Handler) GetListItems(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	listID := c.Param("list_id")
 	if listID == "" {
-		c.JSON(400, gin.H{"message": "list_id is required"})
+		response.Error(c, 400, "list_id is required")
 		return
 	}
 
@@ -81,11 +83,7 @@ func (handler *Handler) GetListItems(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    items,
-	})
+	response.OK(c, items)
 }
 
 // UpdateListItem updates an existing list item
@@ -94,7 +92,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -102,7 +100,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	var req request.UpdateListItemRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -122,7 +120,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Item updated successfully"})
+	response.OK(c, gin.H{"message": "Item updated successfully"})
 }
 
 // RemoveListItem removes an item from a list
@@ -131,7 +129,7 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -139,7 +137,7 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 	var req request.RemoveListItemRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -150,7 +148,7 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Item removed successfully"})
+	response.OK(c, gin.H{"message": "Item removed successfully"})
 }
 
 // AddListItemBatch adds multiple items to a list
@@ -159,7 +157,7 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -167,7 +165,7 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	var req request.AddListItemBatchRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -191,6 +189,8 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Items added successfully",
@@ -204,7 +204,7 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -212,7 +212,7 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	var req request.RemoveListItemBatchRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -223,5 +223,8 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+	// "count") that response.OK()'s single data field cannot represent
+	// without nesting it under "data", changing this response's shape.
 	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
 }

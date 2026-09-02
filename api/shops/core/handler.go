@@ -22,17 +22,13 @@ func (handler *Handler) GetShopEquipmentOverview(c *gin.Context) {
 	ctxUser, ok := c.Get("user")
 	user, userOK := ctxUser.(*bootstrap.User)
 	if !ok || !userOK || user == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	overview, err := handler.service.GetShopEquipmentOverview(c.Request.Context(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, response.StandardResponse{
-			Status:  http.StatusInternalServerError,
-			Message: ErrShopEquipmentOverviewUnavailable.Error(),
-			Data:    nil,
-		})
+		response.Error(c, http.StatusInternalServerError, ErrShopEquipmentOverviewUnavailable.Error())
 		return
 	}
 
@@ -65,7 +61,7 @@ func (handler *Handler) CreateShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -73,7 +69,7 @@ func (handler *Handler) CreateShop(c *gin.Context) {
 	var req request.CreateShopRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -94,6 +90,8 @@ func (handler *Handler) CreateShop(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Shop created successfully",
@@ -107,14 +105,14 @@ func (handler *Handler) DeleteShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -125,7 +123,7 @@ func (handler *Handler) DeleteShop(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Shop deleted successfully"})
+	response.OK(c, gin.H{"message": "Shop deleted successfully"})
 }
 
 // GetUserShops returns all shops for the authenticated user
@@ -134,7 +132,7 @@ func (handler *Handler) GetUserShops(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -146,11 +144,7 @@ func (handler *Handler) GetUserShops(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    shops,
-	})
+	response.OK(c, shops)
 }
 
 // GetUserDataWithShops returns user data along with all shops they are a part of
@@ -159,7 +153,7 @@ func (handler *Handler) GetUserDataWithShops(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -171,6 +165,8 @@ func (handler *Handler) GetUserDataWithShops(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "User data and shops retrieved successfully",
@@ -184,14 +180,14 @@ func (handler *Handler) GetShopByID(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -202,11 +198,7 @@ func (handler *Handler) GetShopByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *shop,
-	})
+	response.OK(c, *shop)
 }
 
 // UpdateShop handles shop updates
@@ -215,21 +207,21 @@ func (handler *Handler) UpdateShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.UpdateShopRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -246,6 +238,8 @@ func (handler *Handler) UpdateShop(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Shop updated successfully",

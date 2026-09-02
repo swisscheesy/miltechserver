@@ -23,7 +23,7 @@ func (handler *Handler) CreateShopMessage(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -31,7 +31,7 @@ func (handler *Handler) CreateShopMessage(c *gin.Context) {
 	var req request.CreateShopMessageRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -48,6 +48,8 @@ func (handler *Handler) CreateShopMessage(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Message created successfully",
@@ -61,14 +63,14 @@ func (handler *Handler) GetShopMessages(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -79,11 +81,7 @@ func (handler *Handler) GetShopMessages(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    messages,
-	})
+	response.OK(c, messages)
 }
 
 // GetShopMessagesPaginated returns paginated messages for a shop
@@ -92,21 +90,21 @@ func (handler *Handler) GetShopMessagesPaginated(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.GetShopMessagesPaginatedRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		slog.Info("invalid query parameters", "error", err)
-		c.JSON(400, gin.H{"message": "invalid query parameters"})
+		response.Error(c, 400, "invalid query parameters")
 		return
 	}
 
@@ -118,7 +116,7 @@ func (handler *Handler) GetShopMessagesPaginated(c *gin.Context) {
 		req.Limit = 20
 	}
 	if req.BeforeID != nil && req.AfterID != nil {
-		c.JSON(400, gin.H{"message": "before_id and after_id cannot be used together"})
+		response.Error(c, 400, "before_id and after_id cannot be used together")
 		return
 	}
 
@@ -129,11 +127,7 @@ func (handler *Handler) GetShopMessagesPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *paginatedMessages,
-	})
+	response.OK(c, *paginatedMessages)
 }
 
 // UpdateShopMessage updates an existing shop message
@@ -142,7 +136,7 @@ func (handler *Handler) UpdateShopMessage(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -150,7 +144,7 @@ func (handler *Handler) UpdateShopMessage(c *gin.Context) {
 	var req request.UpdateShopMessageRequest
 	if err := c.BindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -166,7 +160,7 @@ func (handler *Handler) UpdateShopMessage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Message updated successfully"})
+	response.OK(c, gin.H{"message": "Message updated successfully"})
 }
 
 // DeleteShopMessage deletes a shop message
@@ -175,14 +169,14 @@ func (handler *Handler) DeleteShopMessage(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	messageID := c.Param("message_id")
 	if messageID == "" {
-		c.JSON(400, gin.H{"message": "message_id is required"})
+		response.Error(c, 400, "message_id is required")
 		return
 	}
 
@@ -193,7 +187,7 @@ func (handler *Handler) DeleteShopMessage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Message deleted successfully"})
+	response.OK(c, gin.H{"message": "Message deleted successfully"})
 }
 
 // UploadMessageImage handles image upload for shop messages
@@ -202,7 +196,7 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -213,7 +207,7 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 		shopID = c.PostForm("shop_id")
 	}
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -221,14 +215,14 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		slog.Error("Error getting uploaded file", "error", err)
-		c.JSON(400, gin.H{"message": "failed to get uploaded file"})
+		response.Error(c, 400, "failed to get uploaded file")
 		return
 	}
 	defer file.Close()
 
 	// Check file size before reading
 	if header.Size > 5*1024*1024 { // 5MB
-		c.JSON(400, gin.H{"message": "file size exceeds maximum allowed size of 5MB"})
+		response.Error(c, 400, "file size exceeds maximum allowed size of 5MB")
 		return
 	}
 
@@ -237,7 +231,7 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	_, err = file.Read(imageData)
 	if err != nil {
 		slog.Error("Error reading file data", "error", err)
-		c.JSON(500, gin.H{"message": "failed to read file data"})
+		response.Error(c, 500, "failed to read file data")
 		return
 	}
 
@@ -249,10 +243,13 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	messageID, fileExtension, imageURL, err := service.UploadMessageImage(user, shopID, imageData, contentType)
 	if err != nil {
 		slog.Error("Error uploading image to blob storage", "error", err)
-		c.JSON(500, gin.H{"message": fmt.Sprintf("failed to upload image: %v", err)})
+		response.Error(c, 500, fmt.Sprintf("failed to upload image: %v", err))
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text. The nested
+	// gin.H{} here is the Data field's payload shape, not an envelope.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Image uploaded successfully",
@@ -271,20 +268,20 @@ func (handler *Handler) DeleteMessageImage(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	messageID := c.Param("message_id")
 	if messageID == "" {
-		c.JSON(400, gin.H{"message": "message_id is required"})
+		response.Error(c, 400, "message_id is required")
 		return
 	}
 
 	shopID := c.Query("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
@@ -295,5 +292,5 @@ func (handler *Handler) DeleteMessageImage(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Image deleted successfully"})
+	response.OK(c, gin.H{"message": "Image deleted successfully"})
 }
