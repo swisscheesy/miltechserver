@@ -22,22 +22,22 @@ type serviceStub struct {
 	err          error
 }
 
-func (s *serviceStub) GetAllPaginated(page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceStub) GetAllPaginated(_ context.Context, page int) (EquipmentDetailsPageResponse, error) {
 	return s.pageResp, s.err
 }
-func (s *serviceStub) GetFamilies() (FamiliesResponse, error) {
+func (s *serviceStub) GetFamilies(_ context.Context) (FamiliesResponse, error) {
 	return s.familiesResp, s.err
 }
-func (s *serviceStub) GetByFamilyPaginated(family string, page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceStub) GetByFamilyPaginated(_ context.Context, family string, page int) (EquipmentDetailsPageResponse, error) {
 	return s.pageResp, s.err
 }
-func (s *serviceStub) SearchPaginated(query string, page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceStub) SearchPaginated(_ context.Context, query string, page int) (EquipmentDetailsPageResponse, error) {
 	return s.pageResp, s.err
 }
-func (s *serviceStub) ListImageFamilies() (*ImageFamiliesResponse, error) {
+func (s *serviceStub) ListImageFamilies(_ context.Context) (*ImageFamiliesResponse, error) {
 	return s.imgFamilies, s.err
 }
-func (s *serviceStub) ListFamilyImages(family string) (*FamilyImagesResponse, error) {
+func (s *serviceStub) ListFamilyImages(_ context.Context, family string) (*FamilyImagesResponse, error) {
 	return s.imgList, s.err
 }
 func (s *serviceStub) GenerateImageDownloadURL(_ context.Context, _ string) (*ImageDownloadResponse, error) {

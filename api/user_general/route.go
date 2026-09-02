@@ -53,7 +53,7 @@ func (handler *Handler) upsertUser(c *gin.Context) {
 		return
 	}
 
-	if err := handler.service.UpsertUser(user, userDto); err != nil {
+	if err := handler.service.UpsertUser(c.Request.Context(), user, userDto); err != nil {
 		c.Error(err)
 		return
 	}
@@ -96,7 +96,7 @@ func (handler *Handler) updateUserDisplayName(c *gin.Context) {
 		return
 	}
 
-	if err := handler.service.UpdateUserDisplayName(displayNameRequest.UID, displayNameRequest.DisplayName); err != nil {
+	if err := handler.service.UpdateUserDisplayName(c.Request.Context(), displayNameRequest.UID, displayNameRequest.DisplayName); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			slog.Info("User not found", "uid", displayNameRequest.UID)
 		}

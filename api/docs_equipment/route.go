@@ -56,7 +56,7 @@ func (h *Handler) getAllPaginated(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.GetAllPaginated(page)
+	data, err := h.service.GetAllPaginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -70,7 +70,7 @@ func (h *Handler) getAllPaginated(c *gin.Context) {
 }
 
 func (h *Handler) getFamilies(c *gin.Context) {
-	data, err := h.service.GetFamilies()
+	data, err := h.service.GetFamilies(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
@@ -91,7 +91,7 @@ func (h *Handler) getByFamily(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.GetByFamilyPaginated(family, page)
+	data, err := h.service.GetByFamilyPaginated(c.Request.Context(), family, page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -116,7 +116,7 @@ func (h *Handler) search(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.SearchPaginated(q, page)
+	data, err := h.service.SearchPaginated(c.Request.Context(), q, page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -130,7 +130,7 @@ func (h *Handler) search(c *gin.Context) {
 }
 
 func (h *Handler) listImageFamilies(c *gin.Context) {
-	data, err := h.service.ListImageFamilies()
+	data, err := h.service.ListImageFamilies(c.Request.Context())
 	if err != nil {
 		slog.Error("Failed to list image families", "error", err)
 		// Kept as a raw gin.H{} response: this is a flat multi-field body
@@ -153,7 +153,7 @@ func (h *Handler) listFamilyImages(c *gin.Context) {
 		return
 	}
 
-	data, err := h.service.ListFamilyImages(family)
+	data, err := h.service.ListFamilyImages(c.Request.Context(), family)
 	if err != nil {
 		slog.Error("Failed to list family images", "error", err, "family", family)
 		// Kept as a raw gin.H{} response: flat multi-field body ("error" +

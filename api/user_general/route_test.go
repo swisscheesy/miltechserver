@@ -22,7 +22,7 @@ type serviceStub struct {
 	deletedUID string
 }
 
-func (s *serviceStub) UpsertUser(*bootstrap.User, auth.UserDto) error {
+func (s *serviceStub) UpsertUser(_ context.Context, _ *bootstrap.User, _ auth.UserDto) error {
 	return s.upsertErr
 }
 
@@ -31,7 +31,7 @@ func (s *serviceStub) DeleteUser(_ context.Context, uid string) error {
 	return s.deleteErr
 }
 
-func (s *serviceStub) UpdateUserDisplayName(string, string) error {
+func (s *serviceStub) UpdateUserDisplayName(_ context.Context, _ string, _ string) error {
 	return s.updateErr
 }
 
