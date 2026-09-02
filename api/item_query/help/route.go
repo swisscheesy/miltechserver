@@ -24,7 +24,7 @@ func registerHandlers(router *gin.RouterGroup, service Service) {
 
 func (handler *Handler) findByCode(c *gin.Context) {
 	code := c.Query("code")
-	result, err := handler.service.FindByCode(code)
+	result, err := handler.service.FindByCode(c.Request.Context(), code)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCode):

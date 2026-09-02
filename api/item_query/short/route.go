@@ -32,7 +32,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 		// When cancelled=true, use the two-step fallback path. Any other value
 		// (absent, "false", etc.) falls through to the original behaviour.
 		if c.Query("cancelled") == "true" {
-			results, err := handler.service.FindShortByNiinCancelled(value)
+			results, err := handler.service.FindShortByNiinCancelled(c.Request.Context(), value)
 			if err != nil {
 				if errors.Is(err, shared.ErrNoItemsFound) {
 					c.JSON(http.StatusNotFound, response.EmptyResponseMessage())
@@ -46,7 +46,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 		}
 
 		// Original path — unchanged.
-		result, err := handler.service.FindShortByNiin(value)
+		result, err := handler.service.FindShortByNiin(c.Request.Context(), value)
 		if err != nil {
 			if errors.Is(err, shared.ErrNoItemsFound) {
 				c.JSON(http.StatusNotFound, response.EmptyResponseMessage())
@@ -58,7 +58,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 		response.OK(c, result)
 
 	case "part":
-		result, err := handler.service.FindShortByPart(value)
+		result, err := handler.service.FindShortByPart(c.Request.Context(), value)
 		if err != nil {
 			if errors.Is(err, shared.ErrNoItemsFound) {
 				c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())

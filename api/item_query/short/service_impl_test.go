@@ -1,6 +1,7 @@
 package short
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -68,7 +69,7 @@ func TestFindShortByNiinTracksAnalytics(t *testing.T) {
 	analytics := &analyticsStub{}
 	svc := NewService(stub, analytics)
 
-	result, err := svc.FindShortByNiin(niin)
+	result, err := svc.FindShortByNiin(context.Background(), niin)
 	require.NoError(t, err)
 	require.Equal(t, niin, deref(result.Niin))
 
@@ -84,7 +85,7 @@ func TestFindShortByPartTracksUniqueNiins(t *testing.T) {
 	analytics := &analyticsStub{}
 	svc := NewService(stub, analytics)
 
-	results, err := svc.FindShortByPart("part")
+	results, err := svc.FindShortByPart(context.Background(), "part")
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -97,7 +98,7 @@ func TestFindShortByNiinReturnsRepoError(t *testing.T) {
 	stub := &repoStub{niinErr: shared.ErrNoItemsFound}
 	svc := NewService(stub, &analyticsStub{})
 
-	_, err := svc.FindShortByNiin("bad")
+	_, err := svc.FindShortByNiin(context.Background(), "bad")
 	require.ErrorIs(t, err, shared.ErrNoItemsFound)
 }
 
@@ -108,7 +109,7 @@ func TestFindShortByNiinAnalyticsFailureDoesNotFail(t *testing.T) {
 	analytics := &analyticsStub{fail: true}
 	svc := NewService(stub, analytics)
 
-	result, err := svc.FindShortByNiin(niin)
+	result, err := svc.FindShortByNiin(context.Background(), niin)
 	require.NoError(t, err)
 	require.Equal(t, niin, deref(result.Niin))
 
@@ -128,7 +129,7 @@ func TestFindShortByNiinCancelledPrimaryHit(t *testing.T) {
 	analytics := &analyticsStub{}
 	svc := NewService(stub, analytics)
 
-	results, err := svc.FindShortByNiinCancelled(niin)
+	results, err := svc.FindShortByNiinCancelled(context.Background(), niin)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, niin, deref(results[0].Niin))
@@ -157,7 +158,7 @@ func TestFindShortByNiinCancelledFallbackSucceeds(t *testing.T) {
 	analytics := &analyticsStub{}
 	svc := NewService(stub, analytics)
 
-	results, err := svc.FindShortByNiinCancelled("OLD123")
+	results, err := svc.FindShortByNiinCancelled(context.Background(), "OLD123")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, canonicalNiin, deref(results[0].Niin))
@@ -175,7 +176,7 @@ func TestFindShortByNiinCancelledBothMiss(t *testing.T) {
 	}
 	svc := NewService(stub, &analyticsStub{})
 
-	_, err := svc.FindShortByNiinCancelled("UNKNOWN")
+	_, err := svc.FindShortByNiinCancelled(context.Background(), "UNKNOWN")
 	require.ErrorIs(t, err, shared.ErrNoItemsFound)
 }
 
@@ -196,7 +197,7 @@ func TestFindShortByNiinCancelledAllCanonicalSkipped(t *testing.T) {
 	}
 	svc := NewService(stub, &analyticsStub{})
 
-	_, err := svc.FindShortByNiinCancelled("GHOST")
+	_, err := svc.FindShortByNiinCancelled(context.Background(), "GHOST")
 	require.ErrorIs(t, err, shared.ErrNoItemsFound)
 }
 
@@ -220,7 +221,7 @@ func TestFindShortByNiinCancelledDeduplicatesCanonical(t *testing.T) {
 	analytics := &analyticsStub{}
 	svc := NewService(stub, analytics)
 
-	results, err := svc.FindShortByNiinCancelled("OLD")
+	results, err := svc.FindShortByNiinCancelled(context.Background(), "OLD")
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -235,7 +236,7 @@ func TestFindShortByNiinCancelledPrimaryUnexpectedError(t *testing.T) {
 	stub := &repoStub{niinErr: unexpected}
 	svc := NewService(stub, &analyticsStub{})
 
-	_, err := svc.FindShortByNiinCancelled("any")
+	_, err := svc.FindShortByNiinCancelled(context.Background(), "any")
 	require.ErrorIs(t, err, unexpected)
 }
 

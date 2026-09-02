@@ -1,6 +1,7 @@
 package short
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -39,7 +40,7 @@ func (s *ServiceImpl) processAnalytics() {
 	}
 }
 
-func (service *ServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByNiin(ctx context.Context, niin string) (model.NiinLookup, error) {
 	val, err := service.repo.ShortItemSearchNiin(niin)
 	if err != nil {
 		return model.NiinLookup{}, err
@@ -51,7 +52,7 @@ func (service *ServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, erro
 	return val, nil
 }
 
-func (service *ServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByPart(ctx context.Context, part string) ([]model.NiinLookup, error) {
 	results, err := service.repo.ShortItemSearchPart(part)
 	if err != nil {
 		return []model.NiinLookup{}, err
@@ -82,7 +83,7 @@ func (service *ServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, er
 // Only when the primary search finds nothing does it fall back to querying
 // nsn.cancelled_niin for the given NIIN, then re-queries niin_lookup for
 // each unique canonical NIIN found there.
-func (service *ServiceImpl) FindShortByNiinCancelled(niin string) ([]model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByNiinCancelled(ctx context.Context, niin string) ([]model.NiinLookup, error) {
 	// Step 1: Primary niin_lookup search — identical to FindShortByNiin.
 	val, err := service.repo.ShortItemSearchNiin(niin)
 	if err == nil {

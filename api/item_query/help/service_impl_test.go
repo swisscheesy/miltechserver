@@ -1,6 +1,7 @@
 package help
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestFindByCodeNormalizesAndReturnsFirstRow(t *testing.T) {
 	}
 	svc := NewService(repo)
 
-	result, err := svc.FindByCode("  ab12 ")
+	result, err := svc.FindByCode(context.Background(), "  ab12 ")
 	require.NoError(t, err)
 	require.Equal(t, "AB12", repo.lastCode)
 	require.Equal(t, "A description", result.Description)
@@ -38,7 +39,7 @@ func TestFindByCodeNormalizesAndReturnsFirstRow(t *testing.T) {
 func TestFindByCodeReturnsInvalidCodeForEmptyInput(t *testing.T) {
 	svc := NewService(&repoStub{})
 
-	_, err := svc.FindByCode("   ")
+	_, err := svc.FindByCode(context.Background(), "   ")
 	require.ErrorIs(t, err, ErrInvalidCode)
 }
 
@@ -46,6 +47,6 @@ func TestFindByCodePropagatesRepositoryErrors(t *testing.T) {
 	expectedErr := errors.New("db down")
 	svc := NewService(&repoStub{err: expectedErr})
 
-	_, err := svc.FindByCode("abc")
+	_, err := svc.FindByCode(context.Background(), "abc")
 	require.ErrorIs(t, err, expectedErr)
 }
