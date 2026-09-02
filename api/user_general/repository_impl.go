@@ -10,6 +10,7 @@ import (
 
 	"miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/auth"
+	sharedb "miltechserver/api/shared/db"
 	"miltechserver/bootstrap"
 )
 
@@ -60,36 +61,33 @@ func (repo *RepositoryImpl) DeleteUser(
 	ctx context.Context,
 	uid string,
 ) error {
-	tx, err := repo.db.BeginTx(ctx, nil)
+	_, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (struct{}, error) {
+		if err := repo.accountCleaner.CleanupAccount(ctx, tx, uid); err != nil {
+			return struct{}{}, fmt.Errorf("clean up user PMCS account data: %w", err)
+		}
+
+		result, err := tx.ExecContext(
+			ctx,
+			`DELETE FROM users WHERE uid = $1`,
+			uid,
+		)
+		if err != nil {
+			return struct{}{}, fmt.Errorf("error deleting user: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return struct{}{}, fmt.Errorf("error getting rows affected: %w", err)
+		}
+
+		if rowsAffected == 0 {
+			return struct{}{}, ErrUserNotFound
+		}
+
+		return struct{}{}, nil
+	})
 	if err != nil {
-		return fmt.Errorf("begin user deletion transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	if err := repo.accountCleaner.CleanupAccount(ctx, tx, uid); err != nil {
-		return fmt.Errorf("clean up user PMCS account data: %w", err)
-	}
-
-	result, err := tx.ExecContext(
-		ctx,
-		`DELETE FROM users WHERE uid = $1`,
-		uid,
-	)
-	if err != nil {
-		return fmt.Errorf("error deleting user: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error getting rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return ErrUserNotFound
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit user deletion transaction: %w", err)
+		return err
 	}
 
 	slog.Info("user DELETED", "user_id", uid)
