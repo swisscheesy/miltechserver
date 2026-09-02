@@ -12,7 +12,7 @@ import (
 
 	"miltechserver/api/middleware"
 	"miltechserver/api/user_vehicles"
-	"miltechserver/bootstrap"
+	"miltechserver/tests/testutil"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler)
-	router.Use(testUserMiddleware())
+	router.Use(testutil.FakeAuthMiddleware())
 
 	group := router.Group("/api/v1/auth")
 
@@ -38,33 +38,6 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	user_vehicles.RegisterRoutes(deps, group)
 
 	return router
-}
-
-func testUserMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID := c.GetHeader("X-User-ID")
-		if userID == "" {
-			c.Next()
-			return
-		}
-
-		user := &bootstrap.User{
-			UserID:   userID,
-			Username: c.GetHeader("X-User-Name"),
-			Email:    c.GetHeader("X-User-Email"),
-			Role:     "user",
-		}
-
-		if user.Username == "" {
-			user.Username = "test-user"
-		}
-		if user.Email == "" {
-			user.Email = userID + "@example.com"
-		}
-
-		c.Set("user", user)
-		c.Next()
-	}
 }
 
 func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
