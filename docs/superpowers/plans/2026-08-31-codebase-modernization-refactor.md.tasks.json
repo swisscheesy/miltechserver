@@ -94,8 +94,8 @@
     {
       "id": 11,
       "subject": "Task 12: Promote WithWriteTx to shared db package",
-      "status": "pending",
-      "description": "**Goal:** persistence.WithWriteTx[T any] already exists in api/user_pmcs/persistence/retry.go with retry semantics. Promote a simplified variant (no retry, since the six Task-13 target files never had retry semantics) to a shared api/shared/db package. user_pmcs's own retry.go is NOT modified by this task.\n\n**Files:**\n- Create: api/shared/db/transaction.go\n- Test: api/shared/db/transaction_test.go\n\n**Acceptance Criteria:**\n- [ ] Promoted helper accepts a *sql.DB, a callback func(tx *sql.Tx) (T, error), returns (T, error), commits on success, rolls back on error.\n- [ ] Real-transaction test confirms both commit and rollback-on-error paths leave the database in the expected state.\n- [ ] api/user_pmcs/persistence/retry.go is unmodified.\n\n**Verify:** go test ./api/shared/db/... -v (requires test DB at 192.168.20.70) -> commit and rollback paths both pass.\n\n```json:metadata\n{\"files\": [\"api/shared/db/transaction.go\", \"api/shared/db/transaction_test.go\"], \"verifyCommand\": \"go test ./api/shared/db/... -v\", \"acceptanceCriteria\": [\"commit path returns the callback's result with no error\", \"rollback path discards the write and returns the original error\", \"user_pmcs/persistence/retry.go unmodified\"], \"modelTier\": \"standard\"}\n```"
+      "status": "completed",
+      "description": "**Goal:** Add shared db.WithTx transaction helper.\n\nComplete \u2014 see ledger."
     },
     {
       "id": 12,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T09:18:30.638028+00:00"
+  "lastUpdated": "2026-09-02T16:20:02.065484+00:00"
 }
