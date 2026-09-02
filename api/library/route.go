@@ -61,7 +61,7 @@ func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
 func (handler *Handler) getPMCSVehicles(c *gin.Context) {
 	slog.Info("GetPMCSVehicles endpoint called")
 
-	vehicles, err := handler.service.GetPMCSVehicles()
+	vehicles, err := handler.service.GetPMCSVehicles(c.Request.Context())
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS vehicles", "error", err)
 		response.Error(c, http.StatusInternalServerError, "Failed to retrieve PMCS vehicles")
@@ -85,7 +85,7 @@ func (handler *Handler) getPMCSDocuments(c *gin.Context) {
 		return
 	}
 
-	documents, err := handler.service.GetPMCSDocuments(vehicleName)
+	documents, err := handler.service.GetPMCSDocuments(c.Request.Context(), vehicleName)
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS documents",
 			"error", err,

@@ -18,5 +18,5 @@ type Service interface {
 	// SearchSummaries returns a paginated list of PS Magazine issues whose summaries
 	// contain query. Only the lines matching query are returned per file.
 	// query must be at least 3 characters. page is 1-indexed.
-	SearchSummaries(query string, page int) (*PSMagSearchResponse, error)
+	SearchSummaries(ctx context.Context, query string, page int) (*PSMagSearchResponse, error)
 }

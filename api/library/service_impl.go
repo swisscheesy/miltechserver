@@ -40,9 +40,7 @@ func NewService(
 }
 
 // GetPMCSVehicles retrieves all vehicle folders from the PMCS library in Azure Blob Storage.
-func (s *ServiceImpl) GetPMCSVehicles() (*PMCSVehiclesResponse, error) {
-	ctx := context.Background()
-
+func (s *ServiceImpl) GetPMCSVehicles(ctx context.Context) (*PMCSVehiclesResponse, error) {
 	slog.Info("Fetching PMCS vehicles from Azure Blob Storage",
 		"container", LibraryContainerName,
 		"prefix", PMCSPrefix)
@@ -101,9 +99,7 @@ func (s *ServiceImpl) GetPMCSVehicles() (*PMCSVehiclesResponse, error) {
 }
 
 // GetPMCSDocuments retrieves all PDF documents from a vehicle folder in Azure Blob Storage.
-func (s *ServiceImpl) GetPMCSDocuments(vehicleName string) (*DocumentsListResponse, error) {
-	ctx := context.Background()
-
+func (s *ServiceImpl) GetPMCSDocuments(ctx context.Context, vehicleName string) (*DocumentsListResponse, error) {
 	if strings.TrimSpace(vehicleName) == "" {
 		return nil, ErrEmptyVehicleName
 	}

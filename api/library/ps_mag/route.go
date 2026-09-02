@@ -140,7 +140,7 @@ func (h *Handler) searchSummaries(c *gin.Context) {
 
 	slog.Info("SearchPSMagSummaries endpoint called", "query", q, "page", page)
 
-	result, err := h.service.SearchSummaries(q, page)
+	result, err := h.service.SearchSummaries(c.Request.Context(), q, page)
 	if err != nil {
 		slog.Error("Failed to search PS Magazine summaries", "error", err)
 		response.Error(c, http.StatusInternalServerError, "Failed to search summaries")

@@ -214,7 +214,7 @@ func (s *ServiceImpl) ListIssues(ctx context.Context, page int, order string, ye
 
 // SearchSummaries returns a paginated list of PS Magazine issues whose summaries
 // contain query. Only the lines matching query are returned per file.
-func (s *ServiceImpl) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
+func (s *ServiceImpl) SearchSummaries(ctx context.Context, query string, page int) (*PSMagSearchResponse, error) {
 	if len(strings.TrimSpace(query)) < 3 {
 		return nil, ErrQueryTooShort
 	}

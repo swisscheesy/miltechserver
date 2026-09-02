@@ -251,7 +251,7 @@ func TestServiceSearchSummaries_ReturnsMatchingLines(t *testing.T) {
 	}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 1)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.TotalCount)
@@ -264,7 +264,7 @@ func TestServiceSearchSummaries_EmptyResults(t *testing.T) {
 	stub := &repoStub{rows: nil, total: 0}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 1)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.NoError(t, err)
 	require.Equal(t, 0, resp.TotalCount)
@@ -274,7 +274,7 @@ func TestServiceSearchSummaries_EmptyResults(t *testing.T) {
 func TestServiceSearchSummaries_QueryTooShort(t *testing.T) {
 	svc := &ServiceImpl{repo: &repoStub{}}
 
-	_, err := svc.SearchSummaries("ab", 1)
+	_, err := svc.SearchSummaries(context.Background(), "ab", 1)
 
 	require.ErrorIs(t, err, ErrQueryTooShort)
 }
@@ -282,7 +282,7 @@ func TestServiceSearchSummaries_QueryTooShort(t *testing.T) {
 func TestServiceSearchSummaries_InvalidPage(t *testing.T) {
 	svc := &ServiceImpl{repo: &repoStub{}}
 
-	_, err := svc.SearchSummaries("oil", 0)
+	_, err := svc.SearchSummaries(context.Background(), "oil", 0)
 
 	require.ErrorIs(t, err, ErrInvalidPage)
 }
@@ -291,7 +291,7 @@ func TestServiceSearchSummaries_RepoError(t *testing.T) {
 	stub := &repoStub{err: errors.New("db down")}
 	svc := &ServiceImpl{repo: stub}
 
-	_, err := svc.SearchSummaries("oil", 1)
+	_, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.Error(t, err)
 }
@@ -304,7 +304,7 @@ func TestServiceSearchSummaries_Pagination(t *testing.T) {
 	}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 2)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 2)
 
 	require.NoError(t, err)
 	require.Equal(t, 35, resp.TotalCount)

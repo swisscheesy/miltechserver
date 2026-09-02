@@ -50,6 +50,6 @@ func TestGenerateDownloadURLValidation(t *testing.T) {
 func TestGetPMCSDocumentsValidation(t *testing.T) {
 	svc := NewService(nil, nil, nil)
 
-	_, err := svc.GetPMCSDocuments("")
+	_, err := svc.GetPMCSDocuments(context.Background(), "")
 	require.ErrorIs(t, err, ErrEmptyVehicleName)
 }

@@ -30,7 +30,7 @@ func (s *serviceStub) GenerateDownloadURL(_ context.Context, blobPath string) (*
 	return &DownloadURLResponse{BlobPath: blobPath, DownloadURL: "https://example.com/sas", ExpiresAt: "2099-01-01T00:00:00Z"}, nil
 }
 
-func (s *serviceStub) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
+func (s *serviceStub) SearchSummaries(_ context.Context, query string, page int) (*PSMagSearchResponse, error) {
 	return s.searchResp, s.searchErr
 }
 
