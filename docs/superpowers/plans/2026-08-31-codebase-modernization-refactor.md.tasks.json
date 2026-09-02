@@ -44,11 +44,11 @@
     {
       "id": 6,
       "subject": "Task 7: Response consolidation - material_images",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3
       ],
-      "description": "**Goal:** material_images has 35 raw gin.H{}/c.JSON(http.StatusOK occurrences across flags/route.go, images/route.go, votes/route.go and zero use of response.StandardResponse. Migrate to response.OK()/response.Error(), preserving every existing field name and status code exactly.\n\n**Files:**\n- Modify: api/material_images/flags/route.go\n- Modify: api/material_images/images/route.go\n- Modify: api/material_images/votes/route.go\n\n**Acceptance Criteria:**\n- [ ] Golden-fixture snapshot of every endpoint's response body matches byte-for-byte after migration (or explicitly confirmed error-to-message key changes only).\n- [ ] grep -rn \"gin.H{\" api/material_images/ returns zero results.\n- [ ] Domain-specific typed responses (ImageFlagResponse, PaginatedImagesResponse, ImageVoteResponse) preserved as-is.\n\n**Verify:** go test -p 1 ./tests/material_images/... -v -> all pass; golden-fixture diff is empty.\n\n```json:metadata\n{\"files\": [\"api/material_images/flags/route.go\", \"api/material_images/images/route.go\", \"api/material_images/votes/route.go\"], \"verifyCommand\": \"go test -p 1 ./tests/material_images/... -v\", \"acceptanceCriteria\": [\"golden-fixture diff empty or explicitly confirmed error-to-message key changes only\", \"zero raw gin.H{} constructions remain\", \"domain-specific typed responses unchanged\"], \"modelTier\": \"standard\"}\n```"
+      "description": "**Goal:** Response consolidation for material_images.\n\nComplete \u2014 see ledger. Note: getFlags permanently excluded/unwrapped (approved exception)."
     },
     {
       "id": 7,
@@ -146,5 +146,5 @@
       "description": "**Goal:** api/route/shops_route.go's NewShopsRouter() wraps shops.RegisterRoutes() with no added behavior, unlike every other domain which calls RegisterRoutes directly. Inline the call and delete the wrapper file.\n\n**Files:**\n- Modify: api/route/route.go\n- Delete: api/route/shops_route.go\n\n**Acceptance Criteria:**\n- [ ] api/route/shops_route.go no longer exists.\n- [ ] route.go calls shops.RegisterRoutes(shops.Dependencies{...}, group) directly, matching every other domain.\n- [ ] Gin's registered route list is byte-identical before and after (same paths, methods, order).\n\n**Verify:** go build ./... && go test -p 1 ./tests/shops/... -v; route-list diff is empty.\n\n```json:metadata\n{\"files\": [\"api/route/route.go\", \"api/route/shops_route.go\"], \"verifyCommand\": \"go build ./... && go test -p 1 ./tests/shops/... -v\", \"acceptanceCriteria\": [\"shops_route.go deleted\", \"route.go calls shops.RegisterRoutes directly\", \"registered route list unchanged before and after\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-09-02T07:16:40.880416+00:00"
+  "lastUpdated": "2026-09-02T07:29:21.774060+00:00"
 }
