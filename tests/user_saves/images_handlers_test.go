@@ -11,6 +11,7 @@ import (
 
 	"miltechserver/api/user_saves/images"
 	"miltechserver/bootstrap"
+	"miltechserver/tests/testutil"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -49,7 +50,7 @@ func (service *imagesServiceStub) Get(ctx context.Context, user *bootstrap.User,
 func TestImagesHandlersUploadAndGet(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(testUserMiddleware())
+	router.Use(testutil.FakeAuthMiddleware())
 
 	service := &imagesServiceStub{
 		returnURL:  "https://example.com/img.jpg",
@@ -91,7 +92,7 @@ func TestImagesHandlersUploadAndGet(t *testing.T) {
 func TestImagesHandlersDeleteUnauthorized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.Use(testUserMiddleware())
+	router.Use(testutil.FakeAuthMiddleware())
 
 	service := &imagesServiceStub{}
 	group := router.Group("/api/v1/auth")
