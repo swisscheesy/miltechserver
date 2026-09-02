@@ -416,10 +416,11 @@ refactor:
   (ETags, strict JSON, structured error codes) for existing clients. Needs
   its own ADR before any code moves, following this project's existing ADR
   process.
-- **Collapsing the two rate-limiting systems** (the now-deleted-by-Pass-1
-  global limiter was never wired up, but `user_pmcs`'s bespoke limiter is
-  live) into one. Touches request-handling behavior under load — outside
-  this plan's "preserve behavior" constraint.
+- **Collapsing the two rate-limiting systems** (`api/middleware/rate_limiter.go`
+  is confirmed live — wired into 5+ route registrations — and `user_pmcs`
+  also has its own bespoke limiter; the two were never consolidated) into
+  one. Touches request-handling behavior under load — outside this plan's
+  "preserve behavior" constraint.
 - **Reconciling raw-SQL vs. Jet query-builder usage.** Looks like a
   deliberate escape hatch for complex CTE/aggregation queries in several
   domains, not an oversight. Worth an ADR documenting it as sanctioned, or

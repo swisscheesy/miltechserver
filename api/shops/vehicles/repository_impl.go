@@ -8,8 +8,8 @@ import (
 	"math"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
-	"miltechserver/api/shops/shared"
 	sharedb "miltechserver/api/shared/db"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/go-jet/jet/v2/postgres"
