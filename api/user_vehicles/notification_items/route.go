@@ -28,7 +28,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -39,24 +39,20 @@ func (handler *Handler) getByUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByNotification(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 
@@ -66,24 +62,20 @@ func (handler *Handler) getByNotification(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	itemID := c.Param("itemId")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item ID is required"})
+		response.Error(c, 400, "item ID is required")
 		return
 	}
 
@@ -93,17 +85,13 @@ func (handler *Handler) getByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsert(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -111,7 +99,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 	var item model.UserNotificationItems
 	if err := c.BindJSON(&item); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -127,7 +115,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 func (handler *Handler) upsertBatch(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -135,7 +123,7 @@ func (handler *Handler) upsertBatch(c *gin.Context) {
 	var items []model.UserNotificationItems
 	if err := c.BindJSON(&items); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -151,14 +139,14 @@ func (handler *Handler) upsertBatch(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	itemID := c.Param("itemId")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item ID is required"})
+		response.Error(c, 400, "item ID is required")
 		return
 	}
 
@@ -174,14 +162,14 @@ func (handler *Handler) delete(c *gin.Context) {
 func (handler *Handler) deleteAllByNotification(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 

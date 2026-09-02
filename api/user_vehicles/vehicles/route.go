@@ -26,7 +26,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -37,24 +37,20 @@ func (handler *Handler) getByUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
@@ -64,17 +60,13 @@ func (handler *Handler) getByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsert(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -82,7 +74,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 	var vehicle model.UserVehicle
 	if err := c.BindJSON(&vehicle); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -98,14 +90,14 @@ func (handler *Handler) upsert(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
@@ -121,7 +113,7 @@ func (handler *Handler) delete(c *gin.Context) {
 func (handler *Handler) deleteAll(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
