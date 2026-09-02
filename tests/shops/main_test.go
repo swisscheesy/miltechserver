@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"miltechserver/tests/testutil"
+
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -25,7 +27,7 @@ func TestMain(m *testing.M) {
 	}
 
 	var err error
-	testDB, err = sql.Open("postgres", "postgres://postgres:potato123@192.168.20.70/miltech_ng_test?sslmode=disable")
+	testDB, err = sql.Open("postgres", testutil.TestDSN)
 	if err != nil {
 		log.Fatalf("failed to open test database: %v", err)
 	}
