@@ -1,8 +1,6 @@
 package detailed
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 
 	"miltechserver/api/response"
@@ -30,9 +28,5 @@ func (handler *Handler) findDetailed(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    itemData,
-	})
+	response.OK(c, itemData)
 }

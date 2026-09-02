@@ -41,11 +41,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 				return
 			}
-			c.JSON(http.StatusOK, response.StandardResponse{
-				Status:  http.StatusOK,
-				Message: "",
-				Data:    results,
-			})
+			response.OK(c, results)
 			return
 		}
 
@@ -59,11 +55,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 			return
 		}
-		c.JSON(http.StatusOK, response.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "",
-			Data:    result,
-		})
+		response.OK(c, result)
 
 	case "part":
 		result, err := handler.service.FindShortByPart(value)
@@ -75,10 +67,6 @@ func (handler *Handler) findShort(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 			return
 		}
-		c.JSON(http.StatusOK, response.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "",
-			Data:    result,
-		})
+		response.OK(c, result)
 	}
 }
