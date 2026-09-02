@@ -109,9 +109,7 @@ func (h *Handler) listIssues(c *gin.Context) {
 	result, err := h.service.ListIssues(c.Request.Context(), page, order, year, issueNumber)
 	if err != nil {
 		slog.Error("Failed to list PS Magazine issues", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to list issues",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to list issues")
 		return
 	}
 
@@ -119,7 +117,7 @@ func (h *Handler) listIssues(c *gin.Context) {
 		"count", result.Count, "totalCount", result.TotalCount, "page", result.Page)
 
 	c.Header("Cache-Control", "public, max-age=300")
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
+	response.OK(c, result)
 }
 
 // searchSummaries returns PS Magazine issues whose summary contains the query phrase.
@@ -145,16 +143,14 @@ func (h *Handler) searchSummaries(c *gin.Context) {
 	result, err := h.service.SearchSummaries(q, page)
 	if err != nil {
 		slog.Error("Failed to search PS Magazine summaries", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to search summaries",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to search summaries")
 		return
 	}
 
 	slog.Info("Successfully searched PS Magazine summaries",
 		"query", q, "totalCount", result.TotalCount, "page", result.Page)
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
+	response.OK(c, result)
 }
 
 // generateDownloadURL returns a time-limited SAS URL for downloading a PS Magazine issue.
@@ -181,9 +177,7 @@ func (h *Handler) generateDownloadURL(c *gin.Context) {
 			})
 		default:
 			slog.Error("Failed to generate PS Magazine download URL", "error", err, "blobPath", blobPath)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to generate download URL",
-			})
+			response.Error(c, http.StatusInternalServerError, "Failed to generate download URL")
 		}
 		return
 	}
@@ -191,5 +185,5 @@ func (h *Handler) generateDownloadURL(c *gin.Context) {
 	slog.Info("Successfully generated PS Magazine download URL",
 		"blobPath", blobPath, "expiresAt", result.ExpiresAt)
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: result})
+	response.OK(c, result)
 }

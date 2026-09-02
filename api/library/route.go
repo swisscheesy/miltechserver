@@ -64,14 +64,12 @@ func (handler *Handler) getPMCSVehicles(c *gin.Context) {
 	vehicles, err := handler.service.GetPMCSVehicles()
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS vehicles", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve PMCS vehicles",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve PMCS vehicles")
 		return
 	}
 
 	slog.Info("Successfully retrieved PMCS vehicles", "count", vehicles.Count)
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: vehicles})
+	response.OK(c, vehicles)
 }
 
 // getPMCSDocuments returns a list of all PDF documents for a specific vehicle.
@@ -83,9 +81,7 @@ func (handler *Handler) getPMCSDocuments(c *gin.Context) {
 
 	if strings.TrimSpace(vehicleName) == "" {
 		slog.Warn("GetPMCSDocuments called with empty vehicle name")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Vehicle name is required",
-		})
+		response.Error(c, http.StatusBadRequest, "Vehicle name is required")
 		return
 	}
 
@@ -94,9 +90,7 @@ func (handler *Handler) getPMCSDocuments(c *gin.Context) {
 		slog.Error("Failed to retrieve PMCS documents",
 			"error", err,
 			"vehicle", vehicleName)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve PMCS documents",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve PMCS documents")
 		return
 	}
 
@@ -104,7 +98,7 @@ func (handler *Handler) getPMCSDocuments(c *gin.Context) {
 		"count", documents.Count,
 		"vehicle", vehicleName)
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: documents})
+	response.OK(c, documents)
 }
 
 // generateDownloadURL returns a time-limited SAS URL for downloading a document.
@@ -116,9 +110,7 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 
 	if strings.TrimSpace(blobPath) == "" {
 		slog.Warn("GenerateDownloadURL called with empty blob_path")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "blob_path query parameter is required",
-		})
+		response.Error(c, http.StatusBadRequest, "blob_path query parameter is required")
 		return
 	}
 
@@ -129,6 +121,8 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 			slog.Warn("Document not found for download",
 				"blobPath", blobPath,
 				"error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Document not found",
 				"details": "The requested document does not exist or is not accessible",
@@ -137,6 +131,8 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 			slog.Warn("Invalid blob path for download",
 				"blobPath", blobPath,
 				"error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid request",
 				"details": err.Error(),
@@ -145,9 +141,7 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 			slog.Error("Failed to generate download URL",
 				"error", err,
 				"blobPath", blobPath)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to generate download URL",
-			})
+			response.Error(c, http.StatusInternalServerError, "Failed to generate download URL")
 		}
 		return
 	}
@@ -156,5 +150,5 @@ func (handler *Handler) generateDownloadURL(c *gin.Context) {
 		"blobPath", blobPath,
 		"expiresAt", downloadURLResp.ExpiresAt)
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: downloadURLResp})
+	response.OK(c, downloadURLResp)
 }
