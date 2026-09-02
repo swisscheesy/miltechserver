@@ -2,6 +2,7 @@ package user_saves_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -25,21 +26,21 @@ type imagesServiceStub struct {
 	deleteCalled bool
 }
 
-func (service *imagesServiceStub) Upload(user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error) {
+func (service *imagesServiceStub) Upload(ctx context.Context, user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error) {
 	service.lastItemID = itemID
 	service.lastTable = tableType
 	service.lastImage = imageData
 	return service.returnURL, nil
 }
 
-func (service *imagesServiceStub) Delete(user *bootstrap.User, itemID string, tableType string) error {
+func (service *imagesServiceStub) Delete(ctx context.Context, user *bootstrap.User, itemID string, tableType string) error {
 	service.deleteCalled = true
 	service.lastItemID = itemID
 	service.lastTable = tableType
 	return nil
 }
 
-func (service *imagesServiceStub) Get(user *bootstrap.User, itemID string, tableType string) ([]byte, string, error) {
+func (service *imagesServiceStub) Get(ctx context.Context, user *bootstrap.User, itemID string, tableType string) ([]byte, string, error) {
 	service.lastItemID = itemID
 	service.lastTable = tableType
 	return service.returnData, service.returnType, nil

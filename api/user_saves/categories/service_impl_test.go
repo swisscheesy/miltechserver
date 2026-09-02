@@ -1,6 +1,7 @@
 package categories
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -102,7 +103,7 @@ var _ images.Repository = (*categoriesImagesStub)(nil)
 func TestServiceImplGetByUserRequiresUser(t *testing.T) {
 	service := NewService(&categoriesRepoStub{}, &categoryItemsStub{}, &categoriesImagesStub{})
 
-	_, err := service.GetByUser(nil)
+	_, err := service.GetByUser(context.Background(), nil)
 	require.ErrorIs(t, err, shared.ErrUserNotFound)
 }
 
@@ -112,7 +113,7 @@ func TestServiceImplDeleteCallsRepoOnItemsError(t *testing.T) {
 	service := NewService(repo, itemsRepo, &categoriesImagesStub{})
 
 	category := model.UserItemCategory{ID: "cat"}
-	err := service.Delete(&bootstrap.User{UserID: "user"}, category)
+	err := service.Delete(context.Background(), &bootstrap.User{UserID: "user"}, category)
 	require.NoError(t, err)
 	require.True(t, repo.deleteCalled)
 }
@@ -124,7 +125,7 @@ func TestServiceImplDeleteAllDeletesImages(t *testing.T) {
 	imagesRepo := &categoriesImagesStub{}
 	service := NewService(repo, itemsRepo, imagesRepo)
 
-	err := service.DeleteAll(&bootstrap.User{UserID: "user"})
+	err := service.DeleteAll(context.Background(), &bootstrap.User{UserID: "user"})
 	require.NoError(t, err)
 	require.True(t, repo.deleteAll)
 	require.ElementsMatch(t, []string{"item", "cat"}, imagesRepo.deletedIDs)

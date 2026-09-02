@@ -1,13 +1,14 @@
 package categories
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 )
 
 type Service interface {
-	GetByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
-	Upsert(user *bootstrap.User, category model.UserItemCategory) error
-	Delete(user *bootstrap.User, category model.UserItemCategory) error
-	DeleteAll(user *bootstrap.User) error
+	GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemCategory, error)
+	Upsert(ctx context.Context, user *bootstrap.User, category model.UserItemCategory) error
+	Delete(ctx context.Context, user *bootstrap.User, category model.UserItemCategory) error
+	DeleteAll(ctx context.Context, user *bootstrap.User) error
 }

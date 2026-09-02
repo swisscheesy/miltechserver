@@ -1,6 +1,7 @@
 package categories
 
 import (
+	"context"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/user_saves/categories/items"
@@ -19,7 +20,7 @@ func NewService(repo Repository, itemsRepo items.Repository, imagesRepo images.R
 	return &ServiceImpl{repo: repo, itemsRepo: itemsRepo, imagesRepo: imagesRepo}
 }
 
-func (service *ServiceImpl) GetByUser(user *bootstrap.User) ([]model.UserItemCategory, error) {
+func (service *ServiceImpl) GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemCategory, error) {
 	if user == nil {
 		return nil, shared.ErrUserNotFound
 	}
@@ -27,7 +28,7 @@ func (service *ServiceImpl) GetByUser(user *bootstrap.User) ([]model.UserItemCat
 	return service.repo.GetByUser(user)
 }
 
-func (service *ServiceImpl) Upsert(user *bootstrap.User, category model.UserItemCategory) error {
+func (service *ServiceImpl) Upsert(ctx context.Context, user *bootstrap.User, category model.UserItemCategory) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}
@@ -35,7 +36,7 @@ func (service *ServiceImpl) Upsert(user *bootstrap.User, category model.UserItem
 	return service.repo.Upsert(user, category)
 }
 
-func (service *ServiceImpl) Delete(user *bootstrap.User, category model.UserItemCategory) error {
+func (service *ServiceImpl) Delete(ctx context.Context, user *bootstrap.User, category model.UserItemCategory) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}
@@ -71,7 +72,7 @@ func (service *ServiceImpl) Delete(user *bootstrap.User, category model.UserItem
 	return nil
 }
 
-func (service *ServiceImpl) DeleteAll(user *bootstrap.User) error {
+func (service *ServiceImpl) DeleteAll(ctx context.Context, user *bootstrap.User) error {
 	if user == nil {
 		return shared.ErrUserNotFound
 	}

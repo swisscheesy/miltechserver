@@ -30,7 +30,7 @@ func (handler *Handler) getItemCategoriesByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -53,7 +53,7 @@ func (handler *Handler) upsertItemCategoryByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Upsert(user, itemCategory)
+	err = handler.service.Upsert(c.Request.Context(), user, itemCategory)
 	if err != nil {
 		c.Error(err)
 		return
@@ -76,7 +76,7 @@ func (handler *Handler) deleteItemCategory(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, itemCategory)
+	err = handler.service.Delete(c.Request.Context(), user, itemCategory)
 	if err != nil {
 		c.Error(err)
 		return
@@ -93,7 +93,7 @@ func (handler *Handler) deleteAllItemCategories(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return

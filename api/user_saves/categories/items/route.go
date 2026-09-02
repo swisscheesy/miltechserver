@@ -38,7 +38,7 @@ func (handler *Handler) getCategorizedItemsByCategory(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByCategory(user, itemCategory)
+	result, err := handler.service.GetByCategory(c.Request.Context(), user, itemCategory)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -55,7 +55,7 @@ func (handler *Handler) getCategorizedItemsByUser(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
@@ -78,7 +78,7 @@ func (handler *Handler) deleteCategorizedItemByCategoryId(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Delete(user, categorizedItem)
+	err = handler.service.Delete(c.Request.Context(), user, categorizedItem)
 	if err != nil {
 		c.Error(err)
 		return
@@ -95,7 +95,7 @@ func (handler *Handler) deleteAllCategorizedItems(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -118,7 +118,7 @@ func (handler *Handler) upsertCategorizedItemByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.Upsert(user, categorizedItem)
+	err = handler.service.Upsert(c.Request.Context(), user, categorizedItem)
 	if err != nil {
 		c.Error(err)
 		return
@@ -141,7 +141,7 @@ func (handler *Handler) upsertCategorizedItemListByUser(c *gin.Context) {
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, categorizedItems)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, categorizedItems)
 	if err != nil {
 		c.Error(err)
 		return
