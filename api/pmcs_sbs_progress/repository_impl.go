@@ -8,6 +8,7 @@ import (
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
+	sharedb "miltechserver/api/shared/db"
 	"miltechserver/bootstrap"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -266,25 +267,21 @@ func (repo *RepositoryImpl) UpsertFault(user *bootstrap.User, inspection model.U
 		UserPmcsFaults.UpdatedAt.SET(TimestampzT(now)),
 	)).RETURNING(UserPmcsFaults.AllColumns)
 
-	tx, err := repo.db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("begin upsert pmcs sbs fault transaction: %w", err)
-	}
-	defer tx.Rollback()
+	saved, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (*model.UserPmcsFaults, error) {
+		if _, err := ensureInspection(tx, inspection); err != nil {
+			return nil, err
+		}
 
-	if _, err := ensureInspection(tx, inspection); err != nil {
+		var saved model.UserPmcsFaults
+		if err := stmt.Query(tx, &saved); err != nil {
+			return nil, fmt.Errorf("upsert pmcs sbs fault: %w", err)
+		}
+		return &saved, nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	var saved model.UserPmcsFaults
-	if err := stmt.Query(tx, &saved); err != nil {
-		return nil, fmt.Errorf("upsert pmcs sbs fault: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit upsert pmcs sbs fault transaction: %w", err)
-	}
-	return &saved, nil
+	return saved, nil
 }
 
 func (repo *RepositoryImpl) DeleteFault(user *bootstrap.User, equipmentID string, key FaultKey) error {
