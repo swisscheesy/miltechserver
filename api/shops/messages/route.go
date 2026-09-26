@@ -6,6 +6,7 @@ import (
 
 func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	handler := Handler{service: service}
+	registerSyncRoutes(router, service)
 	router.POST("/shops/messages", handler.CreateShopMessage)
 	router.GET("/shops/:shop_id/messages", handler.GetShopMessages)
 	router.GET("/shops/:shop_id/messages/paginated", handler.GetShopMessagesPaginated)

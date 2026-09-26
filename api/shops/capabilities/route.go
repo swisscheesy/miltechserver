@@ -19,5 +19,7 @@ func Get(c *gin.Context) {
 		return
 	}
 	// Activation requires released-client and serving-instance evidence.
+	// message_sync also requires verified counter backfill and all-writer allocation;
+	// the additive message sync service remains closed while F1 is blocked.
 	response.OK(c, gin.H{"contract_version": 2, "typed_errors": false, "atomic_notification_save": false, "service_dates": false, "service_reads": false, "message_sync": false})
 }
