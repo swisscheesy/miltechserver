@@ -164,6 +164,7 @@ func TestAtomicCancellationAndForeignItems(t *testing.T) {
 }
 
 type atomicDriverState struct {
+	connections           int
 	normalizedCommittedAt time.Time
 	missingReceipt        bool
 
@@ -191,6 +192,7 @@ type atomicDriverState struct {
 type atomicConnector struct{ state *atomicDriverState }
 
 func (c atomicConnector) Connect(context.Context) (driver.Conn, error) {
+	c.state.connections++
 	return &atomicConn{state: c.state}, nil
 }
 func (c atomicConnector) Driver() driver.Driver { return atomicDriver{} }
@@ -393,13 +395,13 @@ func TestLegacyDeleteRequiresLockedMembership(t *testing.T) {
 	}
 }
 
-func TestAtomicRealRouteContractAndReceipt(t *testing.T) {
+func TestAtomicRealRouteDisabledBeforeDatabaseAccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {
 		name, header string
 		invalid      bool
 		status       int
-	}{{"legacy", "", false, 400}, {"unknown", "3", false, 400}, {"invalid", "2", true, 400}, {"save", "2", false, 200}} {
+	}{{"legacy", "", false, 400}, {"unknown", "3", false, 400}, {"invalid", "2", true, 400}, {"disabled", "2", false, 503}} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := &atomicDriverState{}
 			db := sql.OpenDB(atomicConnector{state})
@@ -419,18 +421,23 @@ func TestAtomicRealRouteContractAndReceipt(t *testing.T) {
 			if rec.Code != tc.status {
 				t.Fatalf("response %d %s", rec.Code, rec.Body.String())
 			}
-			if tc.status != 200 {
-				if state.businessWrites != 0 {
-					t.Fatal("invalid route wrote data")
+			// A fresh sql.DB cannot start a transaction or execute SQL without
+			// opening a driver connection first.
+			if state.connections != 0 {
+				t.Fatalf("disabled route accessed database: %+v", state)
+			}
+			if tc.status == http.StatusServiceUnavailable {
+				var envelope struct {
+					Status int    `json:"status"`
+					Code   string `json:"code"`
+					Data   any    `json:"data"`
 				}
-				return
-			}
-			var envelope struct{ Data map[string]any }
-			if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-				t.Fatal(err)
-			}
-			if len(envelope.Data) != 4 || envelope.Data["operation_id"] != r.OperationID || envelope.Data["replayed"] != false {
-				t.Fatalf("not receipt-only: %v", envelope.Data)
+				if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+					t.Fatal(err)
+				}
+				if envelope.Status != 503 || envelope.Code != "unsupported_contract" || envelope.Data != nil {
+					t.Fatalf("expected typed unavailable response without receipt: %s", rec.Body.String())
+				}
 			}
 		})
 	}
