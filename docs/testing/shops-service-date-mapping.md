@@ -30,3 +30,24 @@ Both directions remain **undecided**. SQL casts, UTC truncation, viewer conversi
 5. Generate Jet/Drift artifacts through configured tools, run historical upgrades and hidden PMCS/FK checks, and prove every serving writer supports the mapping before capability activation.
 
 Until these gates pass, no scheduled-date column, backfill, database migration, versioned endpoint, legacy adapter change or service-date capability activation is part of S1 delivery.
+
+## E3 evidence refresh — 2026-09-26
+
+At server source `d50a691fe59174f4e3e5d495a83746adafcc7d9e` and mobile
+source `97f2b5317b6d8bfe62f346de90f7c4af6323c2fd`, both mapping directions
+remain undecided. No additional owner schema/session/writer samples or released
+artifacts were supplied. No scheduled-date storage, backfill, versioned date
+adapter, server migration, trigger or index was added during E3.
+
+Fresh safe Go unit/race checks include the standalone parser and pass; fresh
+Flutter acceptance/full suites include `shop_service_date_test.dart` and
+`local completion persists, omitted copy retains, explicit null reopens` against
+real Drift and pass. That proves parser and completion-null behavior only.
+`service_dates` and `service_reads` remain false. S2 independent calendar/alerts/
+history reads and S3 resolver/UI consumers remain deferred and unverified.
+
+The isolated server race wrapper exited 1 before provisioning because the approved
+baseline/migration boundary is absent. Physical fresh/populated upgrades,
+legacy-to-date/date-to-legacy preservation, ambiguous-row handling, old/new
+cross-writes and old-server expanded-schema rollback remain BLOCKED. The full
+E3 coverage map is in the mobile remediation verification report.
