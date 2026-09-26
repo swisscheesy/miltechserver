@@ -208,3 +208,31 @@ type UpdateShopSettingsRequest struct {
 	AdminOnlyLists *bool `json:"admin_only_lists,omitempty"`
 	// Future settings will be added here as optional pointers
 }
+
+// NotificationSaveRequest replaces the complete direct-item set. Linked-list
+// items are represented solely by Attachment and never copied into Items.
+type NotificationSaveRequest struct {
+	OperationID    string                     `json:"operation_id"`
+	ShopID         string                     `json:"shop_id"`
+	VehicleID      string                     `json:"vehicle_id"`
+	NotificationID *string                    `json:"notification_id"`
+	Details        NotificationSaveDetails    `json:"details"`
+	Attachment     NotificationSaveAttachment `json:"attachment"`
+	Items          []NotificationSaveItem     `json:"items"`
+}
+type NotificationSaveDetails struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	IsCompleted bool   `json:"is_completed"`
+}
+type NotificationSaveAttachment struct {
+	Intent string  `json:"intent"`
+	ListID *string `json:"list_id"`
+}
+type NotificationSaveItem struct {
+	ID           string `json:"id"`
+	Niin         string `json:"niin"`
+	Nomenclature string `json:"nomenclature"`
+	Quantity     int32  `json:"quantity"`
+}

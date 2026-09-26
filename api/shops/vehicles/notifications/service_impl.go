@@ -353,6 +353,9 @@ func (service *ServiceImpl) recordNotificationChange(
 	notificationType string,
 	vehicleAdmin string,
 ) {
+	if _, ok := service.repo.(interface{ OwnsLegacyNotificationAudits() }); ok {
+		return
+	}
 	change := model.ShopVehicleNotificationChanges{
 		NotificationID:    &notificationID,
 		ShopID:            shopID,

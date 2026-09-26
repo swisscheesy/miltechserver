@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -30,4 +31,18 @@ func WithTx[T any](conn *sql.DB, fn func(tx *sql.Tx) (T, error)) (T, error) {
 	}
 
 	return result, nil
+}
+
+// WithTxContext binds every statement and the transaction lifetime to ctx.
+// A commit error is ambiguous: callers must resolve it with the same operation ID.
+func WithTxContext(ctx context.Context, conn *sql.DB, fn func(*sql.Tx) error) error {
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

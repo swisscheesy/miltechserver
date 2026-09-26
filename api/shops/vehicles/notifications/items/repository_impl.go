@@ -2,7 +2,6 @@ package items
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
@@ -20,23 +19,11 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) CreateNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
-	stmt := ShopNotificationItems.INSERT(
-		ShopNotificationItems.ID,
-		ShopNotificationItems.ShopID,
-		ShopNotificationItems.NotificationID,
-		ShopNotificationItems.Niin,
-		ShopNotificationItems.Nomenclature,
-		ShopNotificationItems.Quantity,
-		ShopNotificationItems.SaveTime,
-	).MODEL(item).RETURNING(ShopNotificationItems.AllColumns)
-
-	var createdItem model.ShopNotificationItems
-	err := stmt.Query(repo.db, &createdItem)
+	created, err := repo.createLegacyItems(user, []model.ShopNotificationItems{item})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create notification item: %w", err)
+		return nil, err
 	}
-
-	return &createdItem, nil
+	return &created[0], nil
 }
 
 func (repo *RepositoryImpl) GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {
@@ -107,69 +94,15 @@ func (repo *RepositoryImpl) GetNotificationItemsByIDs(user *bootstrap.User, item
 }
 
 func (repo *RepositoryImpl) CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
-	if len(items) == 0 {
-		return []model.ShopNotificationItems{}, nil
-	}
-
-	stmt := ShopNotificationItems.INSERT(
-		ShopNotificationItems.ID,
-		ShopNotificationItems.ShopID,
-		ShopNotificationItems.NotificationID,
-		ShopNotificationItems.Niin,
-		ShopNotificationItems.Nomenclature,
-		ShopNotificationItems.Quantity,
-		ShopNotificationItems.SaveTime,
-	).MODELS(items).RETURNING(ShopNotificationItems.AllColumns)
-
-	var createdItems []model.ShopNotificationItems
-	err := stmt.Query(repo.db, &createdItems)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create notification items: %w", err)
-	}
-
-	return createdItems, nil
+	return repo.createLegacyItems(user, items)
 }
 
 func (repo *RepositoryImpl) DeleteNotificationItem(user *bootstrap.User, itemID string) error {
-	stmt := ShopNotificationItems.DELETE().
-		WHERE(ShopNotificationItems.ID.EQ(String(itemID)))
-
-	result, err := stmt.Exec(repo.db)
-	if err != nil {
-		return fmt.Errorf("failed to delete notification item: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("notification item not found")
-	}
-
-	return nil
+	return repo.deleteLegacyItems(user, []string{itemID}, true)
 }
 
 func (repo *RepositoryImpl) DeleteNotificationItemList(user *bootstrap.User, itemIDs []string) error {
-	if len(itemIDs) == 0 {
-		return nil
-	}
-
-	var expressions []Expression
-	for _, id := range itemIDs {
-		expressions = append(expressions, String(id))
-	}
-
-	stmt := ShopNotificationItems.DELETE().
-		WHERE(ShopNotificationItems.ID.IN(expressions...))
-
-	_, err := stmt.Exec(repo.db)
-	if err != nil {
-		return fmt.Errorf("failed to delete notification items: %w", err)
-	}
-
-	return nil
+	return repo.deleteLegacyItems(user, itemIDs, false)
 }
 
 func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {

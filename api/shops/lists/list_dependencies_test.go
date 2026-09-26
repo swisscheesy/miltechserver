@@ -45,10 +45,11 @@ type dependencyConn struct {
 func (*dependencyConn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("unexpected prepare")
 }
-func (*dependencyConn) Close() error                { return nil }
-func (c *dependencyConn) Begin() (driver.Tx, error) { return c, nil }
-func (c *dependencyConn) Commit() error             { c.committed = true; return nil }
-func (*dependencyConn) Rollback() error             { return nil }
+func (*dependencyConn) Close() error                                                   { return nil }
+func (c *dependencyConn) BeginTx(context.Context, driver.TxOptions) (driver.Tx, error) { return c, nil }
+func (c *dependencyConn) Begin() (driver.Tx, error)                                    { return c, nil }
+func (c *dependencyConn) Commit() error                                                { c.committed = true; return nil }
+func (*dependencyConn) Rollback() error                                                { return nil }
 func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
 	c.queries = append(c.queries, q)
 	if q == c.failQuery {
@@ -82,6 +83,10 @@ func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver
 		values = []driver.Value{"old-list", "user"}
 	case strings.HasPrefix(q, "SELECT attached_shop_list"):
 		values = []driver.Value{"old-list"}
+	case strings.HasPrefix(q, "SELECT shop_id,vehicle_id"):
+		values = []driver.Value{"shop", "vehicle"}
+	case strings.HasPrefix(q, "SELECT shop_id,admin"):
+		values = []driver.Value{"shop", "admin"}
 	case strings.HasPrefix(q, "SELECT shop_id,created_by"):
 		values = []driver.Value{"shop", "user"}
 	case strings.HasPrefix(q, "SELECT shop_id"):
@@ -301,11 +306,11 @@ func TestListDependenciesLookupErrors(t *testing.T) {
 			_, err := core.NewRepository(db).Update(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ListID: "list"})
 			return err
 		}},
-		{"create-notification-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1", "vehicle_not_found", func(db *sql.DB) error {
+		{"create-notification-vehicle", "SELECT shop_id,admin FROM shop_vehicle WHERE id=$1 FOR UPDATE", "vehicle_not_found", func(db *sql.DB) error {
 			_, err := notifications.NewRepository(db).CreateVehicleNotification(&bootstrap.User{UserID: "user"}, model.ShopVehicleNotifications{ShopID: "shop", VehicleID: "vehicle"})
 			return err
 		}},
-		{"update-notification-shop", "SELECT shop_id FROM shop_vehicle_notifications WHERE id=$1", "notification_not_found", func(db *sql.DB) error {
+		{"update-notification-shop", "SELECT shop_id,vehicle_id FROM shop_vehicle_notifications WHERE id=$1", "notification_not_found", func(db *sql.DB) error {
 			return notifications.NewRepository(db).UpdateVehicleNotification(&bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}})
 		}},
 		{"update-notification-attachment", "SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2", "notification_not_found", func(db *sql.DB) error {

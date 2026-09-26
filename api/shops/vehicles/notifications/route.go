@@ -6,6 +6,7 @@ import (
 
 func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	handler := Handler{service: service}
+	router.POST("/shops/vehicles/notifications/save", handler.SaveAtomic)
 	router.POST("/shops/vehicles/notifications", handler.CreateVehicleNotification)
 	router.GET("/shops/vehicles/:vehicle_id/notifications", handler.GetVehicleNotifications)
 	router.GET("/shops/vehicles/:vehicle_id/notifications-with-items", handler.GetVehicleNotificationsWithItems)

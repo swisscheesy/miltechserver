@@ -1,7 +1,6 @@
 package notifications
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -25,53 +24,7 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) CreateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	if _, _, err := shared.LockShopMutation(context.Background(), tx, notification.ShopID, user.UserID); err != nil {
-		return nil, err
-	}
-	if notification.AttachedShopList != nil {
-		if err := shared.LockReferencedLists(context.Background(), tx, notification.ShopID, *notification.AttachedShopList); err != nil {
-			return nil, err
-		}
-	}
-	var vehicleShop string
-	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle WHERE id=$1`, notification.VehicleID).Scan(&vehicleShop); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, shared.ErrVehicleNotFound
-		}
-		return nil, &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify vehicle", Status: 500, Cause: err}
-	}
-	if vehicleShop != notification.ShopID {
-		return nil, shared.ErrShopAccessDenied
-	}
-
-	stmt := ShopVehicleNotifications.INSERT(
-		ShopVehicleNotifications.ID,
-		ShopVehicleNotifications.ShopID,
-		ShopVehicleNotifications.VehicleID,
-		ShopVehicleNotifications.Title,
-		ShopVehicleNotifications.Description,
-		ShopVehicleNotifications.Type,
-		ShopVehicleNotifications.Completed,
-		ShopVehicleNotifications.AttachedShopList,
-		ShopVehicleNotifications.SaveTime,
-		ShopVehicleNotifications.LastUpdated,
-	).MODEL(notification).RETURNING(ShopVehicleNotifications.AllColumns)
-
-	var createdNotification model.ShopVehicleNotifications
-	err = stmt.Query(tx, &createdNotification)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create vehicle notification: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return &createdNotification, nil
+	return repo.createLegacyNotification(user, notification)
 }
 
 func (repo *RepositoryImpl) GetVehicleNotifications(user *bootstrap.User, vehicleID string) ([]model.ShopVehicleNotifications, error) {
@@ -187,113 +140,11 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 }
 
 func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error {
-	notification := update.Notification
-
-	tx, err := repo.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var shopID string
-	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle_notifications WHERE id=$1`, notification.ID).Scan(&shopID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return shared.ErrNotificationNotFound
-		}
-		return &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify notification", Status: 500, Cause: err}
-	}
-	if _, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID); err != nil {
-		return err
-	}
-	var oldList sql.NullString
-	if err := tx.QueryRow(`SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2`, notification.ID, shopID).Scan(&oldList); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return shared.ErrNotificationNotFound
-		}
-		return &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify notification", Status: 500, Cause: err}
-	}
-	listIDs := []string{oldList.String}
-	if update.AttachedShopListSet && update.AttachedShopList != nil {
-		listIDs = append(listIDs, *update.AttachedShopList)
-	}
-	if err := shared.LockReferencedLists(context.Background(), tx, shopID, listIDs...); err != nil {
-		return err
-	}
-
-	var result sql.Result
-	if update.AttachedShopListSet {
-		rawSQL := `
-			UPDATE shop_vehicle_notifications
-			SET title = $1,
-				description = $2,
-				type = $3,
-				completed = $4,
-				last_updated = $5,
-				attached_shop_list = $6
-			WHERE id = $7
-		`
-
-		result, err = tx.Exec(
-			rawSQL,
-			notification.Title,
-			notification.Description,
-			notification.Type,
-			notification.Completed,
-			notification.LastUpdated,
-			update.AttachedShopList,
-			notification.ID,
-		)
-	} else {
-		stmt := ShopVehicleNotifications.UPDATE(
-			ShopVehicleNotifications.Title,
-			ShopVehicleNotifications.Description,
-			ShopVehicleNotifications.Type,
-			ShopVehicleNotifications.Completed,
-			ShopVehicleNotifications.LastUpdated,
-		).SET(
-			ShopVehicleNotifications.Title.SET(String(notification.Title)),
-			ShopVehicleNotifications.Description.SET(String(notification.Description)),
-			ShopVehicleNotifications.Type.SET(String(notification.Type)),
-			ShopVehicleNotifications.Completed.SET(Bool(notification.Completed)),
-			ShopVehicleNotifications.LastUpdated.SET(TimestampzT(notification.LastUpdated)),
-		).WHERE(ShopVehicleNotifications.ID.EQ(String(notification.ID)))
-
-		result, err = stmt.Exec(tx)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to update vehicle notification: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("notification not found")
-	}
-
-	return tx.Commit()
+	return repo.updateLegacyNotification(user, update)
 }
 
 func (repo *RepositoryImpl) DeleteVehicleNotification(user *bootstrap.User, notificationID string) error {
-	stmt := ShopVehicleNotifications.DELETE().
-		WHERE(ShopVehicleNotifications.ID.EQ(String(notificationID)))
-
-	result, err := stmt.Exec(repo.db)
-	if err != nil {
-		return fmt.Errorf("failed to delete vehicle notification: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("notification not found")
-	}
-
-	return nil
+	return repo.deleteLegacyNotification(user, notificationID)
 }
 
 func (repo *RepositoryImpl) CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error {
