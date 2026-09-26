@@ -1,10 +1,12 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
+	shopshared "miltechserver/api/shops/shared"
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -23,6 +25,25 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) Create(user *bootstrap.User, service model.EquipmentServices) (*model.EquipmentServices, error) {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, _, err := shopshared.LockShopMutation(context.Background(), tx, service.ShopID, user.UserID); err != nil {
+		return nil, err
+	}
+	if err := shopshared.LockReferencedLists(context.Background(), tx, service.ShopID, service.ListID); err != nil {
+		return nil, err
+	}
+	var vehicleShop string
+	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle WHERE id=$1`, service.EquipmentID).Scan(&vehicleShop); err != nil {
+		return nil, shopshared.ErrVehicleNotFound
+	}
+	if vehicleShop != service.ShopID {
+		return nil, shopshared.ErrShopAccessDenied
+	}
+
 	stmt := EquipmentServices.INSERT(
 		EquipmentServices.ID,
 		EquipmentServices.ShopID,
@@ -40,11 +61,14 @@ func (repo *RepositoryImpl) Create(user *bootstrap.User, service model.Equipment
 	).MODEL(service).RETURNING(EquipmentServices.AllColumns)
 
 	var createdService model.EquipmentServices
-	err := stmt.Query(repo.db, &createdService)
+	err = stmt.Query(tx, &createdService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create equipment service: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	slog.Info("Equipment service created", "service_id", service.ID, "created_by", user.UserID)
 	return &createdService, nil
 }
@@ -64,6 +88,30 @@ func (repo *RepositoryImpl) GetByID(user *bootstrap.User, serviceID string) (*mo
 }
 
 func (repo *RepositoryImpl) Update(user *bootstrap.User, service model.EquipmentServices) (*model.EquipmentServices, error) {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var shopID string
+	if err := tx.QueryRow(`SELECT shop_id FROM equipment_services WHERE id=$1`, service.ID).Scan(&shopID); err != nil {
+		return nil, errors.New("equipment service not found")
+	}
+	admin, _, err := shopshared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return nil, err
+	}
+	var oldList, creator string
+	if err := tx.QueryRow(`SELECT list_id,created_by FROM equipment_services WHERE id=$1 AND shop_id=$2`, service.ID, shopID).Scan(&oldList, &creator); err != nil {
+		return nil, errors.New("equipment service not found")
+	}
+	if creator != user.UserID && !admin {
+		return nil, shopshared.ErrShopAccessDenied
+	}
+	if err := shopshared.LockReferencedLists(context.Background(), tx, shopID, oldList, service.ListID); err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	service.UpdatedAt = now
 
@@ -84,11 +132,14 @@ func (repo *RepositoryImpl) Update(user *bootstrap.User, service model.Equipment
 	).RETURNING(EquipmentServices.AllColumns)
 
 	var updatedService model.EquipmentServices
-	err := stmt.Query(repo.db, &updatedService)
+	err = stmt.Query(tx, &updatedService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update equipment service: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	slog.Info("Equipment service updated", "service_id", service.ID, "updated_by", user.UserID)
 	return &updatedService, nil
 }

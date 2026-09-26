@@ -214,6 +214,21 @@ func (repo *RepositoryImpl) DeleteShopList(user *bootstrap.User, listID string) 
 		return err
 	}
 
+	var inUse bool
+	if err := tx.QueryRowContext(context.Background(), `SELECT EXISTS(SELECT 1 FROM equipment_services WHERE list_id=$1)`, listID).Scan(&inUse); err != nil {
+		return fmt.Errorf("failed to check list dependencies: %w", err)
+	}
+	if inUse {
+		return errors.New("list is in use")
+	}
+	// Preserve notifications even on existing schemas. The FK migration remains
+	// required for older binaries and other writers before rollout.
+	if _, err := ShopVehicleNotifications.UPDATE(ShopVehicleNotifications.AttachedShopList).
+		SET(ShopVehicleNotifications.AttachedShopList.SET(StringExp(NULL))).
+		WHERE(ShopVehicleNotifications.AttachedShopList.EQ(String(listID))).Exec(tx); err != nil {
+		return fmt.Errorf("failed to detach list notifications: %w", err)
+	}
+
 	stmt := ShopLists.DELETE().
 		WHERE(ShopLists.ID.EQ(String(listID)))
 

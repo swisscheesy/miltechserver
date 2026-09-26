@@ -251,12 +251,29 @@ func (repo *RepositoryImpl) GetShopMemberCount(user *bootstrap.User, shopID stri
 }
 
 func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID); err != nil {
+		return err
+	}
+	var memberCount int
+	if err := tx.QueryRow(`SELECT count(*) FROM shop_members WHERE shop_id=$1`, shopID).Scan(&memberCount); err != nil {
+		return fmt.Errorf("failed to recheck shop member count: %w", err)
+	}
+	if memberCount != 1 {
+		return errors.New("shop membership changed; retry leaving the shop")
+	}
+
 	stmt := Shops.DELETE().WHERE(
 		Shops.ID.EQ(String(shopID)).
 			AND(Shops.CreatedBy.EQ(String(user.UserID))),
 	)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop: %w", err)
 	}
@@ -271,7 +288,7 @@ func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) erro
 	}
 
 	slog.Info("Shop deleted from database", "shop_id", shopID, "deleted_by", user.UserID)
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {

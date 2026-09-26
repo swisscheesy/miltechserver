@@ -1,6 +1,7 @@
 package notifications
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -24,6 +25,27 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) CreateVehicleNotification(user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if _, _, err := shared.LockShopMutation(context.Background(), tx, notification.ShopID, user.UserID); err != nil {
+		return nil, err
+	}
+	if notification.AttachedShopList != nil {
+		if err := shared.LockReferencedLists(context.Background(), tx, notification.ShopID, *notification.AttachedShopList); err != nil {
+			return nil, err
+		}
+	}
+	var vehicleShop string
+	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle WHERE id=$1`, notification.VehicleID).Scan(&vehicleShop); err != nil {
+		return nil, shared.ErrVehicleNotFound
+	}
+	if vehicleShop != notification.ShopID {
+		return nil, shared.ErrShopAccessDenied
+	}
+
 	stmt := ShopVehicleNotifications.INSERT(
 		ShopVehicleNotifications.ID,
 		ShopVehicleNotifications.ShopID,
@@ -38,11 +60,14 @@ func (repo *RepositoryImpl) CreateVehicleNotification(user *bootstrap.User, noti
 	).MODEL(notification).RETURNING(ShopVehicleNotifications.AllColumns)
 
 	var createdNotification model.ShopVehicleNotifications
-	err := stmt.Query(repo.db, &createdNotification)
+	err = stmt.Query(tx, &createdNotification)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vehicle notification: %w", err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return &createdNotification, nil
 }
 
@@ -161,8 +186,31 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, update VehicleNotificationUpdate) error {
 	notification := update.Notification
 
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var shopID string
+	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle_notifications WHERE id=$1`, notification.ID).Scan(&shopID); err != nil {
+		return shared.ErrNotificationNotFound
+	}
+	if _, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID); err != nil {
+		return err
+	}
+	var oldList sql.NullString
+	if err := tx.QueryRow(`SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2`, notification.ID, shopID).Scan(&oldList); err != nil {
+		return shared.ErrNotificationNotFound
+	}
+	listIDs := []string{oldList.String}
+	if update.AttachedShopListSet && update.AttachedShopList != nil {
+		listIDs = append(listIDs, *update.AttachedShopList)
+	}
+	if err := shared.LockReferencedLists(context.Background(), tx, shopID, listIDs...); err != nil {
+		return err
+	}
+
 	var result sql.Result
-	var err error
 	if update.AttachedShopListSet {
 		rawSQL := `
 			UPDATE shop_vehicle_notifications
@@ -175,7 +223,7 @@ func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, upda
 			WHERE id = $7
 		`
 
-		result, err = repo.db.Exec(
+		result, err = tx.Exec(
 			rawSQL,
 			notification.Title,
 			notification.Description,
@@ -200,7 +248,7 @@ func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, upda
 			ShopVehicleNotifications.LastUpdated.SET(TimestampzT(notification.LastUpdated)),
 		).WHERE(ShopVehicleNotifications.ID.EQ(String(notification.ID)))
 
-		result, err = stmt.Exec(repo.db)
+		result, err = stmt.Exec(tx)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to update vehicle notification: %w", err)
@@ -215,7 +263,7 @@ func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, upda
 		return errors.New("notification not found")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) DeleteVehicleNotification(user *bootstrap.User, notificationID string) error {

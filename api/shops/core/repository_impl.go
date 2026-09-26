@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"sync/atomic"
 	"time"
@@ -101,12 +102,26 @@ func (repo *RepositoryImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (
 }
 
 func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return err
+	}
+	if !admin {
+		return shared.ErrShopAdminRequired
+	}
+
 	stmt := Shops.DELETE().WHERE(
 		Shops.ID.EQ(String(shopID)).
 			AND(Shops.CreatedBy.EQ(String(user.UserID))),
 	)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop: %w", err)
 	}
@@ -121,7 +136,7 @@ func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) erro
 	}
 
 	slog.Info("Shop deleted from database", "shop_id", shopID, "deleted_by", user.UserID)
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops, error) {
