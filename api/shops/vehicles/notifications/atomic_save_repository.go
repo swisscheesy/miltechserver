@@ -149,9 +149,10 @@ func (repo *RepositoryImpl) saveAtomicTx(ctx context.Context, tx *sql.Tx, userID
 			return receipt, err
 		}
 	}
-	receipt.CommittedAt = time.Now().UTC()
-	if _, err := tx.ExecContext(ctx, `UPDATE shop_notification_operations SET committed_at=$1 WHERE user_id=$2 AND operation_id=$3`, receipt.CommittedAt, userID, r.OperationID); err != nil {
-		return receipt, err
+	// Return the persisted timestamp so the first receipt and later replays
+	// agree even when the database normalizes timestamp precision.
+	if err := tx.QueryRowContext(ctx, `UPDATE shop_notification_operations SET committed_at=$1 WHERE user_id=$2 AND operation_id=$3 RETURNING committed_at`, time.Now().UTC(), userID, r.OperationID).Scan(&receipt.CommittedAt); err != nil {
+		return receipt, &shared.Failure{Code: "internal_error", PublicMessage: "Unable to complete notification save", Status: 500, Cause: err}
 	}
 	// The claim, writes and mandatory audits become durable in a single commit.
 	return receipt, nil

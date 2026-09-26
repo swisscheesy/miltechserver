@@ -52,7 +52,7 @@ func TestAtomicValidation(t *testing.T) {
 		func(r *request.NotificationSaveRequest) { id := r.ShopID; r.Attachment.ListID = &id },
 		func(r *request.NotificationSaveRequest) { r.Details.Type = "BAD" },
 		func(r *request.NotificationSaveRequest) {
-			r.Items = []request.NotificationSaveItem{{ID: r.ShopID, Quantity: 1}, {ID: r.ShopID, Quantity: 1}}
+			r.Items = []request.NotificationSaveItem{{ID: r.ShopID, Niin: "123", Nomenclature: "part", Quantity: 1}, {ID: r.ShopID, Niin: "456", Nomenclature: "other", Quantity: 1}}
 		},
 	} {
 		r := atomicRequest()
@@ -164,6 +164,9 @@ func TestAtomicCancellationAndForeignItems(t *testing.T) {
 }
 
 type atomicDriverState struct {
+	normalizedCommittedAt time.Time
+	missingReceipt        bool
+
 	deletedShop       bool
 	changedAttachment int
 	lockedLists       []string
@@ -238,9 +241,6 @@ func (c *atomicConn) ExecContext(_ context.Context, q string, args []driver.Name
 		s.fingerprint = append([]byte{}, args[2].Value.([]byte)...)
 		s.target = args[3].Value.(string)
 		s.committedAt = args[4].Value.(time.Time)
-	case strings.HasPrefix(q, "UPDATE shop_notification_operations"):
-		phase = "receipt"
-		s.committedAt = args[0].Value.(time.Time)
 	case strings.HasPrefix(q, "INSERT INTO shop_vehicle_notifications"), strings.HasPrefix(q, "UPDATE shop_vehicle_notifications"), strings.HasPrefix(q, "DELETE FROM shop_vehicle_notifications"):
 		phase = "details"
 	case strings.Contains(q, "shop_notification_items"):
@@ -272,6 +272,23 @@ func (c *atomicConn) QueryContext(_ context.Context, q string, args []driver.Nam
 	s.queryLog = append(s.queryLog, q)
 	var values []driver.Value
 	switch {
+	case strings.HasPrefix(q, "UPDATE shop_notification_operations"):
+		if !strings.HasSuffix(q, "RETURNING committed_at") {
+			return nil, errors.New("receipt update must return its stored timestamp")
+		}
+		if s.fail == "receipt" {
+			return nil, errors.New("private driver failure")
+		}
+		if s.missingReceipt {
+			return &atomicRows{cols: []string{"committed_at"}}, nil
+		}
+		s.businessWrites++
+		s.committedAt = args[0].Value.(time.Time)
+		if !s.normalizedCommittedAt.IsZero() {
+			s.committedAt = s.normalizedCommittedAt
+		}
+		values = []driver.Value{s.committedAt}
+
 	case strings.HasPrefix(q, "INSERT INTO shop_notification_items"):
 		s.businessWrites++
 		values = make([]driver.Value, len(args))
@@ -552,5 +569,49 @@ func TestLegacyDetailAndDeleteAuditsAfterCommit(t *testing.T) {
 				t.Fatalf("best-effort audit changed legacy success: %v %+v", err, state)
 			}
 		})
+	}
+}
+
+func TestAtomicReceiptUsesStoredTimestamp(t *testing.T) {
+	stored := time.Date(2026, 9, 26, 12, 34, 56, 123456000, time.UTC)
+	state := &atomicDriverState{normalizedCommittedAt: stored}
+	db := sql.OpenDB(atomicConnector{state})
+	defer db.Close()
+	repo := NewRepository(db)
+	r := atomicRequest()
+	first, err := repo.SaveAtomic(context.Background(), "user", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replay, err := repo.SaveAtomic(context.Background(), "user", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.CommittedAt.Equal(stored) || !replay.CommittedAt.Equal(stored) || !first.CommittedAt.Equal(replay.CommittedAt) {
+		t.Fatalf("timestamps differ: first=%s replay=%s stored=%s", first.CommittedAt, replay.CommittedAt, stored)
+	}
+	if first.Replayed || !replay.Replayed {
+		t.Fatal("incorrect replay markers")
+	}
+}
+func TestAtomicMissingReceiptCompletionRollsBack(t *testing.T) {
+	state := &atomicDriverState{missingReceipt: true}
+	db := sql.OpenDB(atomicConnector{state})
+	defer db.Close()
+	receipt, err := NewRepository(db).SaveAtomic(context.Background(), "user", atomicRequest())
+	if err == nil || !errors.Is(err, sql.ErrNoRows) || shared.ClassifyFailure(err).Status != 500 || receipt.NotificationID != "" || state.commits != 0 || state.rollbacks != 1 {
+		t.Fatalf("missing receipt committed: receipt=%+v error=%v state=%+v", receipt, err, state)
+	}
+}
+func TestAtomicValidationRejectsDuplicateIDsIndependently(t *testing.T) {
+	r := atomicRequest()
+	item := request.NotificationSaveItem{ID: r.ShopID, Niin: "123", Nomenclature: "part", Quantity: 1}
+	r.Items = []request.NotificationSaveItem{item}
+	if err := ValidateNotificationSave(r); err != nil {
+		t.Fatalf("fixture not valid: %v", err)
+	}
+	r.Items = append(r.Items, item)
+	if ValidateNotificationSave(r) == nil {
+		t.Fatal("accepted duplicate item ID")
 	}
 }
