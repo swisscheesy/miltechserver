@@ -117,6 +117,15 @@ func TestBatchAuthorizationEveryResource(t *testing.T) {
 				require.Len(t, decodeSlice(t, decodeStandardResponse(t, add.Body).Data), 2)
 			} else {
 				require.GreaterOrEqual(t, add.Code, 400)
+				if scenario == "missing" {
+					body := decodeStandardResponse(t, add.Body)
+					require.Equal(t, 500, add.Code)
+					require.Equal(t, 500, body.Status)
+					require.Equal(t, "null", string(body.Data))
+					require.Contains(t, body.Message, "list not found")
+					require.NotContains(t, body.Message, "sql:")
+					require.NotContains(t, body.Message, "pq:")
+				}
 			}
 			after := 0
 			require.NoError(t, testDB.QueryRow(`SELECT count(*) FROM shop_list_items`).Scan(&after))
@@ -131,6 +140,15 @@ func TestBatchAuthorizationEveryResource(t *testing.T) {
 				require.Contains(t, remove.Body.String(), `"count":2`)
 			} else {
 				require.GreaterOrEqual(t, remove.Code, 400)
+				if scenario == "missing" {
+					body := decodeStandardResponse(t, remove.Body)
+					require.Equal(t, 500, remove.Code)
+					require.Equal(t, 500, body.Status)
+					require.Equal(t, "null", string(body.Data))
+					require.Contains(t, body.Message, "list item not found")
+					require.NotContains(t, body.Message, "sql:")
+					require.NotContains(t, body.Message, "pq:")
+				}
 			}
 			count := 0
 			require.NoError(t, testDB.QueryRow(`SELECT count(*) FROM shop_list_items`).Scan(&count))

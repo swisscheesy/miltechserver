@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/bootstrap"
@@ -228,15 +229,32 @@ func CanDeleteList(member, admin, adminOnly, creator bool) bool {
 	return member && (admin || (!adminOnly && creator))
 }
 
+// authorizationError keeps driver details out of Error(), which legacy HTTP
+// middleware publishes verbatim, while preserving the cause for diagnostics.
+type authorizationError struct {
+	public error
+	cause  error
+}
+
+func (err *authorizationError) Error() string        { return err.public.Error() }
+func (err *authorizationError) Unwrap() error        { return err.cause }
+func (err *authorizationError) Is(target error) bool { return errors.Is(err.public, target) }
+
+func authorizationQueryError(operation string, missing error, cause error) error {
+	public := missing
+	if !errors.Is(cause, sql.ErrNoRows) {
+		public = errors.New("failed to verify shop authorization")
+		slog.Error("Shop authorization query failed", "operation", operation, "error", cause)
+	}
+	return &authorizationError{public: public, cause: cause}
+}
+
 // RequireShopMember holds current membership and role until the caller commits.
 func RequireShopMember(ctx context.Context, tx *sql.Tx, shopID, userID string) (bool, error) {
 	var role string
 	err := tx.QueryRowContext(ctx, `SELECT role FROM shop_members WHERE shop_id=$1 AND user_id=$2 FOR UPDATE`, shopID, userID).Scan(&role)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, ErrShopAccessDenied
-	}
 	if err != nil {
-		return false, fmt.Errorf("failed to lock shop membership: %w", err)
+		return false, authorizationQueryError("lock shop membership", ErrShopAccessDenied, err)
 	}
 	return role == "admin", nil
 }
@@ -245,11 +263,8 @@ func RequireShopMember(ctx context.Context, tx *sql.Tx, shopID, userID string) (
 // writers, including role changes, so authorization stays valid until commit.
 func LockShopMutation(ctx context.Context, tx *sql.Tx, shopID, userID string) (admin, adminOnly bool, err error) {
 	err = tx.QueryRowContext(ctx, `SELECT admin_only_lists FROM shops WHERE id=$1 FOR UPDATE`, shopID).Scan(&adminOnly)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, false, ErrShopNotFound
-	}
 	if err != nil {
-		return false, false, err
+		return false, false, authorizationQueryError("lock shop settings", ErrShopNotFound, err)
 	}
 	admin, err = RequireShopMember(ctx, tx, shopID, userID)
 	return
@@ -265,7 +280,7 @@ func AuthorizeListMutation(ctx context.Context, tx *sql.Tx, userID, shopID strin
 	for _, id := range itemIDs {
 		var listID string
 		if err := tx.QueryRowContext(ctx, `SELECT list_id FROM shop_list_items WHERE id=$1`, id).Scan(&listID); err != nil {
-			return fmt.Errorf("list item not found: %w", err)
+			return authorizationQueryError("resolve or lock list item", errors.New("list item not found"), err)
 		}
 		itemLists[id] = listID
 		listIDs = append(listIDs, listID)
@@ -278,7 +293,7 @@ func AuthorizeListMutation(ctx context.Context, tx *sql.Tx, userID, shopID strin
 		}
 		var owner string
 		if err := tx.QueryRowContext(ctx, `SELECT shop_id FROM shop_lists WHERE id=$1`, id).Scan(&owner); err != nil {
-			return fmt.Errorf("list not found: %w", err)
+			return authorizationQueryError("resolve or lock list", ErrListNotFound, err)
 		}
 		if shopID == "" {
 			shopID = owner
@@ -298,7 +313,7 @@ func AuthorizeListMutation(ctx context.Context, tx *sql.Tx, userID, shopID strin
 	for _, id := range listIDs {
 		var owner, creator string
 		if err := tx.QueryRowContext(ctx, `SELECT shop_id,created_by FROM shop_lists WHERE id=$1 FOR UPDATE`, id).Scan(&owner, &creator); err != nil {
-			return fmt.Errorf("list not found: %w", err)
+			return authorizationQueryError("resolve or lock list", ErrListNotFound, err)
 		}
 		if owner != shopID {
 			return ErrListAccessDenied
@@ -310,7 +325,7 @@ func AuthorizeListMutation(ctx context.Context, tx *sql.Tx, userID, shopID strin
 	for _, id := range itemIDs {
 		var listID string
 		if err := tx.QueryRowContext(ctx, `SELECT list_id FROM shop_list_items WHERE id=$1 FOR UPDATE`, id).Scan(&listID); err != nil {
-			return fmt.Errorf("list item not found: %w", err)
+			return authorizationQueryError("resolve or lock list item", errors.New("list item not found"), err)
 		}
 		if listID != itemLists[id] {
 			return ErrListAccessDenied
@@ -333,7 +348,7 @@ func AuthorizeOwnedMutation(ctx context.Context, tx *sql.Tx, userID, resource, i
 	}
 	var shopID, author string
 	if err := tx.QueryRowContext(ctx, query, id).Scan(&shopID, &author); err != nil {
-		return fmt.Errorf("resource not found: %w", err)
+		return authorizationQueryError("resolve or lock "+resource, errors.New("resource not found"), err)
 	}
 	admin, _, err := LockShopMutation(ctx, tx, shopID, userID)
 	if err != nil {
@@ -341,7 +356,7 @@ func AuthorizeOwnedMutation(ctx context.Context, tx *sql.Tx, userID, resource, i
 	}
 	var lockedShop string
 	if err := tx.QueryRowContext(ctx, query+" FOR UPDATE", id).Scan(&lockedShop, &author); err != nil {
-		return fmt.Errorf("resource not found: %w", err)
+		return authorizationQueryError("resolve or lock "+resource, errors.New("resource not found"), err)
 	}
 	if lockedShop != shopID || (author != userID && !(allowAdmin && admin)) {
 		return ErrShopAccessDenied
