@@ -61,7 +61,8 @@ pg_ctl -D "$instance/data" -l "$instance/server.log" -o "-h 127.0.0.1 -p $port -
 createdb -h "$instance" -p "$port" -U postgres miltech_test_shops >"$instance/setup.log" 2>&1 || fail 'Disposable database creation failed.'
 psql_local() { psql -X -v ON_ERROR_STOP=1 -h "$instance" -p "$port" -U postgres -d miltech_test_shops "$@"; }
 psql_local -f "$baseline" >"$instance/setup.log" 2>&1 || fail 'Approved baseline restore failed.'
-for migration in "${later_migrations[@]}"; do
+# Bash 3.2 treats an empty array as unset under nounset.
+for migration in ${later_migrations[@]+"${later_migrations[@]}"}; do
   psql_local -f "$root/$migration" >"$instance/setup.log" 2>&1 || fail 'Post-baseline migration failed.'
 done
 psql_local -v marker="$marker" >"$instance/setup.log" 2>&1 <<'SQL'
@@ -72,7 +73,7 @@ CREATE TABLE test_infrastructure.disposable_instance (
 );
 INSERT INTO test_infrastructure.disposable_instance (marker) VALUES (:'marker');
 SQL
-stored=$(psql_local -Atc 'SELECT marker FROM test_infrastructure.disposable_instance WHERE singleton = TRUE')
+stored=$(psql_local -Atc 'SELECT marker FROM test_infrastructure.disposable_instance WHERE singleton = TRUE' 2>"$instance/setup.log") || fail 'Disposable instance marker verification failed.'
 [[ "$stored" == "$marker" ]] || fail 'Disposable instance marker verification failed.'
 export TEST_DATABASE_URL="postgres://postgres@127.0.0.1:$port/miltech_test_shops?sslmode=disable&connect_timeout=5"
 export TEST_DATABASE_MARKER="$marker"
