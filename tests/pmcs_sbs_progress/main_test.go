@@ -7,22 +7,16 @@ import (
 	"testing"
 
 	"miltechserver/tests/testutil"
-
-	_ "github.com/lib/pq"
 )
 
 var testDB *sql.DB
 
 func TestMain(m *testing.M) {
 	var err error
-	testDB, err = sql.Open("postgres", testutil.TestDSN)
+	testDB, err = testutil.OpenDisposableTestDB(os.Getenv("TEST_DATABASE_URL"), os.Getenv("TEST_DATABASE_MARKER"))
 	if err != nil {
 		log.Fatalf("failed to open test database: %v", err)
 	}
-	if err := testDB.Ping(); err != nil {
-		log.Fatalf("failed to ping test database: %v", err)
-	}
-
 	exitCode := m.Run()
 
 	if err := testDB.Close(); err != nil {
