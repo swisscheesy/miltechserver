@@ -61,7 +61,7 @@ func (service *ServiceImpl) JoinShopViaInviteCode(ctx context.Context, user *boo
 		return fmt.Errorf("failed to add member to shop: %w", err)
 	}
 
-	slog.Info("User joined shop via invite code", "user_id", user.UserID, "shop_id", code.ShopID, "invite_code", inviteCode)
+	slog.Info("shop_joined", "shop_id", code.ShopID, "outcome", "success")
 	return nil
 }
 

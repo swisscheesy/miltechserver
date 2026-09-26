@@ -70,7 +70,7 @@ func (service *ServiceImpl) GenerateInviteCode(ctx context.Context, user *bootst
 		return nil, fmt.Errorf("failed to create invite code: %w", err)
 	}
 
-	slog.Info("Invite code generated", "user_id", user.UserID, "shop_id", shopID, "code", code)
+	slog.Info("invite_generated", "shop_id", shopID, "outcome", "success")
 	return createdCode, nil
 }
 
