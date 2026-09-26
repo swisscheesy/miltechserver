@@ -1,12 +1,14 @@
 package lists
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -21,6 +23,15 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) CreateShopList(user *bootstrap.User, list model.ShopLists) (*response.ShopListWithUsername, error) {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, list.ShopID, nil, nil, false); err != nil {
+		return nil, err
+	}
+
 	stmt := ShopLists.INSERT(
 		ShopLists.ID,
 		ShopLists.ShopID,
@@ -30,7 +41,7 @@ func (repo *RepositoryImpl) CreateShopList(user *bootstrap.User, list model.Shop
 		ShopLists.UpdatedAt,
 	).MODEL(list)
 
-	_, err := stmt.Exec(repo.db)
+	_, err = stmt.Exec(tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop list: %w", err)
 	}
@@ -55,7 +66,7 @@ func (repo *RepositoryImpl) CreateShopList(user *bootstrap.User, list model.Shop
 		CreatedByUsername *string `sql:"created_by_username"`
 	}
 
-	err = selectStmt.Query(repo.db, &result)
+	err = selectStmt.Query(tx, &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get created shop list with username: %w", err)
 	}
@@ -70,6 +81,9 @@ func (repo *RepositoryImpl) CreateShopList(user *bootstrap.User, list model.Shop
 		UpdatedAt:         &result.UpdatedAt,
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return createdListWithUsername, nil
 }
 
@@ -158,13 +172,22 @@ func (repo *RepositoryImpl) GetShopListByID(user *bootstrap.User, listID string)
 }
 
 func (repo *RepositoryImpl) UpdateShopList(user *bootstrap.User, list model.ShopLists) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", []string{list.ID}, nil, false); err != nil {
+		return err
+	}
+
 	stmt := ShopLists.UPDATE(
 		ShopLists.Description,
 		ShopLists.UpdatedAt,
 	).MODEL(list).
 		WHERE(ShopLists.ID.EQ(String(list.ID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update shop list: %w", err)
 	}
@@ -178,14 +201,23 @@ func (repo *RepositoryImpl) UpdateShopList(user *bootstrap.User, list model.Shop
 		return errors.New("shop list not found")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) DeleteShopList(user *bootstrap.User, listID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", []string{listID}, nil, true); err != nil {
+		return err
+	}
+
 	stmt := ShopLists.DELETE().
 		WHERE(ShopLists.ID.EQ(String(listID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop list: %w", err)
 	}
@@ -199,5 +231,5 @@ func (repo *RepositoryImpl) DeleteShopList(user *bootstrap.User, listID string) 
 		return errors.New("shop list not found")
 	}
 
-	return nil
+	return tx.Commit()
 }

@@ -277,6 +277,10 @@ func (service *ServiceImpl) DeleteShopVehicle(ctx context.Context, user *bootstr
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
+	if err := service.auth.RequireShopMember(user, vehicle.ShopID); err != nil {
+		return err
+	}
+
 	isCreator := vehicle.CreatorID == user.UserID
 	isAdmin, err := service.auth.IsUserShopAdmin(user, vehicle.ShopID)
 	if err != nil {
@@ -285,23 +289,6 @@ func (service *ServiceImpl) DeleteShopVehicle(ctx context.Context, user *bootstr
 
 	if !isCreator && !isAdmin {
 		return errors.New("access denied: only vehicle creator or shop admin can delete vehicles")
-	}
-
-	vehicleDeletionChange := model.ShopVehicleNotificationChanges{
-		NotificationID:    nil,
-		ShopID:            vehicle.ShopID,
-		VehicleID:         &vehicleID,
-		ChangedBy:         &user.UserID,
-		ChangeType:        "vehicle_deleted",
-		FieldChanges:      buildVehicleDeletionFieldChanges(vehicle),
-		NotificationTitle: nil,
-		NotificationType:  nil,
-		VehicleAdmin:      &vehicle.Admin,
-	}
-
-	err = service.repo.CreateNotificationChange(user, vehicleDeletionChange)
-	if err != nil {
-		slog.Warn("Failed to record vehicle deletion audit", "error", err, "vehicle_id", vehicleID)
 	}
 
 	err = service.repo.DeleteShopVehicle(user, vehicleID)

@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/request"
+	"miltechserver/api/shops/shared"
+	"miltechserver/bootstrap"
 	"strings"
 	"time"
 
@@ -41,7 +44,20 @@ func (repo *RepositoryImpl) GetShopAdminOnlyListsSetting(shopID string) (bool, e
 }
 
 // UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
-func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(shopID string, adminOnlyLists bool) error {
+func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return err
+	}
+	if !admin {
+		return shared.ErrShopAdminRequired
+	}
+
 	now := time.Now()
 
 	stmt := Shops.UPDATE(
@@ -54,7 +70,7 @@ func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(shopID string, admin
 		Shops.ID.EQ(String(shopID)),
 	)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
 	}
@@ -69,7 +85,7 @@ func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(shopID string, admin
 	}
 
 	slog.Info("Shop admin_only_lists setting updated", "shop_id", shopID, "admin_only_lists", adminOnlyLists)
-	return nil
+	return tx.Commit()
 }
 
 // GetShopSettings retrieves all settings for a shop
@@ -95,7 +111,20 @@ func (repo *RepositoryImpl) GetShopSettings(shopID string) (*request.ShopSetting
 }
 
 // UpdateShopSettings updates shop settings with support for partial updates
-func (repo *RepositoryImpl) UpdateShopSettings(shopID string, updates request.UpdateShopSettingsRequest) error {
+func (repo *RepositoryImpl) UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return err
+	}
+	if !admin {
+		return shared.ErrShopAdminRequired
+	}
+
 	now := time.Now()
 
 	if updates.AdminOnlyLists == nil {
@@ -115,7 +144,7 @@ func (repo *RepositoryImpl) UpdateShopSettings(shopID string, updates request.Up
 
 	stmt := setClause.WHERE(Shops.ID.EQ(String(shopID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update shop settings: %w", err)
 	}
@@ -130,7 +159,7 @@ func (repo *RepositoryImpl) UpdateShopSettings(shopID string, updates request.Up
 	}
 
 	slog.Info("Shop settings updated", "shop_id", shopID, "updates", formatSettingsUpdate(updates))
-	return nil
+	return tx.Commit()
 }
 
 func formatSettingsUpdate(updates request.UpdateShopSettingsRequest) string {

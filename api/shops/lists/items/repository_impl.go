@@ -1,12 +1,14 @@
 package items
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/go-jet/jet/v2/postgres"
@@ -22,6 +24,15 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 func (repo *RepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopListItems) (*response.ShopListItemWithUsername, error) {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", []string{item.ListID}, nil, false); err != nil {
+		return nil, err
+	}
+
 	stmt := ShopListItems.INSERT(
 		ShopListItems.ID,
 		ShopListItems.ListID,
@@ -35,7 +46,7 @@ func (repo *RepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopLis
 		ShopListItems.UnitOfMeasure,
 	).MODEL(item)
 
-	_, err := stmt.Exec(repo.db)
+	_, err = stmt.Exec(tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add list item: %w", err)
 	}
@@ -64,7 +75,7 @@ func (repo *RepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopLis
 		AddedByUsername *string `sql:"added_by_username"`
 	}
 
-	err = selectStmt.Query(repo.db, &result)
+	err = selectStmt.Query(tx, &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get created list item with username: %w", err)
 	}
@@ -83,6 +94,9 @@ func (repo *RepositoryImpl) AddListItem(user *bootstrap.User, item model.ShopLis
 		UnitOfMeasure:   result.UnitOfMeasure,
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return createdItemWithUsername, nil
 }
 
@@ -154,6 +168,15 @@ func (repo *RepositoryImpl) GetListItemByID(user *bootstrap.User, itemID string)
 }
 
 func (repo *RepositoryImpl) UpdateListItem(user *bootstrap.User, item model.ShopListItems) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", nil, []string{item.ID}, false); err != nil {
+		return err
+	}
+
 	stmt := ShopListItems.UPDATE(
 		ShopListItems.Niin,
 		ShopListItems.Nomenclature,
@@ -164,7 +187,7 @@ func (repo *RepositoryImpl) UpdateListItem(user *bootstrap.User, item model.Shop
 	).MODEL(item).
 		WHERE(ShopListItems.ID.EQ(String(item.ID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update list item: %w", err)
 	}
@@ -178,14 +201,23 @@ func (repo *RepositoryImpl) UpdateListItem(user *bootstrap.User, item model.Shop
 		return errors.New("list item not found")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) RemoveListItem(user *bootstrap.User, itemID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", nil, []string{itemID}, false); err != nil {
+		return err
+	}
+
 	stmt := ShopListItems.DELETE().
 		WHERE(ShopListItems.ID.EQ(String(itemID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to remove list item: %w", err)
 	}
@@ -199,12 +231,24 @@ func (repo *RepositoryImpl) RemoveListItem(user *bootstrap.User, itemID string) 
 		return errors.New("list item not found")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error) {
 	if len(items) == 0 {
 		return []response.ShopListItemWithUsername{}, nil
+	}
+	listIDs := make([]string, len(items))
+	for i, item := range items {
+		listIDs[i] = item.ListID
+	}
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", listIDs, nil, false); err != nil {
+		return nil, err
 	}
 
 	stmt := ShopListItems.INSERT(
@@ -220,7 +264,7 @@ func (repo *RepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model
 		ShopListItems.UnitOfMeasure,
 	).MODELS(items)
 
-	_, err := stmt.Exec(repo.db)
+	_, err = stmt.Exec(tx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add list items: %w", err)
 	}
@@ -254,7 +298,7 @@ func (repo *RepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model
 		AddedByUsername *string `sql:"added_by_username"`
 	}
 
-	err = selectStmt.Query(repo.db, &results)
+	err = selectStmt.Query(tx, &results)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get created list items with usernames: %w", err)
 	}
@@ -276,12 +320,24 @@ func (repo *RepositoryImpl) AddListItemBatch(user *bootstrap.User, items []model
 		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return createdItemsWithUsername, nil
 }
 
 func (repo *RepositoryImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []string) error {
 	if len(itemIDs) == 0 {
 		return nil
+	}
+
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeListMutation(context.Background(), tx, user.UserID, "", nil, itemIDs, false); err != nil {
+		return err
 	}
 
 	expressions := make([]Expression, len(itemIDs))
@@ -292,10 +348,10 @@ func (repo *RepositoryImpl) RemoveListItemBatch(user *bootstrap.User, itemIDs []
 	stmt := ShopListItems.DELETE().
 		WHERE(ShopListItems.ID.IN(expressions...))
 
-	_, err := stmt.Exec(repo.db)
+	_, err = stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to remove list items: %w", err)
 	}
 
-	return nil
+	return tx.Commit()
 }

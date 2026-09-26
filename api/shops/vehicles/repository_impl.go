@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
@@ -245,10 +246,42 @@ func applyUsageAdjustment(current int32, magnitude int32, operation UsageAdjustm
 }
 
 func (repo *RepositoryImpl) DeleteShopVehicle(user *bootstrap.User, vehicleID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeOwnedMutation(context.Background(), tx, user.UserID, "vehicle", vehicleID, true); err != nil {
+		return err
+	}
+
+	// Capture and write the audit only after authorization, on the same connection.
+	var vehicle model.ShopVehicle
+	if err := SELECT(ShopVehicle.AllColumns).FROM(ShopVehicle).WHERE(ShopVehicle.ID.EQ(String(vehicleID))).Query(tx, &vehicle); err != nil {
+		return err
+	}
+	change := model.ShopVehicleNotificationChanges{
+		ShopID: vehicle.ShopID, VehicleID: &vehicleID, ChangedBy: &user.UserID,
+		ChangeType: "vehicle_deleted", FieldChanges: buildVehicleDeletionFieldChanges(&vehicle), VehicleAdmin: &vehicle.Admin,
+	}
+	// Auditing remains best effort, but a failed statement must not abort deletion.
+	if _, err := tx.Exec("SAVEPOINT vehicle_deletion_audit"); err != nil {
+		return err
+	}
+	if err := createNotificationChange(tx.Exec, change); err != nil {
+		if _, rollbackErr := tx.Exec("ROLLBACK TO SAVEPOINT vehicle_deletion_audit"); rollbackErr != nil {
+			return rollbackErr
+		}
+		slog.Warn("Failed to record vehicle deletion audit", "error", err, "vehicle_id", vehicleID)
+	}
+	if _, err := tx.Exec("RELEASE SAVEPOINT vehicle_deletion_audit"); err != nil {
+		return err
+	}
+
 	stmt := ShopVehicle.DELETE().
 		WHERE(ShopVehicle.ID.EQ(String(vehicleID)))
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop vehicle: %w", err)
 	}
@@ -262,10 +295,14 @@ func (repo *RepositoryImpl) DeleteShopVehicle(user *bootstrap.User, vehicleID st
 		return errors.New("vehicle not found")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error {
+	return createNotificationChange(repo.db.Exec, change)
+}
+
+func createNotificationChange(exec func(string, ...any) (sql.Result, error), change model.ShopVehicleNotificationChanges) error {
 	rawSQL := `
 		INSERT INTO shop_vehicle_notification_changes (
 			notification_id,
@@ -280,7 +317,7 @@ func (repo *RepositoryImpl) CreateNotificationChange(user *bootstrap.User, chang
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	_, err := repo.db.Exec(
+	_, err := exec(
 		rawSQL,
 		change.NotificationID,
 		change.ShopID,

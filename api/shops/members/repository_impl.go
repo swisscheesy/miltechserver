@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"sync/atomic"
 	"time"
@@ -111,13 +112,29 @@ func (repo *RepositoryImpl) AddMemberToShop(user *bootstrap.User, shopID string,
 }
 
 func (repo *RepositoryImpl) RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return err
+	}
+	if user.UserID != targetUserID && !admin {
+		return shared.ErrShopAdminRequired
+	}
+	if _, err := shared.RequireShopMember(context.Background(), tx, shopID, targetUserID); err != nil {
+		return err
+	}
+
 	stmt := ShopMembers.DELETE().
 		WHERE(
 			ShopMembers.ShopID.EQ(String(shopID)).
 				AND(ShopMembers.UserID.EQ(String(targetUserID))),
 		)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to remove member from shop: %w", err)
 	}
@@ -132,10 +149,26 @@ func (repo *RepositoryImpl) RemoveMemberFromShop(user *bootstrap.User, shopID st
 	}
 
 	slog.Info("Member removed from shop", "shop_id", shopID, "removed_user_id", targetUserID, "removed_by", user.UserID)
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string, targetUserID string, newRole string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	if err != nil {
+		return err
+	}
+	if !admin {
+		return shared.ErrShopAdminRequired
+	}
+	if _, err := shared.RequireShopMember(context.Background(), tx, shopID, targetUserID); err != nil {
+		return err
+	}
+
 	stmt := ShopMembers.UPDATE(
 		ShopMembers.Role,
 	).SET(
@@ -145,7 +178,7 @@ func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string
 			AND(ShopMembers.UserID.EQ(String(targetUserID))),
 	)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update member role: %w", err)
 	}
@@ -160,7 +193,7 @@ func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string
 	}
 
 	slog.Info("Member role updated", "shop_id", shopID, "target_user_id", targetUserID, "new_role", newRole, "updated_by", user.UserID)
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {

@@ -10,6 +10,7 @@ import (
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
 	sharedb "miltechserver/api/shared/db"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"net/http"
 	"regexp"
@@ -68,6 +69,9 @@ func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *R
 
 func (repo *RepositoryImpl) CreateShopMessage(user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
 	createdMessage, err := sharedb.WithTx(repo.db, func(tx *sql.Tx) (response.ShopMessageResponse, error) {
+		if _, _, err := shared.LockShopMutation(context.Background(), tx, message.ShopID, user.UserID); err != nil {
+			return response.ShopMessageResponse{}, err
+		}
 		stmt := ShopMessages.INSERT(
 			ShopMessages.ID,
 			ShopMessages.ShopID,
@@ -197,6 +201,15 @@ func (repo *RepositoryImpl) GetShopMessagesCount(user *bootstrap.User, shopID st
 }
 
 func (repo *RepositoryImpl) UpdateShopMessage(user *bootstrap.User, message model.ShopMessages) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeOwnedMutation(context.Background(), tx, user.UserID, "message", message.ID, false); err != nil {
+		return err
+	}
+
 	stmt := ShopMessages.UPDATE(
 		ShopMessages.Message,
 		ShopMessages.UpdatedAt,
@@ -210,7 +223,7 @@ func (repo *RepositoryImpl) UpdateShopMessage(user *bootstrap.User, message mode
 			AND(ShopMessages.UserID.EQ(String(user.UserID))),
 	)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to update shop message: %w", err)
 	}
@@ -224,10 +237,19 @@ func (repo *RepositoryImpl) UpdateShopMessage(user *bootstrap.User, message mode
 		return errors.New("message not found or user not authorized to update")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) DeleteShopMessage(user *bootstrap.User, messageID string) error {
+	tx, err := repo.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := shared.AuthorizeOwnedMutation(context.Background(), tx, user.UserID, "message", messageID, true); err != nil {
+		return err
+	}
+
 	stmt := ShopMessages.DELETE().
 		WHERE(
 			ShopMessages.ID.EQ(String(messageID)).
@@ -246,7 +268,7 @@ func (repo *RepositoryImpl) DeleteShopMessage(user *bootstrap.User, messageID st
 				),
 		)
 
-	result, err := stmt.Exec(repo.db)
+	result, err := stmt.Exec(tx)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop message: %w", err)
 	}
@@ -260,7 +282,7 @@ func (repo *RepositoryImpl) DeleteShopMessage(user *bootstrap.User, messageID st
 		return errors.New("message not found or user not authorized to delete")
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (repo *RepositoryImpl) GetShopMessageByID(user *bootstrap.User, messageID string) (*model.ShopMessages, error) {

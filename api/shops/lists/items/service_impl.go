@@ -295,6 +295,10 @@ func (service *ServiceImpl) RemoveListItemBatch(ctx context.Context, user *boots
 // If admin_only_lists is true, only shop admins can modify lists
 // If admin_only_lists is false, all shop members can modify lists
 func (service *ServiceImpl) canUserModifyListWithAdminOnlyCheck(user *bootstrap.User, shopID string) (bool, error) {
+	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	if err != nil || !isMember {
+		return false, err
+	}
 	adminOnlyLists, err := service.settingsRepo.GetShopAdminOnlyListsSetting(shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)

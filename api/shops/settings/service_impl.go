@@ -70,7 +70,7 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context,
 		return errors.New("access denied: only shop administrators can modify this setting")
 	}
 
-	err = service.repo.UpdateShopAdminOnlyListsSetting(shopID, adminOnlyLists)
+	err = service.repo.UpdateShopAdminOnlyListsSetting(user, shopID, adminOnlyLists)
 	if err != nil {
 		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
 	}
@@ -143,7 +143,7 @@ func (service *ServiceImpl) UpdateShopSettings(ctx context.Context, user *bootst
 		return nil, errors.New("access denied: only shop administrators can modify settings")
 	}
 
-	err = service.repo.UpdateShopSettings(shopID, updates)
+	err = service.repo.UpdateShopSettings(user, shopID, updates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update shop settings: %w", err)
 	}
