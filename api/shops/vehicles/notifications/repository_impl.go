@@ -40,7 +40,10 @@ func (repo *RepositoryImpl) CreateVehicleNotification(user *bootstrap.User, noti
 	}
 	var vehicleShop string
 	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle WHERE id=$1`, notification.VehicleID).Scan(&vehicleShop); err != nil {
-		return nil, shared.ErrVehicleNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, shared.ErrVehicleNotFound
+		}
+		return nil, &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify vehicle", Status: 500, Cause: err}
 	}
 	if vehicleShop != notification.ShopID {
 		return nil, shared.ErrShopAccessDenied
@@ -193,14 +196,20 @@ func (repo *RepositoryImpl) UpdateVehicleNotification(user *bootstrap.User, upda
 	defer tx.Rollback()
 	var shopID string
 	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle_notifications WHERE id=$1`, notification.ID).Scan(&shopID); err != nil {
-		return shared.ErrNotificationNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return shared.ErrNotificationNotFound
+		}
+		return &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify notification", Status: 500, Cause: err}
 	}
 	if _, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID); err != nil {
 		return err
 	}
 	var oldList sql.NullString
 	if err := tx.QueryRow(`SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2`, notification.ID, shopID).Scan(&oldList); err != nil {
-		return shared.ErrNotificationNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return shared.ErrNotificationNotFound
+		}
+		return &shared.Failure{Code: "internal_error", PublicMessage: "Unable to verify notification", Status: 500, Cause: err}
 	}
 	listIDs := []string{oldList.String}
 	if update.AttachedShopListSet && update.AttachedShopList != nil {

@@ -28,6 +28,9 @@ type dependencyDriver struct{}
 func (dependencyDriver) Open(string) (driver.Conn, error) { return nil, errors.New("use connector") }
 
 type dependencyConn struct {
+	failQuery                             string
+	queryCause                            error
+	writes                                int
 	admin                                 bool
 	memberCount                           int
 	dependency                            bool
@@ -48,6 +51,12 @@ func (c *dependencyConn) Commit() error             { c.committed = true; return
 func (*dependencyConn) Rollback() error             { return nil }
 func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
 	c.queries = append(c.queries, q)
+	if q == c.failQuery {
+		return nil, c.queryCause
+	}
+	if strings.HasPrefix(strings.TrimSpace(q), "INSERT") || strings.HasPrefix(strings.TrimSpace(q), "UPDATE") {
+		c.writes++
+	}
 	if strings.Contains(q, "FROM shop_lists") && strings.Contains(q, "FOR UPDATE") {
 		c.lockedLists = append(c.lockedLists, args[0].Value.(string))
 		if c.missingList {
@@ -83,6 +92,7 @@ func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver
 	return &dependencyRows{values: values}, nil
 }
 func (c *dependencyConn) ExecContext(_ context.Context, q string, _ []driver.NamedValue) (driver.Result, error) {
+	c.writes++
 	if strings.Contains(q, "UPDATE") && strings.Contains(q, "shop_vehicle_notifications") {
 		c.detached = true
 		if c.failDetach {
@@ -270,5 +280,67 @@ func TestListDependenciesLastMemberRechecksCount(t *testing.T) {
 	}
 	if c.deleted || c.committed {
 		t.Fatal("deleted shop after another member joined")
+	}
+}
+
+func TestListDependenciesLookupErrors(t *testing.T) {
+	driverCause := errors.New("driver password=private-marker connection lost")
+	for _, tc := range []struct {
+		name, query, missingCode string
+		run                      func(*sql.DB) error
+	}{
+		{"create-service-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1", "vehicle_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Create(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: "list"})
+			return err
+		}},
+		{"update-service-shop", "SELECT shop_id FROM equipment_services WHERE id=$1", "service_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Update(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ListID: "list"})
+			return err
+		}},
+		{"update-service-owner", "SELECT list_id,created_by FROM equipment_services WHERE id=$1 AND shop_id=$2", "service_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Update(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ListID: "list"})
+			return err
+		}},
+		{"create-notification-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1", "vehicle_not_found", func(db *sql.DB) error {
+			_, err := notifications.NewRepository(db).CreateVehicleNotification(&bootstrap.User{UserID: "user"}, model.ShopVehicleNotifications{ShopID: "shop", VehicleID: "vehicle"})
+			return err
+		}},
+		{"update-notification-shop", "SELECT shop_id FROM shop_vehicle_notifications WHERE id=$1", "notification_not_found", func(db *sql.DB) error {
+			return notifications.NewRepository(db).UpdateVehicleNotification(&bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}})
+		}},
+		{"update-notification-attachment", "SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2", "notification_not_found", func(db *sql.DB) error {
+			return notifications.NewRepository(db).UpdateVehicleNotification(&bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}})
+		}},
+	} {
+		for _, cause := range []error{sql.ErrNoRows, driverCause} {
+			t.Run(tc.name+"/"+fmt.Sprint(errors.Is(cause, sql.ErrNoRows)), func(t *testing.T) {
+				c := &dependencyConn{failQuery: tc.query, queryCause: cause}
+				db := sql.OpenDB(dependencyConnector{c})
+				defer db.Close()
+				err := tc.run(db)
+				if err == nil {
+					t.Fatal("expected lookup failure")
+				}
+				failure := shared.ClassifyFailure(err)
+				if errors.Is(cause, sql.ErrNoRows) {
+					if failure.Status != 404 || failure.Code != tc.missingCode {
+						t.Errorf("missing classification: %+v", failure)
+					}
+				} else {
+					if !errors.Is(err, driverCause) {
+						t.Error("driver cause discarded")
+					}
+					if failure.Status != 500 || failure.Code != "internal_error" {
+						t.Errorf("driver classification: %+v", failure)
+					}
+					if strings.Contains(err.Error(), "private-marker") || strings.Contains(failure.PublicMessage, "private-marker") {
+						t.Error("driver details leaked")
+					}
+				}
+				if c.writes != 0 || c.committed {
+					t.Fatal("lookup failure wrote or committed")
+				}
+			})
+		}
 	}
 }

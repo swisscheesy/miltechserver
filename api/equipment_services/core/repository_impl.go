@@ -38,7 +38,10 @@ func (repo *RepositoryImpl) Create(user *bootstrap.User, service model.Equipment
 	}
 	var vehicleShop string
 	if err := tx.QueryRow(`SELECT shop_id FROM shop_vehicle WHERE id=$1`, service.EquipmentID).Scan(&vehicleShop); err != nil {
-		return nil, shopshared.ErrVehicleNotFound
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, shopshared.ErrVehicleNotFound
+		}
+		return nil, &shopshared.Failure{Code: "internal_error", PublicMessage: "Unable to verify vehicle", Status: 500, Cause: err}
 	}
 	if vehicleShop != service.ShopID {
 		return nil, shopshared.ErrShopAccessDenied
@@ -95,7 +98,10 @@ func (repo *RepositoryImpl) Update(user *bootstrap.User, service model.Equipment
 	defer tx.Rollback()
 	var shopID string
 	if err := tx.QueryRow(`SELECT shop_id FROM equipment_services WHERE id=$1`, service.ID).Scan(&shopID); err != nil {
-		return nil, errors.New("equipment service not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, &shopshared.Failure{Code: "service_not_found", PublicMessage: "service not found", Status: 404, Cause: err}
+		}
+		return nil, &shopshared.Failure{Code: "internal_error", PublicMessage: "Unable to verify service", Status: 500, Cause: err}
 	}
 	admin, _, err := shopshared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
 	if err != nil {
@@ -103,7 +109,10 @@ func (repo *RepositoryImpl) Update(user *bootstrap.User, service model.Equipment
 	}
 	var oldList, creator string
 	if err := tx.QueryRow(`SELECT list_id,created_by FROM equipment_services WHERE id=$1 AND shop_id=$2`, service.ID, shopID).Scan(&oldList, &creator); err != nil {
-		return nil, errors.New("equipment service not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, &shopshared.Failure{Code: "service_not_found", PublicMessage: "service not found", Status: 404, Cause: err}
+		}
+		return nil, &shopshared.Failure{Code: "internal_error", PublicMessage: "Unable to verify service", Status: 500, Cause: err}
 	}
 	if creator != user.UserID && !admin {
 		return nil, shopshared.ErrShopAccessDenied
