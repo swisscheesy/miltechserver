@@ -2,6 +2,7 @@ package shared
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ func NullInt32Ptr(value sql.NullInt64) *int32 {
 }
 
 func ErrorsIsNoRows(err error) bool {
-	return err == sql.ErrNoRows
+	return errors.Is(NormalizeNoRows(err), ErrNotFound)
 }
 
 func Placeholders(count int) string {

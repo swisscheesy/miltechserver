@@ -28,7 +28,7 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	}
 
 	var req request.CreateVehicleNotificationRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -180,7 +180,7 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	}
 
 	var req request.UpdateVehicleNotificationRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

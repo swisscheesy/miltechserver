@@ -91,7 +91,10 @@ func (auth *Authorization) RequireServiceAccessByID(user *bootstrap.User, servic
 	var result serviceShopIDResult
 	err := stmt.Query(auth.db, &result)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrServiceNotFound, err)
+		if shopsShared.ErrorsIsNoRows(err) {
+			return "", &shopsShared.Failure{Code: "service_not_found", PublicMessage: ErrServiceNotFound.Error(), Status: 404, Cause: err}
+		}
+		return "", fmt.Errorf("failed to verify service access: %w", err)
 	}
 
 	if err := auth.RequireShopMember(user, result.ShopID); err != nil {

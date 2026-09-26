@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"net/http"
 	"strings"
@@ -72,6 +73,14 @@ func ProcessToken(c *gin.Context, auth *auth.Client, token *auth.Token) {
 }
 
 func abortAuthenticationFailure(c *gin.Context, message string) {
+	// FullPath is the matched server route, not the untrusted request URL.
+	// Equipment-service routes are registered under this same Shops namespace.
+	route := c.FullPath()
+	if c.GetHeader(shared.ContractHeader) == "2" && (route == "/api/v1/auth/shops" || strings.HasPrefix(route, "/api/v1/auth/shops/")) {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, response.StandardResponse{Status: 401, Code: "unauthorized", Message: "unauthorized"})
+		return
+	}
+
 	c.AbortWithStatusJSON(http.StatusUnauthorized, response.StandardResponse{
 		Status:  http.StatusUnauthorized,
 		Message: message,

@@ -27,7 +27,7 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 	}
 
 	var req request.GenerateInviteCodeRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

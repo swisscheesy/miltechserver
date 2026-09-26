@@ -104,7 +104,7 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	}
 
 	var req request.CreateShopVehicleRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -204,7 +204,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	}
 
 	var req request.UpdateShopVehicleRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

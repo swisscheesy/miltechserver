@@ -28,7 +28,7 @@ func (handler *Handler) CreateShopList(c *gin.Context) {
 	}
 
 	var req request.CreateShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -121,7 +121,7 @@ func (handler *Handler) UpdateShopList(c *gin.Context) {
 	}
 
 	var req request.UpdateShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -154,7 +154,7 @@ func (handler *Handler) DeleteShopList(c *gin.Context) {
 	}
 
 	var req request.DeleteShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

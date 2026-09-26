@@ -8,6 +8,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
@@ -67,7 +68,7 @@ func (handler *Handler) CreateShop(c *gin.Context) {
 	}
 
 	var req request.CreateShopRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -140,6 +141,10 @@ func (handler *Handler) GetUserShops(c *gin.Context) {
 	service := handler.service
 	shops, err := service.GetShopsByUser(c.Request.Context(), user)
 	if err != nil {
+		if shared.UsesContract2(c) {
+			c.Error(err)
+			return
+		}
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
@@ -219,7 +224,7 @@ func (handler *Handler) UpdateShop(c *gin.Context) {
 	}
 
 	var req request.UpdateShopRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

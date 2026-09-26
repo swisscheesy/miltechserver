@@ -1,6 +1,7 @@
 package response
 
 type StandardResponse struct {
+	Code    string      `json:"code,omitempty"`
 	Status  int         `json:"status"`
 	Data    interface{} `json:"data"`
 	Message string      `json:"message"`

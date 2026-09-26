@@ -10,9 +10,15 @@ func OK(c *gin.Context, data interface{}) {
 	})
 }
 
+const ErrorWriterKey = "response.scopedErrorWriter"
+
 // Error writes an error response in the standard envelope at the given
 // status code.
 func Error(c *gin.Context, status int, message string) {
+	if writer, ok := c.Get(ErrorWriterKey); ok {
+		writer.(func(int, string))(status, message)
+		return
+	}
 	c.JSON(status, StandardResponse{
 		Status:  status,
 		Data:    nil,

@@ -152,7 +152,7 @@ func (repo *RepositoryImpl) GetShopListByID(user *bootstrap.User, listID string)
 
 	err := stmt.Query(repo.db, &result)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if shared.ErrorsIsNoRows(err) {
 			return nil, errors.New("shop list not found")
 		}
 		return nil, fmt.Errorf("failed to get shop list: %w", err)

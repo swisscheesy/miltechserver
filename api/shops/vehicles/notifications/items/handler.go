@@ -28,7 +28,7 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	}
 
 	var req request.AddNotificationItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -123,7 +123,7 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	}
 
 	var req request.AddNotificationItemListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -195,7 +195,7 @@ func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	}
 
 	var req request.RemoveNotificationItemListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

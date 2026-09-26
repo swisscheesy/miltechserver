@@ -3,6 +3,7 @@ package shops
 import (
 	"database/sql"
 	"miltechserver/api/shops/aggregates"
+	"miltechserver/api/shops/capabilities"
 	"miltechserver/api/shops/core"
 	"miltechserver/api/shops/lists"
 	listitems "miltechserver/api/shops/lists/items"
@@ -28,6 +29,8 @@ type Dependencies struct {
 }
 
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
+	router = router.Group("", shared.ContractMiddleware)
+	capabilities.RegisterRoutes(router)
 	authorization := shared.NewShopAuthorization(deps.DB)
 
 	aggregatesRepository := aggregates.NewRepository(deps.DB)

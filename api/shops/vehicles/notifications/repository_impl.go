@@ -7,6 +7,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	. "github.com/go-jet/jet/v2/postgres"
@@ -148,7 +149,10 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	var notification model.ShopVehicleNotifications
 	err := stmt.Query(repo.db, &notification)
 	if err != nil {
-		return nil, fmt.Errorf("vehicle notification not found: %w", err)
+		if shared.ErrorsIsNoRows(err) {
+			return nil, shared.ErrNotificationNotFound
+		}
+		return nil, fmt.Errorf("vehicle notification lookup failed: %w", err)
 	}
 
 	return &notification, nil

@@ -28,7 +28,7 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	}
 
 	var req request.AddListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -98,7 +98,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	}
 
 	var req request.UpdateListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -135,7 +135,7 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 	}
 
 	var req request.RemoveListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -163,7 +163,7 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	}
 
 	var req request.AddListItemBatchRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -210,7 +210,7 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	}
 
 	var req request.RemoveListItemBatchRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

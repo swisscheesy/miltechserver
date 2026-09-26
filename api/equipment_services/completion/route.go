@@ -6,6 +6,7 @@ import (
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	shopsContract "miltechserver/api/shops/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,11 +43,11 @@ func (handler *Handler) complete(c *gin.Context) {
 	}
 
 	var req request.CompleteEquipmentServiceRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 		// "details") that response.Error()'s single message string cannot represent.
-		c.JSON(400, gin.H{"message": "invalid request", "details": err.Error()})
+		shopsContract.WriteValidationError(c, "invalid request")
 		return
 	}
 

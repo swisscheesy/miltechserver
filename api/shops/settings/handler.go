@@ -69,7 +69,7 @@ func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 	}
 
 	var req request.UpdateAdminOnlyListsRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -184,7 +184,7 @@ func (handler *Handler) UpdateShopSettings(c *gin.Context) {
 	}
 
 	var req request.UpdateShopSettingsRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

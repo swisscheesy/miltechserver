@@ -27,7 +27,7 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	}
 
 	var req request.JoinShopRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -82,7 +82,7 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	}
 
 	var req request.RemoveMemberRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return
@@ -110,7 +110,7 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	}
 
 	var req request.PromoteMemberRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
 		response.Error(c, 400, "invalid request")
 		return

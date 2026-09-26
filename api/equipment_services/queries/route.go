@@ -7,6 +7,7 @@ import (
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	shopsContract "miltechserver/api/shops/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -41,7 +42,7 @@ func (handler *Handler) getByShop(c *gin.Context) {
 		slog.Info("invalid query parameters", "error", err)
 		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 		// "details") that response.Error()'s single message string cannot represent.
-		c.JSON(400, gin.H{"message": "invalid query parameters", "details": err.Error()})
+		shopsContract.WriteValidationError(c, "invalid query parameters")
 		return
 	}
 
@@ -79,7 +80,7 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		slog.Info("invalid query parameters", "error", err)
 		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 		// "details") that response.Error()'s single message string cannot represent.
-		c.JSON(400, gin.H{"message": "invalid query parameters", "details": err.Error()})
+		shopsContract.WriteValidationError(c, "invalid query parameters")
 		return
 	}
 
@@ -89,7 +90,7 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		if err != nil {
 			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 			// "details") that response.Error()'s single message string cannot represent.
-			c.JSON(400, gin.H{"message": "invalid start_date format", "details": err.Error()})
+			shopsContract.WriteValidationError(c, "invalid start_date format")
 			return
 		}
 		startDate = &parsed
@@ -100,7 +101,7 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		if err != nil {
 			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 			// "details") that response.Error()'s single message string cannot represent.
-			c.JSON(400, gin.H{"message": "invalid end_date format", "details": err.Error()})
+			shopsContract.WriteValidationError(c, "invalid end_date format")
 			return
 		}
 		endDate = &parsed
