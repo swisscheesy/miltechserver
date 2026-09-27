@@ -1,19 +1,101 @@
 # Disposable integration databases
 
-## Status: baseline acceptance blocked (2026-09-26)
+## Approved physical baseline (2026-09-27)
 
-The repository has incremental migrations but no verified initial schema. The
-baseline SQL deliberately raises an error, and the wrapper refuses before starting
-PostgreSQL. No schema was inferred from generated Jet models. Fresh restore and
-upgrade against a populated baseline have **not passed**.
+swisscheese approved the exact sanitized `miltech_ng_test` public-schema export
+as the disposable baseline, accepting the documented differences from
+`miltech_ng`. Both exports were produced on 2026-09-27 UTC from independently
+verified database connections on PostgreSQL 14.18 at `192.168.20.70:5432`,
+with `pg_dump 14.18 --schema-only --no-owner --no-acl --schema=public`.
+The source revision is the point-in-time physical schema captured by that
+export; there is no separately recorded database migration revision.
 
-The schema owner must supply a sanitized schema-only artifact from an approved
-source. Record source identifier (no connection secrets), approval, source revision,
-export date, PostgreSQL version, SHA-256, applied migration state, and the comparison
-of types, defaults, sequences, constraints, foreign keys, indexes and extensions.
-Then replace `tests/testutil/shops_schema_baseline.sql`, set the reviewed checksum in
-`scripts/test-shops-isolated.sh`, and list only migrations after that boundary in
-`later_migrations`. There is deliberately no environment bypass for this gate.
+- `miltech_ng_test`: `tests/testutil/shops_schema_baseline.sql`, 146,693 bytes,
+  SHA-256 `9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70`.
+- `miltech_ng`: separately reviewed export SHA-256
+  `184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda`,
+  147,798 bytes. It is comparison evidence, not the fixture.
+
+The exports contain schema statements only; review found no `COPY`, row
+`INSERT`, role creation, ownership changes, grants, database URI, or
+`postgres://` string. No connection credentials are stored here. The full
+comparison and export provenance are in the separately reviewed
+`/private/tmp/shops-notification-schema-pf8s1xpl/review.md` and `schema.diff`.
+For Shops tables plus `users`, both sources have 91 columns, 52 indexes, and
+41 constraints with matching index and constraint definitions. Eleven Shops
+timestamp columns differ by explicit `(6)` precision versus omitted precision;
+defaults and nullability match. Elsewhere, `miltech_ng` has two additional
+materialized views and two indexes, a differently spelled material-images vote
+check, other timestamp precision differences, and `pgcrypto` (absent in
+`miltech_ng_test`). Both sources have `pg_trgm` and `plpgsql`.
+
+The approved snapshot has `public.users(uid)` as a `text NOT NULL` primary key,
+both validated migration-015 `shop_vehicle` nonnegative checks, and no
+`shop_notification_operations` table. A read-only check on each source found
+no `shop_members.user_id` without a matching `users.uid`.
+
+### Migration boundary and limitations
+
+Neither source has a migration/version/flyway/goose table outside system
+schemas, and swisscheese confirmed no applied-migration history exists.
+Migration files in `migrations/` are source definitions, not a deployment log.
+The latest observable marker in the approved physical snapshot is the pair of
+validated migration-015 checks. The wrapper therefore replays no 001–015
+migrations and sets `later_migrations=()` until a later migration is added.
+This is a physical baseline decision, **not proof** that files 001–015 were
+applied sequentially.
+
+Catalog markers from a restore of the pinned export in disposable PostgreSQL
+14.18 were checked against all relevant 001–015 source files:
+
+- 001: four material-image tables and nine indexes present; 002: equipment
+  services table, check and nine indexes present; 003: only 12 of 41 named
+  indexes present; 004: both suggestion tables and indexes present;
+  005: `shop_messages.parent_id` present.
+- 006–008: successor `user_pmcs_inspections`, `user_pmcs_faults`, and
+  `user_pmcs_inspection_comments` tables, `performed_by`, and `notes` present;
+  009: sync-state, checklist, subscription tables and eleven indexes present;
+  010: content UUID reservation table present; 011: successor `source_type`
+  and source-shape check present.
+- 012: trigram index and `pg_trgm` in `public` present; 013: community votes
+  table and voter index present; 014: renamed `user_pmcs_*` tables and indexes
+  present, with old `pmcs_sbs_inspections` absent; 015: both tracked-usage
+  checks present and validated.
+
+The missing 29 migration-003 index names are not dropped or renamed by any
+004–015 migration. The source file was therefore not verified as fully applied;
+the export is the approved physical state rather than a reconstructed migration
+chain. Also, the physical `shop_messages.parent_id` foreign key uses
+`ON DELETE CASCADE` whereas migration 005 specifies `ON DELETE SET NULL`, and
+the physical `equipment_services` table lacks migration 002's named list
+foreign key. These are source-to-physical discrepancies, not changes made by
+the disposable wrapper.
+
+### Task 1 verification
+
+On 2026-09-27, `rtk proxy scripts/test-shops-isolated.sh ./tests/shops
+./tests/equipment_services -count=1` restored the pinned export into a fresh
+disposable PostgreSQL 14.18 cluster and passed both packages (`shops` 3.054s,
+`equipment_services` 0.655s). The wrapper rejected supplied
+`TEST_DATABASE_URL`, supplied `TEST_DATABASE_MARKER`, an altered fixture
+checksum, and `./...` with exit status 1 before opening a database. The fixture
+was restored byte-for-byte after the checksum probe and compared with the
+approved export. Two existing test blockers were repaired in separate commits
+before this pass: the Shops error sanitizer now preserves three fixed vehicle
+usage messages, and a PMCS history query test now requires the disposable
+database name instead of `miltech_ng_test`.
+
+### Restore prerequisites
+
+The schema-filtered export has `CREATE SCHEMA public` and indexes using
+`public.gin_trgm_ops`, but no `CREATE EXTENSION`. The disposable cluster starts
+with PostgreSQL's default `public` schema. The wrapper first installs and
+verifies `pg_trgm` in that schema, checks that the pinned fixture has exactly
+one `CREATE SCHEMA public;` statement, and omits only that redundant statement
+from the restore stream. The fixture bytes and checksum remain unchanged;
+`psql -X -v ON_ERROR_STOP=1` rejects all other restore errors. PostgreSQL
+documents that schema-filtered dumps can omit dependencies outside the selected
+schema: [pg_dump 14](https://www.postgresql.org/docs/14/app-pgdump.html).
 
 ## Invocation
 
@@ -23,11 +105,12 @@ Unset `TEST_DATABASE_URL` and `TEST_DATABASE_MARKER` first, then run:
 scripts/test-shops-isolated.sh ./tests/shops ./tests/equipment_services -count=1
 ```
 
-The wrapper requires local `initdb`, `pg_ctl`, `psql`, `createdb`, Python 3, Go and
-`shasum`. It creates an ephemeral local cluster, restores the approved baseline,
-applies its explicit later migrations, writes and verifies a random 256-bit marker,
-passes the exact DSN to tests, and removes the cluster on exit or signals. The
-provisioning path is prepared but cannot be validated until the baseline is approved.
+The wrapper requires local `initdb`, `pg_ctl`, `psql`, `createdb`, Python 3, Go,
+`shasum`, `awk`, and `sed`. It creates an ephemeral local cluster, restores the
+approved baseline, applies its explicit later migrations, writes and verifies a
+random 256-bit marker, passes the exact DSN to tests, and removes the cluster
+on exit or signals. The provisioning path is confined to the approved fixture
+and disposable PostgreSQL.
 Local trust authentication is confined to this disposable cluster on loopback and
 a private socket; run it on a trusted development host. SIGKILL cannot run traps
 and requires manual cleanup of the temporary cluster.
@@ -52,16 +135,15 @@ refuses `./...`, other package patterns, and unsupported flags. Supported flags
 are `-race`, `-v`, `-failfast`, `-short`, `-count`, `-run`, `-timeout`, `-parallel`
 and `-shuffle`; flags taking a value accept either Go spelling.
 
-## Acceptance evidence still required
+## Further acceptance evidence
 
-1. Restore a fresh approved schema and run the two suites above successfully.
-2. Restore a separate approved baseline, seed owner-approved representative rows,
+1. Restore a separate approved baseline, seed owner-approved representative rows,
    apply only subsequent migrations, compare schema and preserved data, then run
    the suites. Existing suite truncation is not evidence of populated upgrades.
-3. Prove actual marker mismatch/missing-table refusals against disposable Postgres;
+2. Prove actual marker mismatch/missing-table refusals against disposable Postgres;
    current marker regression tests use an in-process SQL driver with no network.
-4. Record release compatibility evidence in `shops-release-contracts.md`.
-5. Coordinate rotation of the previously committed credential with the owner.
+3. Record release compatibility evidence in `shops-release-contracts.md`.
+4. Coordinate rotation of the previously committed credential with the owner.
    Removing the source constant does not rotate it or remove it from Git history.
 
 References: [Go database/sql](https://pkg.go.dev/database/sql),

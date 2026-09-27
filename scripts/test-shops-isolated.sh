@@ -22,12 +22,13 @@ done
 [[ "$needs_value" == false && "$packages" -gt 0 ]] || fail 'A supported test package and complete flag values are required.'
 root=$(cd "$(dirname "$0")/.." && pwd)
 baseline="$root/tests/testutil/shops_schema_baseline.sql"
-# Fill these only in a reviewed baseline-provenance change. No environment override.
-baseline_sha256=''
+# The approved public-schema export is pinned; no environment override.
+baseline_sha256='9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70'
+# The snapshot has the validated migration-015 constraints. No source migration
+# follows that physical state yet; history of applied migration files is absent.
 later_migrations=()
-[[ -n "$baseline_sha256" ]] || fail 'BLOCKED: owner-approved schema baseline and migration boundary are unavailable; see docs/testing/shops-database.md.'
 [[ $(shasum -a 256 "$baseline" | cut -d ' ' -f 1) == "$baseline_sha256" ]] || fail 'Approved baseline checksum mismatch.'
-for tool in initdb pg_ctl psql createdb python3 go; do
+for tool in initdb pg_ctl psql createdb python3 go awk sed; do
   command -v "$tool" >/dev/null || fail "Required local tool unavailable: $tool"
 done
 # Ignore inherited libpq connection defaults for local setup and tests.
@@ -60,7 +61,16 @@ pg_ctl -D "$instance/data" -l "$instance/server.log" -o "-h 127.0.0.1 -p $port -
 # The private socket ties schema setup to this cluster even if TCP binding fails.
 createdb -h "$instance" -p "$port" -U postgres miltech_test_shops >"$instance/setup.log" 2>&1 || fail 'Disposable database creation failed.'
 psql_local() { psql -X -v ON_ERROR_STOP=1 -h "$instance" -p "$port" -U postgres -d miltech_test_shops "$@"; }
-psql_local -f "$baseline" >"$instance/setup.log" 2>&1 || fail 'Approved baseline restore failed.'
+# pg_dump --schema=public includes CREATE SCHEMA public but omits pg_trgm, which
+# its public.gin_trgm_ops index needs. Keep the approved file byte-for-byte:
+# provision the extension in the disposable default schema, then omit only the
+# redundant schema declaration from the restore stream.
+schema_declarations=$(awk '/^CREATE SCHEMA public;$/ { count++ } END { print count+0 }' "$baseline")
+[[ "$schema_declarations" == 1 ]] || fail 'Approved baseline public schema declaration mismatch.'
+psql_local -c 'CREATE EXTENSION pg_trgm WITH SCHEMA public' >"$instance/setup.log" 2>&1 || fail 'Disposable pg_trgm setup failed.'
+extension_schema=$(psql_local -Atc "SELECT extnamespace::regnamespace::text FROM pg_extension WHERE extname = 'pg_trgm'" 2>"$instance/setup.log") || fail 'Disposable pg_trgm verification failed.'
+[[ "$extension_schema" == public ]] || fail 'Disposable pg_trgm verification failed.'
+sed '/^CREATE SCHEMA public;$/d' "$baseline" | psql_local >"$instance/setup.log" 2>&1 || fail 'Approved baseline restore failed.'
 # Bash 3.2 treats an empty array as unset under nounset.
 for migration in ${later_migrations[@]+"${later_migrations[@]}"}; do
   psql_local -f "$root/$migration" >"$instance/setup.log" 2>&1 || fail 'Post-baseline migration failed.'
