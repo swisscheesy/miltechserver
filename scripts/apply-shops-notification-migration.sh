@@ -63,7 +63,7 @@ emit_guard() {
   cat <<'SQL'
 SELECT COALESCE(
   current_database() = :'expected_database'
-  AND inet_server_addr()::text = :'expected_address'
+  AND host(inet_server_addr()) = :'expected_address'
   AND inet_server_port() = :expected_port
   AND current_user = :'expected_role'
   AND current_setting('server_version_num')::integer = 140018
