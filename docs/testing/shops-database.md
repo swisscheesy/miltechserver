@@ -34,7 +34,7 @@ both validated migration-015 `shop_vehicle` nonnegative checks, and no
 `shop_notification_operations` table. A read-only check on each source found
 no `shop_members.user_id` without a matching `users.uid`.
 
-## Migration 016 operator procedure (prepared, not executed)
+## Migration 016 operator procedure and 2026-09-27 application
 
 `scripts/apply-shops-notification-migration.sh` accepts exactly one of the two
 reviewed database names and the five explicit arguments shown below. The
@@ -58,7 +58,7 @@ The operator must independently verify the service mapping and obtain an
 approved application window before running either command. Complete the
 `miltech_ng_test` application and its post-migration verification before
 considering `miltech_ng`; the latter needs its own approval at the application
-window. These are procedure examples, **not** a record of execution:
+window. These are reusable procedure examples; the execution record follows:
 
 ```sh
 export PGSERVICE=<operator-provisioned-test-service>
@@ -102,6 +102,50 @@ guarded reverse only on disposable databases.
 There is no applied-migration history table. These pins attest to physical
 public-schema state on 2026-09-27, not a sequential 001–015 application. The
 source-to-physical differences below remain release considerations.
+
+### Live application record
+
+swisscheese approved application to both named databases on 2026-09-27. A
+private mode-0600 `PGSERVICEFILE` mapped the previously verified PostgreSQL
+MCP host, port, and role to each target; the test entry changed only the
+database name. Authentication stayed outside the repository and command line.
+The runner used reviewed SQL SHA-256
+`32b7a07f383aa1c6be028df865871bb0034e8df42d6f8e8474bff3aa139087de`.
+Its address guard was corrected in `76c44f9` to compare
+`host(inet_server_addr())`: the `inet` text rendering includes `/32` on this
+server. A read-only live check and independent review passed before either
+application.
+
+| Target | Runner completion (UTC) | Pre-schema SHA-256 | Post-schema SHA-256 | Result |
+| --- | --- | --- | --- | --- |
+| `miltech_ng_test` | 2026-09-27 13:56:48 | `9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70` | `893858c29ece15ec8ad7abf448e9869a0f1c80ca335cc1ab3cccceac0d752b58` | Exit 0; migration 016 present |
+| `miltech_ng` | 2026-09-27 13:57:58 | `184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda` | `5e396f10f2793e72c802c827713701903f881fd0e1c70acdd2b6497452c3d7b0` | Exit 0; migration 016 present |
+
+Immediately before each run, an independent read-only `pg_dump 14.18`
+reproduced its pinned pre-schema checksum. Both connections reported
+`192.168.20.70:5432`, role `postgres`, PostgreSQL 14.18, both validated
+migration-015 checks, and no operation table. The runner independently
+rechecked identity, prerequisites, and fingerprint before applying SQL.
+Read-only post snapshots show each target's ten existing Shops table counts,
+39 constraints, and 50 indexes unchanged. The test database retained one
+Shop, one vehicle, two members, and one invite code. The main database retained
+four Shops, nine vehicles, nine notifications, 18 direct items, 57 messages,
+55 notification changes, 13 list items, 12 lists, six members, and five invite
+codes. Each new operations table has zero rows, the same five non-null column
+definitions, a `(user_id, operation_id)` primary key, a cascading `users(uid)`
+foreign key, and a 32-byte fingerprint check. Its three constraints and one
+index are logically identical across the two targets. The post-schema hashes
+differ because the previously approved source schemas differ.
+An immediate second invocation for each target was refused by the initial
+guard because the operations table already exists, before schema dump or SQL
+include.
+
+This application did not run destructive Go tests, reverse migration, server
+deployment, or capability activation on either named database. Signed
+3.7.0+41 artifacts and staging/device execution remain unavailable; the user
+authorized this additive schema-only application with those release gates
+still open. Server instance `DB_NAME`/host/port mappings and fleet flag state
+have not been verified, so this record does not authorize rollout.
 
 ### Migration boundary and limitations
 

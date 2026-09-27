@@ -133,21 +133,23 @@ builds accept these bytes.
 
 ## Notification save activation gate — 2026-09-27
 
-The Task 7 migration runner and exact two-target procedure are documented in
-`shops-database.md`. Preparing or committing the runner does not apply
-migration 016. The independently reviewed 2026-09-27 pre-migration fingerprints
+The Task 7 migration runner, two-target procedure, and live application record
+are documented in `shops-database.md`. The independently reviewed 2026-09-27 pre-migration fingerprints
 are `9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70`
 for `miltech_ng_test` and
 `184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda`
 for `miltech_ng`; both were at `192.168.20.70:5432` under role `postgres`.
 They are separate physical snapshots, not evidence that migrations 001–015
-ran in sequence. The post-016 fingerprints, application times, row-count
-comparisons, and deployment identities have not been recorded.
+ran in sequence. Migration 016 was applied to `miltech_ng_test` first and
+`miltech_ng` second after explicit user authorization. Read-only post checks
+confirmed the receipt ledger, its constraints, and unchanged existing Shops
+rows and constraints. The post-schema SHA-256 values are
+`893858c29ece15ec8ad7abf448e9869a0f1c80ca335cc1ab3cccceac0d752b58`
+and `5e396f10f2793e72c802c827713701903f881fd0e1c70acdd2b6497452c3d7b0`,
+respectively. Deployment identities have not been verified.
 
-Release remains gated on an approved application window, independent service
-and instance-to-database mapping checks, applying and verifying 016 on
-`miltech_ng_test` first and `miltech_ng` second, and a successful old-binary
-and mixed-binary rehearsal with the capability flag false. Every serving new
+Release remains gated on instance-to-database mapping checks and a successful
+old-binary and mixed-binary rehearsal with the capability flag false. Every serving new
 instance must accept atomic POSTs against its intended migrated database before
 `SHOPS_ATOMIC_NOTIFICATION_SAVE_ENABLED=true` is set uniformly. A capability
 GET from every instance must report the intended body; aggregate HTTP 200 is
@@ -160,5 +162,5 @@ If the server rollout is reverted after atomic saves, retain migration 016 and
 all operation receipts on both databases. Disabling advertisement blocks fresh
 saves and uncertain retries in the future client; keep a compatible endpoint
 available or resolve frozen operation IDs through an operator-led receipt
-lookup before a replacement action. No live migration, deployment, signed
-artifact, or device acceptance is claimed by this preparation.
+lookup before a replacement action. No deployment, signed-artifact, or device
+acceptance is claimed by the schema-only application.
