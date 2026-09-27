@@ -110,7 +110,7 @@ schemas, and swisscheese confirmed no applied-migration history exists.
 Migration files in `migrations/` are source definitions, not a deployment log.
 The latest observable marker in the approved physical snapshot is the pair of
 validated migration-015 checks. The wrapper therefore replays no 001–015
-migrations and sets `later_migrations=()` until a later migration is added.
+migrations; `later_migrations` now contains only migration 016.
 This is a physical baseline decision, **not proof** that files 001–015 were
 applied sequentially.
 
