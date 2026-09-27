@@ -44,6 +44,10 @@ dump can reproduce the reviewed bytes. Do not pass a URI, password, SQL path,
 or a third database name. The runner uses only the fixed
 `migrations/016_create_shop_notification_operations.sql` and never invokes the
 reverse migration.
+Unset `PGDATABASE`, `PGHOST`, `PGHOSTADDR`, `PGPORT`, and `PGUSER` before
+invocation; the runner refuses even empty values for these inherited selectors
+so the service file must provide the target mapping. `PGSERVICEFILE` and the
+operator's authentication channel remain available.
 
 | Target | Reviewed server address | Port | Role | Pre-migration public-schema SHA-256 |
 | --- | --- | --- | --- | --- |
@@ -74,6 +78,16 @@ immediately before including migration 016. A refused or interrupted run is
 not proof of either migrated or untouched state; inspect the catalog before
 retrying. The SQL file has its own transaction. Keep other schema changes out
 of the application window between fingerprint and commit.
+
+The runner resolves its physical script path through symlinks before locating
+the fixed SQL source. Before any database contact it copies that source to a
+private mode-0600 file and checks its pinned SHA-256
+`32b7a07f383aa1c6be028df865871bb0034e8df42d6f8e8474bff3aa139087de`.
+It rechecks the copy immediately before the final session includes it. This
+private verified `\i` path intentionally replaces the plan's literal relative
+`\i migrations/016_create_shop_notification_operations.sql`: a symlinked
+runner or source-file replacement cannot redirect the include to different
+SQL. The private copy is removed on exit.
 
 For each target, record before and after: `current_database()`,
 `inet_server_addr()`, `inet_server_port()`, `current_user`, server version,

@@ -28,14 +28,34 @@ esac
 [[ "$expected_role" == postgres ]] || fail 'Role differs from the approved record.'
 [[ "$expected_checksum" == "$approved_checksum" ]] || fail 'Schema checksum differs from the approved target record.'
 [[ -n ${PGSERVICE:-} && "$PGSERVICE" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]] || fail 'An operator-provisioned PGSERVICE name is required.'
+for selector in PGDATABASE PGHOST PGHOSTADDR PGPORT PGUSER; do
+  [[ -z ${!selector+x} ]] || fail "Unset $selector; connection identity must come from PGSERVICE."
+done
 
 command -v psql >/dev/null || fail 'psql is required.'
 command -v pg_dump >/dev/null || fail 'pg_dump is required.'
 command -v shasum >/dev/null || fail 'shasum is required.'
+command -v python3 >/dev/null || fail 'python3 is required to resolve the runner path.'
 
-repository_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+script_path=$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${BASH_SOURCE[0]}")
+repository_root=$(cd "$(dirname "$script_path")/.." && pwd -P)
 cd "$repository_root"
-[[ -f migrations/016_create_shop_notification_operations.sql ]] || fail 'Fixed migration file is missing.'
+
+# A private, hash-checked copy prevents a symlinked invocation or a later
+# replacement of the source file from changing what the final psql session reads.
+approved_migration_checksum=32b7a07f383aa1c6be028df865871bb0034e8df42d6f8e8474bff3aa139087de
+umask 077
+migration_dir=$(mktemp -d /private/tmp/shops-notification-migration.XXXXXXXX) || fail 'Could not create a private migration directory.'
+schema_dump=
+cleanup() {
+  [[ -z "$schema_dump" ]] || rm -f "$schema_dump"
+  rm -rf "$migration_dir"
+}
+trap cleanup EXIT
+migration_sql="$migration_dir/016_create_shop_notification_operations.sql"
+cp migrations/016_create_shop_notification_operations.sql "$migration_sql" 2>/dev/null || fail 'Fixed migration file is missing.'
+chmod 600 "$migration_sql"
+[[ $(shasum -a 256 "$migration_sql" | cut -d ' ' -f 1) == "$approved_migration_checksum" ]] || fail 'Fixed migration checksum differs from the reviewed SQL.'
 
 psql_args=(-X -w -v ON_ERROR_STOP=1 -v "expected_database=$target" -v "expected_address=$expected_address" -v "expected_port=$expected_port" -v "expected_role=$expected_role")
 
@@ -72,9 +92,7 @@ SQL
 # unintended schema. The guard is repeated in the migration psql session.
 emit_guard | psql "${psql_args[@]}" -q || fail 'Initial connection guard failed.'
 
-umask 077
 schema_dump=$(mktemp "${TMPDIR:-/tmp}/shops-notification-schema.XXXXXXXX") || fail 'Could not create a private schema dump.'
-trap 'rm -f "$schema_dump"' EXIT
 pg_dump --schema-only --no-owner --no-acl --schema=public \
   --file="$schema_dump" 2>/dev/null || fail 'Schema export failed.'
 actual_checksum=$(shasum -a 256 "$schema_dump" | cut -d ' ' -f 1)
@@ -82,9 +100,10 @@ actual_checksum=$(shasum -a 256 "$schema_dump" | cut -d ' ' -f 1)
 
 # The final guard and the fixed include run on one psql connection. ON_ERROR_STOP
 # exits before the include on any failed query or refused conditional branch.
+[[ $(shasum -a 256 "$migration_sql" | cut -d ' ' -f 1) == "$approved_migration_checksum" ]] || fail 'Private migration copy changed before include.'
 {
   emit_guard
-  printf '%s\n' '\i migrations/016_create_shop_notification_operations.sql'
+  printf '\\i %s\n' "$migration_sql"
 } | psql "${psql_args[@]}" -q || fail 'Migration session failed.'
 
 printf 'Migration 016 applied to approved target %s. Verify the resulting schema and rows before proceeding.\n' "$target"
