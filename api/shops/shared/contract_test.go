@@ -11,6 +11,7 @@ import (
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -67,31 +68,43 @@ func TestContractMiddlewareIsolation(t *testing.T) {
 		}
 	}
 }
-func TestContractCapabilitiesDisabled(t *testing.T) {
-	r := gin.New()
-	g := r.Group("", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{}) })
-	capabilities.RegisterRoutes(g)
-	for _, selector := range []string{"", "99", "2"} {
-		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/shops/capabilities", nil)
-		req.Header.Set(shared.ContractHeader, selector)
-		r.ServeHTTP(w, req)
-		if selector != "2" {
-			if w.Code != 400 {
-				t.Fatal(w.Code)
+func TestContractCapabilitiesByFlag(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%t", enabled), func(t *testing.T) {
+			r := gin.New()
+			g := r.Group("", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{}) })
+			capabilities.RegisterRoutes(g, enabled)
+			for _, selector := range []string{"", "99", "2"} {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest("GET", "/shops/capabilities", nil)
+				req.Header.Set(shared.ContractHeader, selector)
+				r.ServeHTTP(w, req)
+				if selector != "2" {
+					if w.Code != 400 {
+						t.Fatal(w.Code)
+					}
+					continue
+				}
+				if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" {
+					t.Fatalf("status=%d headers=%v", w.Code, w.Header())
+				}
+				var body struct{ Data map[string]interface{} }
+				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				want := map[string]interface{}{
+					"contract_version":         float64(2),
+					"typed_errors":             false,
+					"atomic_notification_save": enabled,
+					"service_dates":            false,
+					"service_reads":            false,
+					"message_sync":             false,
+				}
+				if !reflect.DeepEqual(body.Data, want) {
+					t.Fatalf("got %v, want %v", body.Data, want)
+				}
 			}
-			continue
-		}
-		var body struct{ Data map[string]interface{} }
-		json.Unmarshal(w.Body.Bytes(), &body)
-		if body.Data["contract_version"] != float64(2) {
-			t.Fatal(body)
-		}
-		for _, key := range []string{"typed_errors", "atomic_notification_save", "service_dates", "service_reads", "message_sync"} {
-			if body.Data[key] != false {
-				t.Fatal(key)
-			}
-		}
+		})
 	}
 }
 

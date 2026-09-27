@@ -28,6 +28,10 @@ type standardResponse struct {
 }
 
 func newTestRouter(t *testing.T) *gin.Engine {
+	return newTestRouterWithAtomicCapability(t, false)
+}
+
+func newTestRouterWithAtomicCapability(t *testing.T, enabled bool) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -40,7 +44,7 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	deps := shops.Dependencies{
 		DB:         testDB,
 		BlobClient: (*azblob.Client)(nil),
-		Env:        &bootstrap.Env{BlobAccountName: "test-account"},
+		Env:        &bootstrap.Env{BlobAccountName: "test-account", ShopsAtomicNotificationSaveEnabled: enabled},
 	}
 
 	shops.RegisterRoutes(deps, group)

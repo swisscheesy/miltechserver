@@ -32,9 +32,10 @@ type Env struct {
 	ContextTimeout   int
 	MobileAppVersion string
 	// Connection pool settings for parallel query workloads
-	DBMaxOpenConns int
-	DBMaxIdleConns int
-	UserPmcs       UserPmcsConfig
+	DBMaxOpenConns                     int
+	DBMaxIdleConns                     int
+	UserPmcs                           UserPmcsConfig
+	ShopsAtomicNotificationSaveEnabled bool
 }
 
 type UserPmcsConfig struct {
@@ -106,6 +107,10 @@ func NewEnv() *Env {
 	if err := env.UserPmcs.validate(); err != nil {
 		log.Fatal(err)
 	}
+	env.ShopsAtomicNotificationSaveEnabled, err = shopsAtomicNotificationSaveEnabledFromEnvironment()
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Blob Storage
 	env.BlobAccountName = os.Getenv("BLOB_ACCOUNT_NAME")
 
@@ -170,6 +175,21 @@ func newUserPmcsConfigFromEnvironment() (UserPmcsConfig, error) {
 		value.assign(parsed)
 	}
 	return config, nil
+}
+
+func shopsAtomicNotificationSaveEnabledFromEnvironment() (bool, error) {
+	value, found := os.LookupEnv("SHOPS_ATOMIC_NOTIFICATION_SAVE_ENABLED")
+	if !found {
+		return false, nil
+	}
+	switch value {
+	case "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("invalid SHOPS_ATOMIC_NOTIFICATION_SAVE_ENABLED: expected true or false")
+	}
 }
 
 func getUserPmcsEnvAsInt(key string, defaultValue int) (int, error) {

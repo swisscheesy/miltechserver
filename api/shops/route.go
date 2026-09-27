@@ -30,7 +30,7 @@ type Dependencies struct {
 
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	router = router.Group("", shared.ContractMiddleware)
-	capabilities.RegisterRoutes(router)
+	capabilities.RegisterRoutes(router, deps.Env.ShopsAtomicNotificationSaveEnabled)
 	authorization := shared.NewShopAuthorization(deps.DB)
 
 	aggregatesRepository := aggregates.NewRepository(deps.DB)

@@ -98,6 +98,37 @@ func TestAtomicNotificationCreateCommitsCompleteSet(t *testing.T) {
 	require.Equal(t, 1, atomicRowCount(t, "shop_notification_operations", "user_id=$1 AND operation_id=$2 AND notification_id=$3 AND committed_at=$4", "atomic-owner", receipt.OperationID, receipt.NotificationID, receipt.CommittedAt))
 }
 
+func TestAtomicCapabilityRollingConfig(t *testing.T) {
+	falseRouter, shopID, vehicleID := atomicFixture(t, "atomic-owner")
+	trueRouter := newTestRouterWithAtomicCapability(t, true)
+
+	checkCapability := func(router *gin.Engine, want bool) {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/shops/capabilities", nil)
+		req.Header.Set("X-MilTech-Shops-Contract", "2")
+		req.Header.Set("X-User-ID", "atomic-owner")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Equal(t, "no-store", rec.Header().Get("Cache-Control"))
+		body := decodeStandardResponse(t, rec.Body)
+		require.Equal(t, want, decodeMap(t, body.Data)["atomic_notification_save"])
+	}
+
+	checkCapability(trueRouter, true)
+	first := atomicNotificationRequest(shopID, vehicleID)
+	firstReceipt := atomicReceipt(t, doContract2JSONRequest(t, falseRouter, first, "atomic-owner"))
+	require.Equal(t, first.OperationID, firstReceipt.OperationID)
+	require.Equal(t, 1, atomicRowCount(t, "shop_vehicle_notifications", "id=$1", firstReceipt.NotificationID))
+
+	checkCapability(falseRouter, false)
+	second := atomicNotificationRequest(shopID, vehicleID)
+	secondReceipt := atomicReceipt(t, doContract2JSONRequest(t, trueRouter, second, "atomic-owner"))
+	require.Equal(t, second.OperationID, secondReceipt.OperationID)
+	require.Equal(t, 1, atomicRowCount(t, "shop_vehicle_notifications", "id=$1", secondReceipt.NotificationID))
+	require.Equal(t, 2, atomicRowCount(t, "shop_vehicle_notifications", "shop_id=$1", shopID))
+}
+
 func TestAtomicNotificationConcurrentReplayAndConflict(t *testing.T) {
 	router, shopID, vehicleID := atomicFixture(t, "atomic-owner")
 	r := atomicNotificationRequest(shopID, vehicleID)

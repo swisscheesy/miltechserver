@@ -7,8 +7,13 @@ import (
 	"miltechserver/bootstrap"
 )
 
-func RegisterRoutes(router *gin.RouterGroup) { router.GET("/shops/capabilities", Get) }
-func Get(c *gin.Context) {
+func RegisterRoutes(router *gin.RouterGroup, atomicNotificationSaveEnabled bool) {
+	router.GET("/shops/capabilities", func(c *gin.Context) {
+		get(c, atomicNotificationSaveEnabled)
+	})
+}
+
+func get(c *gin.Context, atomicNotificationSaveEnabled bool) {
 	user, ok := c.Get("user")
 	u, valid := user.(*bootstrap.User)
 	if !ok || !valid || u == nil {
@@ -18,8 +23,8 @@ func Get(c *gin.Context) {
 	if !shared.RequireContract2(c) {
 		return
 	}
-	// Activation requires released-client and serving-instance evidence.
 	// message_sync also requires verified counter backfill and all-writer allocation;
 	// the additive message sync service remains closed while F1 is blocked.
-	response.OK(c, gin.H{"contract_version": 2, "typed_errors": false, "atomic_notification_save": false, "service_dates": false, "service_reads": false, "message_sync": false})
+	c.Header("Cache-Control", "no-store")
+	response.OK(c, gin.H{"contract_version": 2, "typed_errors": false, "atomic_notification_save": atomicNotificationSaveEnabled, "service_dates": false, "service_reads": false, "message_sync": false})
 }
