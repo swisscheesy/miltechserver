@@ -90,6 +90,11 @@ var publicResponseMessages = map[string]bool{
 	"shop_id is required":                            true,
 	"unauthorized":                                   true,
 	"vehicle_id is required":                         true,
+
+	// The usage handler emits these fixed public messages for legacy requests.
+	"shop access denied":     true,
+	"shop vehicle not found": true,
+	"usage adjustment would move tracked usage outside the supported range": true,
 }
 
 func WriteValidationError(c *gin.Context, message string) {
