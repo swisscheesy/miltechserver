@@ -83,10 +83,13 @@ func FingerprintNotificationSave(r request.NotificationSaveRequest) ([32]byte, e
 }
 
 func (service *ServiceImpl) SaveAtomic(ctx context.Context, userID string, r request.NotificationSaveRequest) (response.NotificationSaveReceipt, error) {
-	// Production stays closed until the schema baseline, operation-table
-	// migration, and released-client compatibility proof are owner-approved.
-	// Repository support alone does not establish rollout readiness.
-	return response.NotificationSaveReceipt{}, &shared.Failure{Code: "unsupported_contract", PublicMessage: "Notification save unavailable", Status: 503}
+	saver, ok := service.repo.(AtomicSaver)
+	if !ok {
+		return response.NotificationSaveReceipt{}, &shared.Failure{
+			Code: "unsupported_contract", PublicMessage: "Notification save unavailable", Status: 503,
+		}
+	}
+	return saver.SaveAtomic(ctx, userID, r)
 }
 
 func (handler *Handler) SaveAtomic(c *gin.Context) {

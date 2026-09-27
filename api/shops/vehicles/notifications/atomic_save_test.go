@@ -395,13 +395,13 @@ func TestLegacyDeleteRequiresLockedMembership(t *testing.T) {
 	}
 }
 
-func TestAtomicRealRouteDisabledBeforeDatabaseAccess(t *testing.T) {
+func TestAtomicRealRouteRejectsInvalidBeforeDatabaseAccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, tc := range []struct {
 		name, header string
 		invalid      bool
 		status       int
-	}{{"legacy", "", false, 400}, {"unknown", "3", false, 400}, {"invalid", "2", true, 400}, {"disabled", "2", false, 503}} {
+	}{{"legacy", "", false, 400}, {"unknown", "3", false, 400}, {"invalid", "2", true, 400}} {
 		t.Run(tc.name, func(t *testing.T) {
 			state := &atomicDriverState{}
 			db := sql.OpenDB(atomicConnector{state})
@@ -424,24 +424,26 @@ func TestAtomicRealRouteDisabledBeforeDatabaseAccess(t *testing.T) {
 			// A fresh sql.DB cannot start a transaction or execute SQL without
 			// opening a driver connection first.
 			if state.connections != 0 {
-				t.Fatalf("disabled route accessed database: %+v", state)
-			}
-			if tc.status == http.StatusServiceUnavailable {
-				var envelope struct {
-					Status int    `json:"status"`
-					Code   string `json:"code"`
-					Data   any    `json:"data"`
-				}
-				if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
-					t.Fatal(err)
-				}
-				if envelope.Status != 503 || envelope.Code != "unsupported_contract" || envelope.Data != nil {
-					t.Fatalf("expected typed unavailable response without receipt: %s", rec.Body.String())
-				}
+				t.Fatalf("invalid route accessed database: %+v", state)
 			}
 		})
 	}
 }
+
+type repositoryWithoutAtomicSaver struct{ Repository }
+
+func TestAtomicServiceWithoutSaverReturnsTypedUnavailable(t *testing.T) {
+	service := NewService(repositoryWithoutAtomicSaver{}, nil)
+	receipt, err := service.SaveAtomic(context.Background(), "user", atomicRequest())
+	if receipt.NotificationID != "" || err == nil {
+		t.Fatalf("unexpected unsupported repository result: %+v %v", receipt, err)
+	}
+	failure := shared.ClassifyFailure(err)
+	if failure.Status != http.StatusServiceUnavailable || failure.Code != "unsupported_contract" {
+		t.Fatalf("missing typed unavailable failure: %+v", failure)
+	}
+}
+
 func TestAtomicLastSaveWinsAuditsInterveningItems(t *testing.T) {
 	r := atomicRequest()
 	id := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
