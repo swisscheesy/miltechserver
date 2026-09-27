@@ -340,7 +340,7 @@ func newShopHistoryQueryCountingDatabase(t *testing.T) (*sql.DB, *shopHistoryQue
 
 	var databaseName string
 	require.NoError(t, database.QueryRow(`SELECT current_database()`).Scan(&databaseName))
-	require.Equal(t, "miltech_ng_test", databaseName)
+	require.Equal(t, "miltech_test_shops", databaseName)
 	counter.mutex.Lock()
 	counter.queries = nil
 	counter.mutex.Unlock()
