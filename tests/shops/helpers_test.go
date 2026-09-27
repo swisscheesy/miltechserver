@@ -133,6 +133,7 @@ func clearShopTables(t *testing.T, db *sql.DB) {
 
 	_, err := db.Exec(
 		`TRUNCATE TABLE
+			shop_notification_operations,
 			shop_notification_items,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,
