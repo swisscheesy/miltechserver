@@ -130,3 +130,35 @@ file were removed after verification and were not committed. This remains
 source and host-test evidence, not signed Android or iOS binary evidence, and
 it does not prove independently staged platform
 builds accept these bytes.
+
+## Notification save activation gate — 2026-09-27
+
+The Task 7 migration runner and exact two-target procedure are documented in
+`shops-database.md`. Preparing or committing the runner does not apply
+migration 016. The independently reviewed 2026-09-27 pre-migration fingerprints
+are `9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70`
+for `miltech_ng_test` and
+`184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda`
+for `miltech_ng`; both were at `192.168.20.70:5432` under role `postgres`.
+They are separate physical snapshots, not evidence that migrations 001–015
+ran in sequence. The post-016 fingerprints, application times, row-count
+comparisons, and deployment identities have not been recorded.
+
+Release remains gated on an approved application window, independent service
+and instance-to-database mapping checks, applying and verifying 016 on
+`miltech_ng_test` first and `miltech_ng` second, and a successful old-binary
+and mixed-binary rehearsal with the capability flag false. Every serving new
+instance must accept atomic POSTs against its intended migrated database before
+`SHOPS_ATOMIC_NOTIFICATION_SAVE_ENABLED=true` is set uniformly. A capability
+GET from every instance must report the intended body; aggregate HTTP 200 is
+insufficient. Keep the legacy routes for 3.7.0+41 and stage signed Android and
+iOS 3.7.0+41 artifacts plus the future mobile build on physical devices before
+release. Artifact IDs, checksums, captured device flows, fleet versions, and
+those stage results are still unavailable.
+
+If the server rollout is reverted after atomic saves, retain migration 016 and
+all operation receipts on both databases. Disabling advertisement blocks fresh
+saves and uncertain retries in the future client; keep a compatible endpoint
+available or resolve frozen operation IDs through an operator-led receipt
+lookup before a replacement action. No live migration, deployment, signed
+artifact, or device acceptance is claimed by this preparation.

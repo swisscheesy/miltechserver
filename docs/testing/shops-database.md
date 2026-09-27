@@ -34,6 +34,61 @@ both validated migration-015 `shop_vehicle` nonnegative checks, and no
 `shop_notification_operations` table. A read-only check on each source found
 no `shop_members.user_id` without a matching `users.uid`.
 
+## Migration 016 operator procedure (prepared, not executed)
+
+`scripts/apply-shops-notification-migration.sh` accepts exactly one of the two
+reviewed database names and the five explicit arguments shown below. The
+operator must provision `PGSERVICE` in a libpq service file and authentication
+outside this repository. Use PostgreSQL 14.18 client tools so the schema-only
+dump can reproduce the reviewed bytes. Do not pass a URI, password, SQL path,
+or a third database name. The runner uses only the fixed
+`migrations/016_create_shop_notification_operations.sql` and never invokes the
+reverse migration.
+
+| Target | Reviewed server address | Port | Role | Pre-migration public-schema SHA-256 |
+| --- | --- | --- | --- | --- |
+| `miltech_ng_test` | `192.168.20.70` | `5432` | `postgres` | `9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70` |
+| `miltech_ng` | `192.168.20.70` | `5432` | `postgres` | `184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda` |
+
+The operator must independently verify the service mapping and obtain an
+approved application window before running either command. Complete the
+`miltech_ng_test` application and its post-migration verification before
+considering `miltech_ng`; the latter needs its own approval at the application
+window. These are procedure examples, **not** a record of execution:
+
+```sh
+export PGSERVICE=<operator-provisioned-test-service>
+scripts/apply-shops-notification-migration.sh miltech_ng_test 192.168.20.70 5432 postgres 9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70
+
+export PGSERVICE=<operator-provisioned-main-service>
+scripts/apply-shops-notification-migration.sh miltech_ng 192.168.20.70 5432 postgres 184eaa0cdb1f1671cbe4fb55eccdb0b5a2fce9bfb6ac7c858e6ab44e52c5deda
+```
+
+Before any migration write, the runner rejects an unexpected argument,
+connection identity, PostgreSQL version, missing or unvalidated migration-015
+checks, existing operations relation, or schema fingerprint. It first checks
+the live identity, then compares `pg_dump --schema-only --no-owner --no-acl
+--schema=public` SHA-256 with the target's own pinned checksum, then rechecks
+identity and catalog in the **same `psql -X -v ON_ERROR_STOP=1` session**
+immediately before including migration 016. A refused or interrupted run is
+not proof of either migrated or untouched state; inspect the catalog before
+retrying. The SQL file has its own transaction. Keep other schema changes out
+of the application window between fingerprint and commit.
+
+For each target, record before and after: `current_database()`,
+`inet_server_addr()`, `inet_server_port()`, `current_user`, server version,
+schema SHA-256, presence and validation state of both migration-015 checks,
+operations-table primary key, user cascade and fingerprint check, and Shops
+row counts. Record timestamp, runner exit, service mapping, and the server
+instances' effective database/host/port. The after checksum will differ from
+the pre-migration value and must be captured independently. Leave operations
+rows and migration 016 in place if a server release is reverted. Rehearse a
+guarded reverse only on disposable databases.
+
+There is no applied-migration history table. These pins attest to physical
+public-schema state on 2026-09-27, not a sequential 001–015 application. The
+source-to-physical differences below remain release considerations.
+
 ### Migration boundary and limitations
 
 Neither source has a migration/version/flyway/goose table outside system
