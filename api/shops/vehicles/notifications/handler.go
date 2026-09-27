@@ -40,7 +40,7 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 		Title:            req.Title,
 		Description:      req.Description,
 		Type:             req.Type,
-		Completed:        false,
+		Completed:        req.Completed,
 		AttachedShopList: req.AttachedShopList,
 	}
 

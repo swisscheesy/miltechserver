@@ -1,10 +1,11 @@
 package shops_test
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -150,6 +151,38 @@ func TestReleasedNotificationNoHeaderCreateItemsEditAndDenial(t *testing.T) {
 	require.Zero(t, atomicRowCount(t, "shop_notification_items", "notification_id=$1 AND niin=$2", id, "blocked"))
 }
 
+func TestReleasedNotificationCreateCompletedFlag(t *testing.T) {
+	router, shopID, vehicleID := atomicFixture(t, "user-1")
+	path := "/api/v1/auth/shops/vehicles/notifications"
+	trueValue, falseValue := true, false
+
+	for _, testCase := range []struct {
+		name      string
+		completed *bool
+		want      bool
+	}{
+		{name: "true from released form", completed: &trueValue, want: true},
+		{name: "false from released form", completed: &falseValue, want: false},
+		{name: "omitted defaults false", want: false},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			body := releasedCreateBody(shopID, vehicleID)
+			if testCase.completed == nil {
+				delete(body, "completed")
+			} else {
+				body["completed"] = *testCase.completed
+			}
+			create := doJSONRequest(t, router, http.MethodPost, path, body, "user-1")
+			data := releasedObject(t, releasedEnvelope(t, create, http.StatusCreated, "Notification created successfully"))
+			require.Equal(t, testCase.want, data["completed"])
+			id := releasedString(t, data, "id")
+			get := doJSONRequest(t, router, http.MethodGet, path+"/"+id, nil, "user-1")
+			persisted := releasedObject(t, releasedEnvelope(t, get, http.StatusOK, ""))
+			require.Equal(t, testCase.want, persisted["completed"])
+		})
+	}
+}
+
 func TestMixedNotificationAlternatingLegacyAndAtomicWriters(t *testing.T) {
 	router, shopID, vehicleID := atomicFixture(t, "user-1")
 	path := "/api/v1/auth/shops/vehicles/notifications"
@@ -191,32 +224,77 @@ func TestMixedNotificationConcurrentUnrelatedWrites(t *testing.T) {
 	itemTarget := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", releasedCreateBody(shopID, vehicleID), "user-1")
 	itemTargetID := releasedNotification(t, releasedEnvelope(t, itemTarget, http.StatusCreated, "Notification created successfully"), shopID, vehicleID, "PM due")
 	atomic := atomicNotificationRequest(shopID, vehicleID)
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	var atomicResponse, legacyResponse, bulkResponse *httptest.ResponseRecorder
-	wg.Add(3)
+
+	const barrierKey int64 = 78264401
+	conn, err := testDB.Conn(context.Background())
+	require.NoError(t, err)
+	_, err = conn.ExecContext(context.Background(), `SELECT pg_advisory_lock($1)`, barrierKey)
+	require.NoError(t, err)
+	barrierHeld := true
+	t.Cleanup(func() {
+		if barrierHeld {
+			_, _ = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, barrierKey)
+		}
+		_, _ = testDB.Exec(`DROP TRIGGER IF EXISTS block_one_atomic_notification ON shop_notification_operations`)
+		_, _ = testDB.Exec(`DROP FUNCTION IF EXISTS block_one_atomic_notification()`)
+		_ = conn.Close()
+	})
+	triggerSQL := fmt.Sprintf(`
+CREATE FUNCTION block_one_atomic_notification() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.operation_id::text = '%s' THEN
+    PERFORM pg_advisory_xact_lock(%d);
+  END IF;
+  RETURN NEW;
+END $$`, atomic.OperationID, barrierKey)
+	_, err = testDB.Exec(triggerSQL)
+	require.NoError(t, err)
+	_, err = testDB.Exec(`CREATE TRIGGER block_one_atomic_notification BEFORE INSERT ON shop_notification_operations FOR EACH ROW EXECUTE FUNCTION block_one_atomic_notification()`)
+	require.NoError(t, err)
+
+	atomicResponses := make(chan *httptest.ResponseRecorder, 1)
 	go func() {
-		defer wg.Done()
-		<-start
-		atomicResponse = doContract2JSONRequest(t, router, atomic, "user-1")
+		atomicResponses <- doContract2JSONRequest(t, router, atomic, "user-1")
 	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var blocked int
+		require.NoError(t, testDB.QueryRow(`SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' AND wait_event='advisory' AND query LIKE 'INSERT INTO shop_notification_operations%'`).Scan(&blocked))
+		if blocked > 0 {
+			break
+		}
+		require.True(t, time.Now().Before(deadline), "atomic insert did not reach the private advisory-lock barrier")
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	type legacyResponses struct{ create, bulk *httptest.ResponseRecorder }
+	legacyDone := make(chan legacyResponses, 1)
 	go func() {
-		defer wg.Done()
-		<-start
-		legacyResponse = doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", releasedCreateBody(shopID, vehicleID), "user-1")
+		created := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", releasedCreateBody(shopID, vehicleID), "user-1")
+		bulk := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/notifications/items/bulk", releasedBulkBody(shopID, itemTargetID, "1234"), "user-1")
+		legacyDone <- legacyResponses{created, bulk}
 	}()
-	go func() {
-		defer wg.Done()
-		<-start
-		bulkResponse = doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/notifications/items/bulk", releasedBulkBody(shopID, itemTargetID, "1234"), "user-1")
-	}()
-	close(start)
-	wg.Wait()
-	atomicID := atomicReceipt(t, atomicResponse).NotificationID
-	legacyID := releasedNotification(t, releasedEnvelope(t, legacyResponse, http.StatusCreated, "Notification created successfully"), shopID, vehicleID, "PM due")
-	require.NotEqual(t, atomicID, legacyID)
-	releasedItems(t, releasedEnvelope(t, bulkResponse, http.StatusCreated, "Items added successfully"), shopID, itemTargetID, "1234")
+	var legacy legacyResponses
+	select {
+	case legacy = <-legacyDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("unrelated legacy create and item writes blocked behind the in-flight atomic save")
+	}
+	legacyID := releasedNotification(t, releasedEnvelope(t, legacy.create, http.StatusCreated, "Notification created successfully"), shopID, vehicleID, "PM due")
+	releasedItems(t, releasedEnvelope(t, legacy.bulk, http.StatusCreated, "Items added successfully"), shopID, itemTargetID, "1234")
 	require.Equal(t, 1, atomicRowCount(t, "shop_notification_items", "notification_id=$1", itemTargetID))
+	require.Zero(t, atomicRowCount(t, "shop_notification_operations", "operation_id=$1", atomic.OperationID))
+	_, err = conn.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, barrierKey)
+	require.NoError(t, err)
+	barrierHeld = false
+	var atomicResponse *httptest.ResponseRecorder
+	select {
+	case atomicResponse = <-atomicResponses:
+	case <-time.After(3 * time.Second):
+		t.Fatal("atomic save did not finish after releasing the private barrier")
+	}
+	atomicID := atomicReceipt(t, atomicResponse).NotificationID
+	require.NotEqual(t, atomicID, legacyID)
 	require.Zero(t, atomicRowCount(t, "shop_notification_items", "notification_id=$1", legacyID))
 	require.Equal(t, len(atomic.Items), atomicRowCount(t, "shop_notification_items", "notification_id=$1", atomicID))
 	require.Zero(t, atomicRowCount(t, "shop_notification_items", "NOT EXISTS (SELECT 1 FROM shop_vehicle_notifications n WHERE n.id=shop_notification_items.notification_id)"))

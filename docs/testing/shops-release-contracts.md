@@ -80,7 +80,8 @@ The source trace is:
 
 - `lib/_bloc/shops/cubits/shop_add_notification_cubit.dart` sends the create
   request before direct items, uses the server-generated notification ID for
-  those items, and edits details before applying item differences.
+  those items, and edits details before applying item differences. The form can
+  send `completed: true` at creation.
 - `lib/_data/repository/remote_shop_repository.dart` serializes create with
   `shop_id`, `vehicle_id`, `title`, `description`, `type`, and `completed`;
   `attached_shop_list` is included only when non-null. Edit sends
@@ -109,7 +110,23 @@ and types consumed by the released models, including timestamps and nullable
 attachment; they inspect the bulk response directly before a later GET. They
 also check denied/nonmember responses remain HTTP 500 standard envelopes with
 null data, which the traced Dio path rejects, and check alternating legacy and
-atomic writes on one notification plus concurrent writes to unrelated rows.
-These Go checks emulate the released parser's required field and type contract;
-they do not execute a signed client binary or generated Dart parser. They do
-not prove that independently staged Android and iOS builds accept these bytes.
+atomic writes on one notification. A private PostgreSQL advisory-lock trigger
+holds an atomic transaction at its operation-ledger insert while unrelated
+legacy create and item writes finish; the test verifies the lock wait before
+releasing it and checking the atomic receipt. The completed-flag regression
+checks `true`, `false`, and omitted create fields in both response and GET.
+
+For an additional exact-source parser check, a disposable detached checkout at
+`62b5af53` regenerated its ignored Dart serializer parts. A disposable server
+route test captured actual create, bulk-item, and nonmember-denial HTTP
+responses into `/private/tmp/miltech-37041-parser-fixtures.json` (SHA-256
+`5df2b78ece371a89e4cca038333d8f423de68e741b24a57e02f399902d11416a`).
+An ephemeral Flutter test in that checkout injected those bodies into the
+historical `ShopApi` and `DioService` through an in-memory Dio adapter. It
+parsed notification and item models, including `completed: true`, and raised
+the historical `RemoteUserSavesException` for the 500 denial. The focused
+`flutter test` exited 0. The temporary capture test, checkout, and fixture
+file were removed after verification and were not committed. This remains
+source and host-test evidence, not signed Android or iOS binary evidence, and
+it does not prove independently staged platform
+builds accept these bytes.
