@@ -73,7 +73,7 @@ func TestContractCapabilitiesByFlag(t *testing.T) {
 		t.Run(fmt.Sprintf("enabled=%t", enabled), func(t *testing.T) {
 			r := gin.New()
 			g := r.Group("", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{}) })
-			capabilities.RegisterRoutes(g, enabled)
+			capabilities.RegisterRoutes(g, capabilities.Flags{AtomicNotificationSave: enabled})
 			for _, selector := range []string{"", "99", "2"} {
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest("GET", "/shops/capabilities", nil)

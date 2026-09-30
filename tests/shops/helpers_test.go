@@ -32,6 +32,10 @@ func newTestRouter(t *testing.T) *gin.Engine {
 }
 
 func newTestRouterWithAtomicCapability(t *testing.T, enabled bool) *gin.Engine {
+	return newTestRouterWithFlags(t, enabled, false)
+}
+
+func newTestRouterWithFlags(t *testing.T, atomic, messageSync bool) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -44,7 +48,7 @@ func newTestRouterWithAtomicCapability(t *testing.T, enabled bool) *gin.Engine {
 	deps := shops.Dependencies{
 		DB:         testDB,
 		BlobClient: (*azblob.Client)(nil),
-		Env:        &bootstrap.Env{BlobAccountName: "test-account", ShopsAtomicNotificationSaveEnabled: enabled},
+		Env:        &bootstrap.Env{BlobAccountName: "test-account", ShopsAtomicNotificationSaveEnabled: atomic, ShopsMessageSyncEnabled: messageSync},
 	}
 
 	shops.RegisterRoutes(deps, group)
