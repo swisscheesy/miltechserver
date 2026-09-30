@@ -2,10 +2,17 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 
--- Blocks concurrent message INSERT/UPDATE/DELETE (reads continue) so backfill,
--- counter seeding and trigger installation are one gap-free transition: no
--- message can be committed unnumbered between the backfill and the trigger.
-LOCK TABLE public.shop_messages IN SHARE ROW EXCLUSIVE MODE;
+-- ACCESS EXCLUSIVE: this migration blocks reads AND writes of shop_messages
+-- until COMMIT. ADD COLUMN needs that lock anyway; the foreign key below takes
+-- SHARE ROW EXCLUSIVE on shops, which blocks writes to shops (not reads); and the
+-- backfill UPDATE and the non-concurrent CREATE INDEX statements run under
+-- these locks. Taking the strongest lock up front makes the backfill, counter
+-- seeding and trigger installation one gap-free transition: no message can be
+-- committed unnumbered between the backfill and the trigger.
+-- lock_timeout only bounds the wait to ACQUIRE the lock. It does not bound how
+-- long the lock is held once acquired; the hold time is the duration of the
+-- whole transaction (see docs/testing/shops-message-sync-measurements.md).
+LOCK TABLE public.shop_messages IN ACCESS EXCLUSIVE MODE;
 
 -- The sync reader treats NULL created_at as "unavailable"; refuse rather than
 -- fabricate an ordering for such rows.
@@ -15,7 +22,7 @@ DO $$ BEGIN
     END IF;
 END $$;
 
--- Nullable, no default: metadata-only add; released clients and binaries that
+-- Nullable, no default: no table rewrite; released clients and binaries that
 -- never mention the column keep inserting successfully.
 ALTER TABLE public.shop_messages ADD COLUMN insertion_number bigint;
 
@@ -54,6 +61,12 @@ BEGIN
     SET last_number = last_number + 1
     WHERE shop_id = NEW.shop_id
     RETURNING last_number INTO NEW.insertion_number;
+
+    -- Fail closed: NULL only if the counter row vanished between the upsert
+    -- and the UPDATE. An unnumbered message would be invisible to catch-up.
+    IF NEW.insertion_number IS NULL THEN
+        RAISE EXCEPTION 'shop_message_counters row missing for shop %', NEW.shop_id;
+    END IF;
 
     RETURN NEW;
 END $$;

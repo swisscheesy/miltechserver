@@ -214,6 +214,25 @@ func TestMessageSyncRoutesUnnumberedRowFailsClosed(t *testing.T) {
 	requireFailure(t, reconcile(t, router, shopID, []string{messageID}, "user-1"), http.StatusServiceUnavailable, "unsupported_contract")
 }
 
+// A shop that has messages but lost its counter row must never be served with
+// an invented watermark. (No messages and no counter is a normal new shop and
+// starts at 0; see TestMessageSyncRoutesInitialEmptyShopStartsAtZero.)
+func TestMessageSyncRoutesMissingCounterWithMessagesFailsClosed(t *testing.T) {
+	clearShopTables(t, testDB)
+	ensureUser(t, testDB, "user-1")
+	router := newTestRouterWithFlags(t, false, true)
+	shopID := createShop(t, router, "user-1", "Lost counter")
+	createMessage(t, router, "user-1", shopID, "has a message")
+	result, err := testDB.Exec(`DELETE FROM public.shop_message_counters WHERE shop_id=$1`, shopID)
+	require.NoError(t, err)
+	affected, err := result.RowsAffected()
+	require.NoError(t, err)
+	require.Equal(t, int64(1), affected, "the counter row must exist before it is deleted")
+
+	requireFailure(t, doContractRequest(t, router, http.MethodGet, messageSyncPath(shopID, "initial", nil), nil, "user-1"), http.StatusServiceUnavailable, "unsupported_contract")
+	requireFailure(t, doContractRequest(t, router, http.MethodGet, messageSyncPath(shopID, "catch-up", url.Values{"after": {"0"}}), nil, "user-1"), http.StatusServiceUnavailable, "unsupported_contract")
+}
+
 func TestMessageSyncRoutesCatchUpBurstOver100HoldsBound(t *testing.T) {
 	clearShopTables(t, testDB)
 	ensureUser(t, testDB, "user-1")
