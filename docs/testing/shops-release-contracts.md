@@ -164,3 +164,80 @@ saves and uncertain retries in the future client; keep a compatible endpoint
 available or resolve frozen operation IDs through an operator-led receipt
 lookup before a replacement action. No deployment, signed-artifact, or device
 acceptance is claimed by the schema-only application.
+
+## Message sync activation — 2026-09-29
+
+Server branch `feature/shops-message-sync`. Schema, runner and measurements are
+in [shops-database.md](shops-database.md) ("Message sync migration 018") and
+[shops-message-sync-measurements.md](shops-message-sync-measurements.md). No
+live database was contacted, nothing was deployed, and no flag was enabled by
+this work; the released-client, signed-artifact and device gates above remain
+open.
+
+### Capability semantics
+
+- `message_sync` in `GET /shops/capabilities` is true only when
+  `SHOPS_MESSAGE_SYNC_ENABLED=true` **and** a catalog readiness probe finds the
+  counter table and an enabled allocator trigger. Otherwise it is false and the
+  four reads (`/shops/:shop_id/messages-v2/{initial,history,catch-up,reconcile}`)
+  answer 503.
+- The probe checks that the schema objects exist. It is **not** proof that the
+  backfill completed, that every row is numbered, or that every serving instance
+  runs the new binary and points at the migrated database. Those are separate
+  gates below. A probe failure is logged as `message sync readiness probe
+  failed`.
+- Order matters: the migration must be applied **before** the flag is turned on.
+  With the flag on and 018 not applied, `/capabilities` still reports false
+  (the probe fails) but the sync read endpoints return 500 if called directly.
+- Timestamps in sync responses, and the cursor's `created_at`, carry the
+  database session's UTC offset (for example `-07:00`), not necessarily `Z`.
+  Clients must parse offsets.
+
+### Legacy-shape guarantee
+
+The legacy message endpoints keep paths, request shapes, envelopes and field
+sets. Their JSON keys stay exactly `id, shop_id, user_id, message, created_at,
+updated_at, is_edited, parent_id, author_username`; `insertion_number` must
+never appear in a legacy response. `TestMessageSyncLegacyCompatibility` pins the
+key set. Because `response.ShopMessageResponse` embeds the jet model
+`model.ShopMessages` and is marshalled directly, the `.gen/` model for
+`shop_messages` is intentionally **not regenerated**: the reader uses raw SQL
+and the legacy insert lists explicit columns. Regenerate only with
+`tools/jetregen`, never the plain `jet` CLI; if the model is ever regenerated,
+`InsertionNumber` must carry `json:"-"` or that test fails.
+
+### Rolling-deployment rule
+
+Enable the flag only when every serving instance for the target database runs
+the new binary and the migration is applied. A mixed fleet answers
+`/capabilities` per instance, so clients would flip between the sync and legacy
+paths. Older binaries and released clients still get numbered messages from the
+trigger, so the migration itself does not require a uniform fleet; the flag
+does. Flag-off is the first-line rollback.
+
+### Deployment sequence and gates (each step needs the operator's approval)
+
+1. Pin the pre-018 schema checksums (see `shops-database.md`); the runner refuses
+   until then.
+2. Apply 018 to `miltech_ng_test` with the runner and record post-conditions and
+   the database-privilege check (app role can write `shop_message_counters`).
+3. Deploy the new binary to the test environment with
+   `SHOPS_MESSAGE_SYNC_ENABLED=false`. Verify `/capabilities` reports
+   `message_sync:false`, legacy flows are unchanged, and a message posted from a
+   released client build (3.7.0+41 or the oldest supported) is numbered.
+4. Inventory the fleet: every instance, its `DB_NAME`, host and port, and its
+   binary version. Uniform new binary required.
+5. Set the flag on and restart all instances; verify `message_sync:true`, the
+   app shows no "Full message refresh is unavailable" banner, and edits and
+   deletes from a second account appear within a poll.
+6. Repeat for `miltech_ng` only after test-environment acceptance and a separate
+   approval, with its own pre/post hashes.
+
+Migration downtime is real (message reads and writes block; see the measurements
+and the `shops-database.md` section); production row counts are unknown.
+
+### Known failures on the base branch
+
+`TestAtomicNotificationItemFieldsSurviveReleasedClientSaves` (tests/shops) and
+`scripts/test-shops-isolated_test.py` (broken since wrapper refactor `f459eb4`)
+fail independently of this work and are not fixed here.

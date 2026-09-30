@@ -210,6 +210,198 @@ from the restore stream. The fixture bytes and checksum remain unchanged;
 documents that schema-filtered dumps can omit dependencies outside the selected
 schema: [pg_dump 14](https://www.postgresql.org/docs/14/app-pgdump.html).
 
+## Message sync migration 018 (2026-09-29)
+
+Migration `migrations/018_add_shop_message_insertion_numbers.sql` is the schema
+half of Shops message synchronization. It is **final and checksum-pinned**; any
+edit requires a new review and new pins. It is additive and does not change a
+legacy response shape.
+
+What it does, in one transaction (`SET LOCAL lock_timeout = '5s'`):
+
+- Locks `public.shops` (`SHARE ROW EXCLUSIVE`), then `public.shop_messages`
+  (`ACCESS EXCLUSIVE`). It refuses (raises, rolls back) if any message has a
+  NULL `created_at`.
+- Adds nullable `shop_messages.insertion_number bigint` and creates
+  `shop_message_counters (shop_id text PRIMARY KEY, last_number bigint NOT NULL
+  DEFAULT 0 CHECK (last_number >= 0))`.
+- Backfills per-shop numbers 1..n ordered by `(created_at, id)`, seeds one
+  counter per existing shop (including shops with no messages), then adds the
+  counter's foreign key to `shops(id) ON DELETE CASCADE` after seeding.
+- Installs `assign_shop_message_insertion_number()` and a `BEFORE INSERT ... FOR
+  EACH ROW` trigger as the **sole allocator**: it overwrites any supplied value,
+  so released clients and older server binaries that never mention the column
+  are numbered too.
+- Creates unique index `shop_messages_shop_insertion_number_key (shop_id,
+  insertion_number)` and `idx_shop_messages_shop_created_id (shop_id, created_at
+  DESC, id DESC)`.
+
+Its rollback, `migrations/018_rollback_shop_message_insertion_numbers.sql`,
+drops all of the above. It is never invoked by the runner.
+
+Pinned SHA-256 values (recomputed by the runner; it refuses on any difference):
+
+- add: `b0e8809dca1d8e109cc3072c13c9033f38f40bbe4a086bffd8322f57617777d7`
+- rollback: `775a51afebf059dbc5d7a733a47fdd4fc598a03a6100443e9e31a60077371ecf`
+
+### Disposable rehearsal (wrapper mode)
+
+The wrapper appends 018 to its `later_migrations` (after 016 and 017). The mode
+`scripts/test-shops-isolated.sh --verify-message-sync-migration ./tests/shops
+-run 'MessageSyncSchema' -count=1` additionally rehearses, on fresh disposable
+databases: a populated upgrade (rows that exist before 018 are backfilled in
+`(created_at, id)` order per shop and counters are seeded), the NULL
+`created_at` refusal (nothing changes), and rollback followed by re-apply. It
+prints `Populated message sync upgrade passed.`, `Migration 018 refused NULL
+created_at and changed nothing.` and `Message sync reverse and re-apply
+passed.`. Measurements (query plans, lock hold, contention probes) are in
+[shops-message-sync-measurements.md](shops-message-sync-measurements.md); they
+are not restated here.
+
+### Preflight evidence
+
+The read-only preflight queries (NULL `created_at` count, non-UUID IDs, per-shop
+volume, existing counter/column/trigger, whether migration 017 columns exist)
+were to be run by the operator on both databases. **Their results have not been
+supplied and are not recorded here.** The only live facts on record are from
+2026-09-27: `miltech_ng` had 57 messages across four shops; `miltech_ng_test`
+had one shop. Migration 018 itself refuses a NULL `created_at`; it does **not**
+check that message IDs are UUIDs, which the sync reader requires. Production row
+counts and message sizes are unknown.
+
+### Operator procedure and pre-018 schema pins
+
+`scripts/apply-shops-message-sync-migration.sh` is a copy-adaptation of the 016
+runner: five explicit arguments, an operator-provisioned `PGSERVICE`, refusal of
+inherited `PGDATABASE`, `PGHOST`, `PGHOSTADDR`, `PGPORT` and `PGUSER` (even
+empty), a private mode-0600 copy of the fixed SQL checked against the pinned
+SHA-256 twice, an identity guard before the schema dump, and the same guard
+repeated in the one `psql -X -v ON_ERROR_STOP=1` session that includes the file.
+It applies only the add migration. Use PostgreSQL 14.18 client tools.
+
+The guard requires: database name, `host(inet_server_addr())`, port and role to
+match the arguments; server version 14.18; the migration-015 checks (kept from
+016); `shop_notification_operations` **present** (016 applied);
+`shop_message_counters` absent; no `insertion_number` column; and row-level
+security **not** enabled on `public.shops`. The RLS check is a conservative
+guard: with RLS the counter foreign key validation was assumed to take per-row
+`FOR KEY SHARE` locks on `shops`, the deadlock the migration was designed to
+avoid. PostgreSQL's `CREATE POLICY` documentation says referential integrity
+checks bypass row security, so the guard may be stricter than necessary; it was
+not probed.
+
+**Pins are not set.** The runner's two `approved_checksum` values are the
+sentinel `UNPINNED`, and the runner exits 1 with `Refused: pre-018 schema
+checksum for <target> has not been pinned; see docs/testing/shops-database.md`
+before any tool lookup or database contact, even when a fifth argument is
+given. The pre-016 hashes above must not be reused (the databases now carry
+016), and whether migration 017 is applied live is unrecorded. To pin:
+
+1. With PostgreSQL 14.18 client tools and a read-only session against the
+   target (`PGSERVICE` only), run `pg_dump --schema-only --no-owner --no-acl
+   --schema=public | shasum -a 256` for each of `miltech_ng_test` and
+   `miltech_ng`, and record whether the 017 columns (`nickname`,
+   `unit_of_measure` on `shop_notification_items`) exist.
+2. Record both hashes and the date in this section.
+3. Replace the two `approved_checksum=$unpinned_checksum` values in the runner
+   in one reviewed commit.
+
+The post-016 hashes recorded on 2026-09-27 are
+`893858c29ece15ec8ad7abf448e9869a0f1c80ca335cc1ab3cccceac0d752b58`
+(`miltech_ng_test`) and
+`5e396f10f2793e72c802c827713701903f881fd0e1c70acdd2b6497452c3d7b0`
+(`miltech_ng`). They are valid pre-018 values **only if migration 017 is not
+applied** on that database and nothing else changed since; they are quoted for
+comparison and are not pins.
+
+Once pinned, the procedure (each database needs its own approval;
+`miltech_ng_test` first, `miltech_ng` only after test-environment acceptance):
+
+```sh
+export PGSERVICE=<operator-provisioned-test-service>
+scripts/apply-shops-message-sync-migration.sh miltech_ng_test 192.168.20.70 5432 postgres <pre-018 test schema SHA-256>
+
+export PGSERVICE=<operator-provisioned-main-service>
+scripts/apply-shops-message-sync-migration.sh miltech_ng 192.168.20.70 5432 postgres <pre-018 main schema SHA-256>
+```
+
+Negative probes run on 2026-09-29 with no database reachable (bogus
+`PGSERVICE`): wrong argument count, unknown target, both targets with the
+sentinel (with matching and non-matching fifth arguments) refused with `Refused:`
+and exit 1. On a temporary copy with a fake pin under `/private/tmp` (not
+committed), a mismatching fifth argument, wrong address, port or role, missing
+or malformed `PGSERVICE`, each inherited `PG*` selector, a missing migration file
+and a migration file whose content differs from the pinned SHA-256 were all
+refused with exit 1 before a database was contacted. No live database was
+contacted and the runner has never applied anything.
+
+### After applying: verification
+
+Record for each database, before and after: identity, server version, schema
+SHA-256, and the following. All must hold before deploying the binary or
+enabling the flag:
+
+- `shop_message_counters` row count equals the `shops` row count.
+- `SELECT count(*) FROM shop_messages WHERE insertion_number IS NULL` is 0.
+- `shop_messages_assign_insertion_number` exists in `pg_trigger` and is enabled
+  (`tgenabled = 'O'`).
+- Both new indexes are valid (`pg_index.indisvalid`).
+- `max(insertion_number)` per shop equals its `last_number`.
+- The `shop_messages` row count is unchanged.
+- A message posted through the application (or by a released client) is
+  numbered.
+- **Database privilege gate.** The trigger is `SECURITY INVOKER`. After 018,
+  every message insert by the application role also inserts into and updates
+  `shop_message_counters`, so that role must own the new table or hold
+  privileges on it (for example through default privileges of the role that
+  runs the migration). The runner's role is `postgres`; the application role
+  is not on record. Verify on `miltech_ng_test`, with the real
+  application role, that a message insert succeeds **before** production. If
+  privileges are missing, every message insert fails, in the legacy path too.
+
+### Lock behaviour, downtime and retry
+
+This is **not** a zero-downtime change. The migration blocks message reads and
+writes (both legacy and sync) from acquiring `shop_messages` until commit, and
+writes to `shops` from acquiring its lock. Measured on a 2026-09-29 Apple-silicon
+laptop with a disposable PostgreSQL 14.18: about 1.1 s at 100,000 rows and about
+6.7 s at 450,000 rows (one run), against concurrent probes that were blocked for
+essentially the whole hold. **Production row counts and hardware are unknown**,
+so these numbers are a shape, not a promise. Apply in a low-traffic window.
+
+Lock order is `shops` first, then `shop_messages`, matching a cascading `DELETE
+FROM shops`; the counter's foreign key is added after seeding, so the seed does
+not take per-row `FOR KEY SHARE` locks on `shops` that deadlocked against
+`shared.LockShopMutation` transactions. Both defects were reproduced by probes
+and fixed (details in the measurements document).
+
+**Accepted residual cycle.** Any transaction that touches `shop_messages` (even
+a `SELECT`) and then writes `shops` deadlocks with the migration. The migration
+is the deadlock victim and rolls back. Current application code has no such path
+(checked writers: settings, core and members repositories; message create, edit
+and delete). If a run fails with `deadlock detected` or a lock timeout, it is
+atomic, nothing changed, and it is safe to re-run.
+
+### Rollback
+
+First-line rollback is `SHOPS_MESSAGE_SYNC_ENABLED=false` on every instance: no
+schema change is needed, and the trigger keeps numbering messages. The 018
+rollback file is for a full schema revert, run only with the flag off on every
+instance; it locks `shops` in `ACCESS EXCLUSIVE` mode, blocking reads and writes
+of `shops` for the few milliseconds it runs (its contention behaviour was not
+probed). Watermarks already given to clients become meaningless; clients
+re-initialize when the capability reads false. Rehearse only on disposable
+databases.
+
+### Known failures unrelated to 018
+
+Both pre-date this work on the base branch and are not fixed here:
+
+- `tests/shops` `TestAtomicNotificationItemFieldsSurviveReleasedClientSaves`
+  fails (expected 1, actual 0).
+- `scripts/test-shops-isolated_test.py` fails at import since the wrapper
+  refactor `f459eb4` moved the anchors it slices.
+
 ## Invocation
 
 Unset `TEST_DATABASE_URL` and `TEST_DATABASE_MARKER` first, then run:

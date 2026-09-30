@@ -15,7 +15,7 @@ Plan nodes and execution time, trimmed (every plan also does `Index Scan using u
 - **history** (older than a mid-table `(created_at, id)` anchor): `Index Scan using idx_shop_messages_shop_created_id`, `Index Cond: (shop_id = … AND ROW(created_at, id) < ROW(…))`, no sort node. Execution 0.026 to 0.029 ms.
 - **catch-up, tail** (`insertion_number > 9950 AND <= 10000`): `Index Scan using shop_messages_shop_insertion_number_key`, both bounds in the `Index Cond`. Execution 0.021 to 0.026 ms.
 - **catch-up, first cycle from zero** (`> 0 AND <= 10000`, `LIMIT 101`): `Index Scan using shop_messages_shop_insertion_number_key`, stops after 101 rows. Execution 0.041 to 0.043 ms.
-- **reconcile** (100 IDs): see the finding below. Execution 0.656 to 0.687 ms.
+- **reconcile** (100 IDs): see the finding below. Execution 0.656 to 0.687 ms over the three quoted runs; the range recorded for this plan in the test cluster (Task 6 report) is 0.69 to 0.87 ms, so treat 0.87 ms as the worst case observed there.
 
 No plan used `Seq Scan on shop_messages`. `idx_shop_messages_shop_created_id` and `shop_messages_shop_insertion_number_key` from migration 018 are used exactly as intended, so no index change was made to 018.
 
@@ -40,7 +40,7 @@ In a scratch cluster (same query, 100 IDs; the other shop fixed at 10,000 rows; 
 - 10,000, 12,000, 15,000, 20,000, 40,000 and 100,000 messages: `Bitmap Index Scan on shop_messages_pkey`, 0.180 to 0.307 ms overall (10,000: 0.185 to 0.212; 100,000: 0.249 to 0.307).
 - The 10,000-message case used the pkey in the scratch cluster but `idx_shop_messages_shop_id` in the plan test's cluster (which also differs in how the rows were inserted), so 10,000 sits at the planner's cost crossover and the exact point depends on the data.
 
-Conclusion: this is a planner cost decision between two index-bounded plans, not a Seq Scan. The worst case observed is 0.69 ms per 100-ID chunk. Other data distributions and shop sizes between the ones above were not tried, so the crossover point itself is not established.
+Conclusion: this is a planner cost decision between two index-bounded plans, not a Seq Scan. The worst case observed is 0.87 ms per 100-ID chunk (test cluster, `idx_shop_messages_shop_id` plan; 0.69 to 0.87 ms). Other data distributions and shop sizes between the ones above were not tried, so the crossover point itself is not established.
 
 An extra `(shop_id, id)` index was tried in the scratch cluster and not added. At 7,500 messages it took reconcile from 0.556 to 0.615 ms down to 0.169 to 0.209 ms (about 0.4 ms saved per chunk); the index was 1,184 kB at 17,500 table rows and 7,312 kB at 110,000 rows, built in 74 ms at 110,000 rows. It would be an eighth index on every message insert. The gain is small, so it was left out; if reconcile ever shows up in slow-query logs, revisit with a follow-up migration rather than changing 018 (whose checksum is pinned for live application). The plan test therefore accepts either index for reconcile and rejects a Seq Scan.
 
@@ -55,12 +55,12 @@ Per-statement time, three runs of the current migration (one transaction; `LOCK 
 - `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY` on the counter table: 0.45 to 0.48 ms.
 - `CREATE UNIQUE INDEX shop_messages_shop_insertion_number_key`: 86.6 to 92.8 ms.
 - `CREATE INDEX idx_shop_messages_shop_created_id`: 108.5 to 111.8 ms.
-- Everything else (NULL check, `ADD COLUMN`, `CREATE TABLE`, function, trigger, commit): each under 2 ms.
+- Everything else (NULL check, `ADD COLUMN`, `CREATE TABLE`, function, trigger, commit): each under 2 ms. Raw per-statement backing for "under 2 ms" exists only for the 450,000-row run; the 100,000-row runs recorded the statements listed above and the totals, not these small ones individually.
 - **Total lock hold** (from the `shop_messages` lock to `COMMIT`, sum of the statements above): about 1.1 s. Wall time of the whole `psql` process including startup: 1.137 to 1.146 s.
 
 Observed impact on the concurrent probes (three runs): the worst read took 1,106 to 1,110 ms and the worst insert 1,099 to 1,112 ms, against medians of 2.5 to 2.7 ms (reads) and 2.7 to 2.9 ms (inserts). Both were blocked for essentially the whole transaction. The rollback (`018_rollback_…`) on the same data: every statement under 0.5 ms.
 
-At 450,000 rows (154 MB, one run, same method): backfill 5,581 ms, counter seed 80 ms, the two index builds 404 ms and 560 ms, `psql` wall time 6.68 s. So the hold grows roughly linearly with rows in this range (about 4.5 times the rows gave about 6 times the wall time).
+At 450,000 rows (154 MB, one run, same method): backfill 5,581 ms, counter seed 80 ms, the two index builds 404 ms and 560 ms, `psql` wall time 6.68 s. Across the two sizes, about 4.5 times the rows took about 6 times the wall time (1.14 s to 6.68 s, one run at the larger size). Two data points do not establish a growth shape, so no extrapolation beyond 450,000 rows is offered.
 
 What this means:
 
@@ -93,7 +93,7 @@ Probe: the application session begins 0.5 s before the migration, runs `SELECT i
 
 So which victim the deadlock detector picks depends on who started waiting first; either way the outcome before the fix was an aborted transaction.
 
-**3. Residual, synthetic cycle (not fixable by lock order).** An application transaction that writes `shop_messages` first and then writes `shops` (the reverse of a cascading delete) still deadlocks with the migration: the migration holds `SHARE ROW EXCLUSIVE` on `shops` while waiting for `ACCESS EXCLUSIVE` on `shop_messages`, and the application waits for `ROW EXCLUSIVE` on `shops`. Probe result: `deadlock detected`, the migration was the victim and rolled back, the application transaction committed. No such path was found: the only code that writes `shop_messages` is `api/shops/messages/repository_impl.go`, where create, edit and delete take the shop row lock first and never write `shops` afterwards (a read of that file, not an exhaustive audit of all callers or of ad-hoc SQL).
+**3. Residual, synthetic cycle (not fixable by lock order).** Any application transaction that **touches** `shop_messages` first (even a plain `SELECT`, which holds `ACCESS SHARE` until commit) and then writes `shops` (the reverse of a cascading delete) still deadlocks with the migration: the migration holds `SHARE ROW EXCLUSIVE` on `shops` while waiting for `ACCESS EXCLUSIVE` on `shop_messages`, and the application waits for `ROW EXCLUSIVE` on `shops`. Probe result (with a message write as the first step): `deadlock detected`, the migration was the victim and rolled back, the application transaction committed. The read-first variant follows from the lock-conflict rules and was not separately probed. No such path was found in the application code checked: message create, edit and delete (`api/shops/messages/repository_impl.go`) never write `shops` after touching `shop_messages`; edit and delete read `shop_messages` first (`AuthorizeOwnedMutation`, `api/shops/shared/authorization.go`, about lines 343 to 353) and then lock the shop row, which is still safe because neither writes `shops` afterwards. The settings, core and members repositories, the other `shops` writers, were checked and do not touch `shop_messages` before writing `shops`. This is a read of those files, not an exhaustive audit of all callers or of ad-hoc SQL. If it ever happens, the migration is the victim, is atomic and can be re-run.
 
 Worst-case window, current file: up to `lock_timeout` (5 s) waiting for the `shops` lock, during which message reads and writes are unaffected; then up to 5 s waiting for the `shop_messages` lock, during which later readers and writers of `shop_messages` queue behind the pending request (standard PostgreSQL lock queueing; not probed); then the hold, about 1.1 s at 100,000 rows and about 6.7 s at 450,000. While the queued `SHARE ROW EXCLUSIVE` request on `shops` waits, later writers of `shops` queue behind it (lock queueing again, not probed). Application transactions that already hold a shops row lock wait for the whole hold and then proceed (probe results above). The migration is one transaction: if a wait times out or it is chosen as a deadlock victim it rolls back atomically (the probes above show the column absent afterwards) and is safe to re-run.
 
@@ -112,7 +112,7 @@ Bytes per row are measured from real response bodies (`SAMPLE` lines from `scrip
 - **500 loaded rows**: 6 requests (1 + 5). Downloads about 150 KB (195 KB), uploads about 20 KB.
 - **2,000 loaded rows**: 21 requests (1 + 20). Downloads about 600 KB (780 KB), uploads about 78 KB.
 
-Server-side query time for those requests is small: reconcile executes in 0.18 to 0.69 ms per chunk (see above), so 20 chunks is roughly 4 to 14 ms of query time (20 x the range). HTTP, JSON encoding, authorization and the per-request read-only transaction were not timed.
+Server-side query time for those requests is small: reconcile executes in 0.18 to 0.87 ms per chunk (see above), so 20 chunks is roughly 4 to 17 ms of query time (20 x the range). HTTP, JSON encoding, authorization and the per-request read-only transaction were not timed.
 
 ## What was not measured
 

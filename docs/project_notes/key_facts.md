@@ -60,3 +60,10 @@ This file stores project constants, configuration, and frequently-needed **non-s
 - After regenerating, `git status .gen` must show no changes to the 32 tracked `user_pmcs_*` files.
 
 
+
+## Message Sync (2026-09-29)
+
+- Do NOT regenerate the jet model for `shop_messages`. `response.ShopMessageResponse` embeds `model.ShopMessages` and is marshalled directly, so a regenerated model adds `insertion_number` to every legacy message response. Use `tools/jetregen` only (never plain `jet`); if regenerated, the field must carry `json:"-"` or `TestMessageSyncLegacyCompatibility` fails.
+- Flag: `SHOPS_MESSAGE_SYNC_ENABLED` (strict `true`/`false`). Apply migration 018 before turning it on; enable only on a uniform new-binary fleet.
+- Live application: `scripts/apply-shops-message-sync-migration.sh` (pinned SHA-256 of 018; pre-018 schema pins are `UNPINNED` until the operator records them in `docs/testing/shops-database.md`).
+- Sync response timestamps carry the DB session UTC offset, not necessarily `Z`.

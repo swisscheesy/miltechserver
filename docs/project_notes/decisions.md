@@ -619,3 +619,58 @@ Based on the current project setup:
   decision or migration execution
 - Historical migrations and ADRs retain the table names that were correct when
   those records were written
+
+### ADR-022: Shops Message Sync Numbering by Trigger, Gated by Flag and Probe (2026-09-29)
+
+**Context:**
+- Message synchronization needs a per-shop, commit-ordered `insertion_number` so
+  clients can catch up from a watermark without missing a message
+- Released clients and older server binaries insert messages and must keep
+  working against the expanded schema; the `/shops/capabilities` answer must not
+  promise sync before the schema exists
+- `response.ShopMessageResponse` embeds the jet model and is marshalled
+  directly, so the legacy JSON key set is a compatibility contract
+
+**Decision:**
+- Migration 018 adds `shop_messages.insertion_number`, a `shop_message_counters`
+  table and a `BEFORE INSERT` trigger that is the **sole allocator**; it
+  overwrites any supplied value, so every writer (old binaries, ad-hoc SQL) is
+  numbered and application code never sets it
+- `message_sync` is advertised only when `SHOPS_MESSAGE_SYNC_ENABLED=true` and a
+  catalog probe finds the counter table and an enabled trigger (capability =
+  flag AND probe); the probe is not backfill or fleet proof, so rollout gates
+  stay operator-verified
+- The jet model for `shop_messages` is intentionally not regenerated; the sync
+  reader uses raw SQL and the legacy insert lists explicit columns. If it is
+  regenerated, the field needs `json:"-"`
+- The migration takes `shops` then `shop_messages` locks (the cascading-delete
+  order) and adds the counter foreign key after seeding; it is applied to live
+  databases only through a checksum-pinned runner, `miltech_ng_test` first
+- `insertion_number` stays nullable (optional `NOT NULL` hardening deferred
+  until production is verified)
+
+**Alternatives considered:**
+- Application-side counter increment (rejected: older binaries and other writers
+  would bypass it)
+- A sequence per shop or a global sequence (rejected: sequences are not
+  commit-ordered, so a watermark could skip a later-committing lower number)
+- Regenerating the jet model (rejected: adds `insertion_number` to every legacy
+  response)
+- Extra `(shop_id, id)` index for reconcile (not added: about 0.4 ms saved per
+  100-ID chunk, an eighth index on every insert; revisit as migration 019)
+
+**Consequences:**
+- Not zero downtime: message reads and writes block for the migration's hold
+  (about 1.1 s at 100,000 rows on a laptop; production row counts unknown)
+- Accepted residual deadlock: a transaction that touches `shop_messages` and then
+  writes `shops` deadlocks with the migration; the migration is the victim, is
+  atomic and can be re-run; no such path exists in current code
+- Every message insert now also writes `shop_message_counters` under the
+  invoker's privileges; the application role must be verified on
+  `miltech_ng_test` before production
+- The migration must be applied before the flag is turned on; the flag must be
+  uniform across the fleet
+- Runner pre-018 schema checksums are unpinned until the operator records them
+- Details: `docs/testing/shops-database.md`,
+  `docs/testing/shops-message-sync-measurements.md`,
+  `docs/testing/shops-release-contracts.md`
