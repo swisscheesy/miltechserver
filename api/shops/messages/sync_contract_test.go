@@ -1,9 +1,12 @@
 package messages
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -96,5 +99,132 @@ func TestMessageSyncCursorRejectsWrongShopVersionAndMalformed(t *testing.T) {
 		if _, err := decodeMessageCursor(syncShop, base64.RawURLEncoding.EncodeToString([]byte(raw))); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}
+	}
+}
+
+// fakeSyncRepository embeds Repository so only the sync reader methods need
+// implementing; any legacy call would panic on the nil embedded interface.
+type fakeSyncRepository struct {
+	Repository
+	calls []string
+	args  []any
+
+	initial   *MessageInitial
+	history   *MessageHistory
+	catchUp   *MessageCatchUp
+	reconcile *MessageReconcile
+	err       error
+}
+
+func (fake *fakeSyncRepository) InitialMessages(_ context.Context, user *bootstrap.User, shopID string, limit int) (*MessageInitial, error) {
+	fake.calls = append(fake.calls, "initial")
+	fake.args = []any{user, shopID, limit}
+	return fake.initial, fake.err
+}
+
+func (fake *fakeSyncRepository) MessageHistory(_ context.Context, user *bootstrap.User, shopID, cursor string, limit int) (*MessageHistory, error) {
+	fake.calls = append(fake.calls, "history")
+	fake.args = []any{user, shopID, cursor, limit}
+	return fake.history, fake.err
+}
+
+func (fake *fakeSyncRepository) CatchUpMessages(_ context.Context, user *bootstrap.User, shopID, after string, through *string, limit int) (*MessageCatchUp, error) {
+	fake.calls = append(fake.calls, "catch-up")
+	fake.args = []any{user, shopID, after, through, limit}
+	return fake.catchUp, fake.err
+}
+
+func (fake *fakeSyncRepository) ReconcileMessages(_ context.Context, user *bootstrap.User, shopID string, ids []string) (*MessageReconcile, error) {
+	fake.calls = append(fake.calls, "reconcile")
+	fake.args = []any{user, shopID, ids}
+	return fake.reconcile, fake.err
+}
+
+func assertSyncUnavailable(t *testing.T, name string, err error) {
+	t.Helper()
+	var failure *shared.Failure
+	if !errors.As(err, &failure) || failure.Status != 503 {
+		t.Fatalf("%s: expected 503 failure, got %v", name, err)
+	}
+}
+
+func invokeAllSyncOperations(service *ServiceImpl, user *bootstrap.User) map[string]error {
+	through := "9"
+	ids := []string{syncID}
+	results := map[string]error{}
+	_, results["initial"] = service.InitialMessages(context.Background(), user, syncShop, 7)
+	_, results["history"] = service.MessageHistory(context.Background(), user, syncShop, "cursor", 7)
+	_, results["catch-up"] = service.CatchUpMessages(context.Background(), user, syncShop, "3", &through, 7)
+	_, results["reconcile"] = service.ReconcileMessages(context.Background(), user, syncShop, ids)
+	return results
+}
+
+func TestMessageSyncServiceFailsClosedWhenFlagOff(t *testing.T) {
+	fake := &fakeSyncRepository{}
+	for name, err := range invokeAllSyncOperations(NewService(fake, nil), &bootstrap.User{UserID: "user"}) {
+		assertSyncUnavailable(t, name, err)
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("reader reached while flag off: %v", fake.calls)
+	}
+}
+
+func TestMessageSyncServiceFailsClosedWhenRepositoryHasNoReader(t *testing.T) {
+	// A nil repository and a legacy-only repository both lack SyncReader.
+	for name, err := range invokeAllSyncOperations(NewService(nil, nil).WithMessageSync(true), &bootstrap.User{UserID: "user"}) {
+		assertSyncUnavailable(t, name, err)
+	}
+}
+
+func TestMessageSyncServiceDelegatesUnchangedWhenFlagOn(t *testing.T) {
+	user := &bootstrap.User{UserID: "user"}
+	through := "9"
+	ids := []string{syncID}
+	readerErr := errors.New("reader failed")
+	fake := &fakeSyncRepository{
+		initial:   &MessageInitial{Watermark: "5"},
+		history:   &MessageHistory{HasMore: true},
+		catchUp:   &MessageCatchUp{NextAfter: "4"},
+		reconcile: &MessageReconcile{MissingIDs: []string{syncID}},
+	}
+	service := NewService(fake, nil).WithMessageSync(true)
+
+	initial, err := service.InitialMessages(context.Background(), user, syncShop, 7)
+	if err != nil || initial != fake.initial || !reflect.DeepEqual(fake.args, []any{user, syncShop, 7}) {
+		t.Fatalf("initial: %v %v %v", initial, err, fake.args)
+	}
+	history, err := service.MessageHistory(context.Background(), user, syncShop, "cursor", 7)
+	if err != nil || history != fake.history || !reflect.DeepEqual(fake.args, []any{user, syncShop, "cursor", 7}) {
+		t.Fatalf("history: %v %v %v", history, err, fake.args)
+	}
+	catchUp, err := service.CatchUpMessages(context.Background(), user, syncShop, "3", &through, 7)
+	if err != nil || catchUp != fake.catchUp || !reflect.DeepEqual(fake.args, []any{user, syncShop, "3", &through, 7}) {
+		t.Fatalf("catch-up: %v %v %v", catchUp, err, fake.args)
+	}
+	reconcile, err := service.ReconcileMessages(context.Background(), user, syncShop, ids)
+	if err != nil || reconcile != fake.reconcile || !reflect.DeepEqual(fake.args, []any{user, syncShop, ids}) {
+		t.Fatalf("reconcile: %v %v %v", reconcile, err, fake.args)
+	}
+
+	fake.err = readerErr
+	for name, err := range invokeAllSyncOperations(service, user) {
+		if !errors.Is(err, readerErr) {
+			t.Fatalf("%s: reader error not returned: %v", name, err)
+		}
+	}
+}
+
+func TestMessageSyncFlagSurvivesWithAuthorization(t *testing.T) {
+	auth := shared.NewShopAuthorization(nil)
+	enabled := NewService(&fakeSyncRepository{}, nil).WithMessageSync(true)
+	if !enabled.WithAuthorization(auth).(*ServiceImpl).messageSyncEnabled {
+		t.Fatal("enabled flag lost by WithAuthorization")
+	}
+	disabled := NewService(&fakeSyncRepository{}, nil)
+	if disabled.WithAuthorization(auth).(*ServiceImpl).messageSyncEnabled {
+		t.Fatal("disabled service became enabled")
+	}
+	if enabled.WithMessageSync(false).messageSyncEnabled != false || !enabled.messageSyncEnabled {
+		t.Fatal("WithMessageSync must return a copy")
 	}
 }

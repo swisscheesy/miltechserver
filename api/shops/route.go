@@ -53,7 +53,7 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	inviteService := invites.NewService(inviteRepository, authorization)
 	listsService := lists.NewService(listRepository, settingsRepository, authorization)
 	listItemsService := listitems.NewService(listItemsRepository, listRepository, settingsRepository, authorization)
-	messagesService := messages.NewService(messagesRepository, authorization)
+	messagesService := messages.NewService(messagesRepository, authorization).WithMessageSync(deps.Env.ShopsMessageSyncEnabled)
 	vehiclesService := vehicles.NewService(vehiclesRepository, authorization)
 	notificationsService := notifications.NewService(notificationsRepository, authorization)
 	notificationItemsService := notificationitems.NewService(notificationItemsRepository)

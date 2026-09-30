@@ -123,18 +123,3 @@ func normalizeSyncIDs(ids []string) ([]string, error) {
 	}
 	return result, nil
 }
-
-// F1 has no verified deployed schema/backfill or all-writer allocation evidence.
-// Keep every production sync path closed until that release gate is completed.
-func (*ServiceImpl) InitialMessages(context.Context, *bootstrap.User, string, int) (*MessageInitial, error) {
-	return nil, syncUnavailable()
-}
-func (*ServiceImpl) MessageHistory(context.Context, *bootstrap.User, string, string, int) (*MessageHistory, error) {
-	return nil, syncUnavailable()
-}
-func (*ServiceImpl) CatchUpMessages(context.Context, *bootstrap.User, string, string, *string, int) (*MessageCatchUp, error) {
-	return nil, syncUnavailable()
-}
-func (*ServiceImpl) ReconcileMessages(context.Context, *bootstrap.User, string, []string) (*MessageReconcile, error) {
-	return nil, syncUnavailable()
-}

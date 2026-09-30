@@ -20,8 +20,9 @@ const (
 )
 
 type ServiceImpl struct {
-	repo Repository
-	auth shared.ShopAuthorization
+	repo               Repository
+	auth               shared.ShopAuthorization
+	messageSyncEnabled bool
 }
 
 func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
@@ -31,10 +32,19 @@ func NewService(repo Repository, auth shared.ShopAuthorization) *ServiceImpl {
 	}
 }
 
+// WithMessageSync returns a copy that serves the additive sync reads. Off by
+// default: the counter migration and every writer must be verified first.
+func (service *ServiceImpl) WithMessageSync(enabled bool) *ServiceImpl {
+	copied := *service
+	copied.messageSyncEnabled = enabled
+	return &copied
+}
+
 func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
 	return &ServiceImpl{
-		repo: service.repo,
-		auth: auth,
+		repo:               service.repo,
+		auth:               auth,
+		messageSyncEnabled: service.messageSyncEnabled,
 	}
 }
 
@@ -286,4 +296,47 @@ func (service *ServiceImpl) DeleteMessageImage(ctx context.Context, user *bootst
 
 	slog.Info("Shop message image deleted", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
 	return nil
+}
+
+func (service *ServiceImpl) syncReader() (SyncReader, error) {
+	if !service.messageSyncEnabled {
+		return nil, syncUnavailable()
+	}
+	reader, ok := service.repo.(SyncReader)
+	if !ok {
+		return nil, syncUnavailable()
+	}
+	return reader, nil
+}
+
+func (service *ServiceImpl) InitialMessages(ctx context.Context, user *bootstrap.User, shopID string, limit int) (*MessageInitial, error) {
+	reader, err := service.syncReader()
+	if err != nil {
+		return nil, err
+	}
+	return reader.InitialMessages(ctx, user, shopID, limit)
+}
+
+func (service *ServiceImpl) MessageHistory(ctx context.Context, user *bootstrap.User, shopID, cursor string, limit int) (*MessageHistory, error) {
+	reader, err := service.syncReader()
+	if err != nil {
+		return nil, err
+	}
+	return reader.MessageHistory(ctx, user, shopID, cursor, limit)
+}
+
+func (service *ServiceImpl) CatchUpMessages(ctx context.Context, user *bootstrap.User, shopID, after string, through *string, limit int) (*MessageCatchUp, error) {
+	reader, err := service.syncReader()
+	if err != nil {
+		return nil, err
+	}
+	return reader.CatchUpMessages(ctx, user, shopID, after, through, limit)
+}
+
+func (service *ServiceImpl) ReconcileMessages(ctx context.Context, user *bootstrap.User, shopID string, ids []string) (*MessageReconcile, error) {
+	reader, err := service.syncReader()
+	if err != nil {
+		return nil, err
+	}
+	return reader.ReconcileMessages(ctx, user, shopID, ids)
 }
