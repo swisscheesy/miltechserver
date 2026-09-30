@@ -53,3 +53,10 @@ This file stores project constants, configuration, and frequently-needed **non-s
 
 <!-- Add more key facts below as you discover them -->
 
+## Generated Jet Models
+
+- Regenerate `.gen/` with `JET_DSN="postgresql://postgres:<password>@<host>:5432/miltech_ng?sslmode=disable" go run ./tools/jetregen` (2026-09-28).
+- Never use the plain `jet` CLI: it omits `json:"snake_case"` tags, and API responses marshal these models directly, so every response key would change (`shop_id` -> `ShopID`). It also wipes `.gen/` first, and most of `.gen/` is gitignored, so git cannot restore it.
+- After regenerating, `git status .gen` must show no changes to the 32 tracked `user_pmcs_*` files.
+
+
