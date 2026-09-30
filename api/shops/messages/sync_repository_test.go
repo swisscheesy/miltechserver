@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"strings"
 	"testing"
@@ -237,11 +238,34 @@ func TestMessageSyncReaderRemovalBetweenReconcileChunks(t *testing.T) {
 		t.Fatalf("%+v %v", second, err)
 	}
 }
+func syncHasMessages(exists bool) syncQuery {
+	return syncQuery{contains: "SELECT EXISTS (SELECT 1 FROM shop_messages WHERE shop_id = $1)", args: []driver.Value{syncShop}, rows: [][]driver.Value{{exists}}}
+}
+func requireSyncUnavailable(t *testing.T, err error) {
+	t.Helper()
+	var failure *shared.Failure
+	if !errors.As(err, &failure) || failure.Status != 503 || failure.Code != "unsupported_contract" {
+		t.Fatalf("expected unsupported_contract 503, got %v", err)
+	}
+}
 func TestMessageSyncReaderMissingCounterFailsInitial(t *testing.T) {
-	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{}})
+	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{}}, syncHasMessages(true))
 	page, err := repo.InitialMessages(context.Background(), syncUser, syncShop, 50)
 	if err == nil || page != nil || c.committed {
 		t.Fatalf("%+v %v", page, err)
+	}
+	requireSyncUnavailable(t, err)
+}
+
+// A Shop created after migration 018 has no counter until its first message.
+func TestMessageSyncReaderMissingCounterWithoutMessagesStartsAtZero(t *testing.T) {
+	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{}}, syncHasMessages(false), syncQuery{contains: "ORDER BY m.created_at DESC,m.id DESC", args: []driver.Value{syncShop, int64(51)}, rows: [][]driver.Value{}})
+	page, err := repo.InitialMessages(context.Background(), syncUser, syncShop, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Watermark != "0" || page.HasOlder || page.OlderCursor != nil || page.Rows == nil || len(page.Rows) != 0 || !c.committed {
+		t.Fatalf("%+v", page)
 	}
 }
 func TestMessageSyncReaderNullInsertionNumberFails(t *testing.T) {
@@ -252,4 +276,5 @@ func TestMessageSyncReaderNullInsertionNumberFails(t *testing.T) {
 	if err == nil || page != nil || c.committed {
 		t.Fatalf("%+v %v", page, err)
 	}
+	requireSyncUnavailable(t, err)
 }
