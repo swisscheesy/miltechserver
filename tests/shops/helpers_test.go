@@ -12,6 +12,7 @@ import (
 
 	"miltechserver/api/middleware"
 	"miltechserver/api/shops"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"miltechserver/tests/testutil"
 
@@ -58,6 +59,19 @@ func newTestRouterWithFlags(t *testing.T, atomic, messageSync bool) *gin.Engine 
 
 func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
 	t.Helper()
+	return doJSONRequestWithHeaders(t, router, method, path, body, userID, nil)
+}
+
+// doContractRequest sends the contract-2 selector that the additive Shops
+// routes (for example messages-v2) require; doJSONRequest stays header-free
+// so it keeps modelling released clients.
+func doContractRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+	return doJSONRequestWithHeaders(t, router, method, path, body, userID, map[string]string{shared.ContractHeader: "2"})
+}
+
+func doJSONRequestWithHeaders(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
 
 	var reader *strings.Reader
 	if body != nil {
@@ -74,6 +88,9 @@ func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string,
 	req.Header.Set("Content-Type", "application/json")
 	if userID != "" {
 		req.Header.Set("X-User-ID", userID)
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 
 	w := httptest.NewRecorder()
