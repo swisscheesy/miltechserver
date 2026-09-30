@@ -29,8 +29,11 @@ baseline="$root/tests/testutil/shops_schema_baseline.sql"
 # The approved public-schema export is pinned; no environment override.
 baseline_sha256='9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70'
 # The approved physical snapshot has the validated migration-015 constraints.
-# Only migration 016 follows it; history of earlier source files is absent.
-later_migrations=("migrations/016_create_shop_notification_operations.sql")
+# Only migrations 016 and 017 follow it; history of earlier source files is absent.
+later_migrations=(
+  "migrations/016_create_shop_notification_operations.sql"
+  "migrations/017_add_shop_notification_item_nickname_uom.sql"
+)
 [[ $(shasum -a 256 "$baseline" | cut -d ' ' -f 1) == "$baseline_sha256" ]] || fail 'Approved baseline checksum mismatch.'
 for tool in initdb pg_ctl psql createdb python3 go awk sed rg; do
   command -v "$tool" >/dev/null || fail "Required local tool unavailable: $tool"
