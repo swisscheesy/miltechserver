@@ -144,6 +144,7 @@ func clearShopTables(t *testing.T, db *sql.DB) {
 			shop_vehicle,
 			shop_list_items,
 			shop_lists,
+			shop_message_counters,
 			shop_messages,
 			shop_invite_codes,
 			shop_members,

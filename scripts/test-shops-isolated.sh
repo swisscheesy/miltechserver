@@ -10,11 +10,13 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 packages=0
 needs_value=false
 verify_notification_migration=false
+verify_message_sync_migration=false
 go_arguments=()
 for argument in "$@"; do
   if [[ "$needs_value" == true ]]; then needs_value=false; go_arguments+=("$argument"); continue; fi
   case "$argument" in
     --verify-notification-migration) verify_notification_migration=true; continue ;;
+    --verify-message-sync-migration) verify_message_sync_migration=true; continue ;;
     ./tests/shops|./tests/equipment_services) packages=$((packages + 1)) ;;
     -race|-v|-failfast|-short) ;;
     -count|-run|-timeout|-parallel|-shuffle) needs_value=true ;;
@@ -29,11 +31,15 @@ baseline="$root/tests/testutil/shops_schema_baseline.sql"
 # The approved public-schema export is pinned; no environment override.
 baseline_sha256='9058c82a9a6de8b1215960c4ac38a5f19d8d79e552714781dbd8d92ff7130f70'
 # The approved physical snapshot has the validated migration-015 constraints.
-# Only migrations 016 and 017 follow it; history of earlier source files is absent.
-later_migrations=(
+# Only migrations 016, 017 and 018 follow it; history of earlier source files is absent.
+notification_migrations=(
   "migrations/016_create_shop_notification_operations.sql"
   "migrations/017_add_shop_notification_item_nickname_uom.sql"
 )
+message_sync_migrations=(
+  "migrations/018_add_shop_message_insertion_numbers.sql"
+)
+later_migrations=("${notification_migrations[@]}" "${message_sync_migrations[@]}")
 [[ $(shasum -a 256 "$baseline" | cut -d ' ' -f 1) == "$baseline_sha256" ]] || fail 'Approved baseline checksum mismatch.'
 for tool in initdb pg_ctl psql createdb python3 go awk sed rg; do
   command -v "$tool" >/dev/null || fail "Required local tool unavailable: $tool"
@@ -121,6 +127,42 @@ SQL
   rg -q -F 'notification operation receipts must be retained' "$instance/reverse.log" || fail 'Populated notification reverse failed for the wrong reason.'
   [[ $(psql_local miltech_populated_reverse -Atc "SELECT count(*) FROM public.shop_notification_operations WHERE user_id = 'reverse-user'") == 1 ]] || fail 'Populated notification reverse lost its receipt.'
   printf '%s\n' 'Populated notification reverse refused and retained its receipt.'
+fi
+if [[ "$verify_message_sync_migration" == true ]]; then
+  apply_migration_files() {
+    local database=$1; shift
+    local migration
+    for migration in "$@"; do
+      psql_local "$database" -f "$root/$migration" >"$instance/setup.log" 2>&1 || fail 'Post-baseline migration failed.'
+    done
+  }
+  restore_baseline miltech_msgsync_upgrade
+  apply_migration_files miltech_msgsync_upgrade "${notification_migrations[@]}"
+  psql_local miltech_msgsync_upgrade -f "$root/tests/testutil/shops_message_sync_upgrade_seed.sql" >"$instance/setup.log" 2>&1 || fail 'Message sync upgrade seed failed.'
+  apply_migration_files miltech_msgsync_upgrade "${message_sync_migrations[@]}"
+  psql_local miltech_msgsync_upgrade -f "$root/tests/testutil/shops_message_sync_upgrade_assert.sql" >"$instance/setup.log" 2>&1 || fail 'Message sync upgrade assertion failed.'
+  printf '%s\n' 'Populated message sync upgrade passed.'
+
+  restore_baseline miltech_msgsync_null
+  apply_migration_files miltech_msgsync_null "${notification_migrations[@]}"
+  psql_local miltech_msgsync_null >"$instance/setup.log" 2>&1 <<'SQL'
+INSERT INTO public.users (uid, email, username, created_at, is_enabled) VALUES ('null-user', 'n@example.com', 'n', now(), true);
+INSERT INTO public.shops (id, name, created_by, created_at) VALUES ('shop-null', 'Null', 'null-user', now());
+INSERT INTO public.shop_messages (id, shop_id, user_id, message, created_at) VALUES ('m-null', 'shop-null', 'null-user', 'x', NULL);
+SQL
+  if psql_local miltech_msgsync_null -f "$root/${message_sync_migrations[0]}" >"$instance/null.log" 2>&1; then
+    fail 'Migration 018 unexpectedly accepted a NULL created_at.'
+  fi
+  rg -q -F 'NULL created_at' "$instance/null.log" || fail 'NULL created_at refusal failed for the wrong reason.'
+  [[ $(psql_local miltech_msgsync_null -Atc "SELECT count(*) FROM information_schema.columns WHERE table_name='shop_messages' AND column_name='insertion_number'") == 0 ]] || fail 'Refused migration left a column behind.'
+  printf '%s\n' 'Migration 018 refused NULL created_at and changed nothing.'
+
+  restore_baseline miltech_msgsync_reverse
+  apply_later_migrations miltech_msgsync_reverse
+  psql_local miltech_msgsync_reverse -f "$root/migrations/018_rollback_shop_message_insertion_numbers.sql" >"$instance/setup.log" 2>&1 || fail 'Message sync reverse failed.'
+  [[ $(psql_local miltech_msgsync_reverse -Atc "SELECT to_regclass('public.shop_message_counters') IS NULL") == t ]] || fail 'Reverse left the counter table.'
+  psql_local miltech_msgsync_reverse -f "$root/${message_sync_migrations[0]}" >"$instance/setup.log" 2>&1 || fail 'Migration 018 was not re-appliable after reverse.'
+  printf '%s\n' 'Message sync reverse and re-apply passed.'
 fi
 psql_local miltech_test_shops -v marker="$marker" >"$instance/setup.log" 2>&1 <<'SQL'
 CREATE SCHEMA test_infrastructure;
