@@ -2,16 +2,28 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 
--- ACCESS EXCLUSIVE: this migration blocks reads AND writes of shop_messages
--- until COMMIT. ADD COLUMN needs that lock anyway; the foreign key below takes
--- SHARE ROW EXCLUSIVE on shops, which blocks writes to shops (not reads); and the
--- backfill UPDATE and the non-concurrent CREATE INDEX statements run under
--- these locks. Taking the strongest lock up front makes the backfill, counter
--- seeding and trigger installation one gap-free transition: no message can be
--- committed unnumbered between the backfill and the trigger.
--- lock_timeout only bounds the wait to ACQUIRE the lock. It does not bound how
--- long the lock is held once acquired; the hold time is the duration of the
--- whole transaction (see docs/testing/shops-message-sync-measurements.md).
+-- Lock order: shops first, then shop_messages. That is the order a cascading
+-- DELETE FROM shops already uses (shops row, then its shop_messages rows), so
+-- the migration cannot form a deadlock cycle with it. Taking shop_messages first
+-- deadlocked in a two-session probe (see docs/testing/shops-message-sync-measurements.md).
+-- It also means a wait for a busy shops lock happens before shop_messages is
+-- locked, so message reads and writes are not held up by that wait.
+--
+-- shops, SHARE ROW EXCLUSIVE: the counter table's foreign key needs this on
+-- shops anyway. Writes to shops block until COMMIT; reads of shops continue.
+-- shop_messages, ACCESS EXCLUSIVE: ADD COLUMN needs it. Reads AND writes of
+-- shop_messages block from acquisition until COMMIT (the backfill UPDATE and the
+-- non-concurrent CREATE INDEX statements run under it). Holding both locks up
+-- front makes the backfill, counter seeding and trigger installation one
+-- gap-free transition: no message can be committed unnumbered between the
+-- backfill and the trigger.
+--
+-- lock_timeout bounds each lock WAIT separately (up to 5s each). It does not
+-- bound how long a lock is held once acquired. If a wait times out or this
+-- transaction is chosen as a deadlock victim, everything rolls back atomically
+-- and the file can simply be re-run. The counter seed below can also wait on
+-- row locks held on shops rows by open transactions.
+LOCK TABLE public.shops IN SHARE ROW EXCLUSIVE MODE;
 LOCK TABLE public.shop_messages IN ACCESS EXCLUSIVE MODE;
 
 -- The sync reader treats NULL created_at as "unavailable"; refuse rather than
