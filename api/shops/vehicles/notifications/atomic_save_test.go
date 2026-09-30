@@ -348,7 +348,7 @@ func (c *atomicConn) QueryContext(_ context.Context, q string, args []driver.Nam
 	case strings.HasPrefix(q, "SELECT shop_id,admin"):
 		values = []driver.Value{atomicRequest().ShopID, "A-1"}
 	case strings.HasPrefix(q, "SELECT id,niin"):
-		return &atomicRows{cols: []string{"id", "niin", "nomenclature", "quantity"}, queue: s.existingItems}, nil
+		return &atomicRows{cols: []string{"id", "niin", "nomenclature", "quantity", "nickname", "unit_of_measure"}, queue: s.existingItems}, nil
 	case strings.HasPrefix(q, "SELECT notification_id FROM shop_notification_items"):
 		if !s.foreignItem {
 			return &atomicRows{cols: []string{"notification_id"}}, nil
@@ -449,7 +449,7 @@ func TestAtomicLastSaveWinsAuditsInterveningItems(t *testing.T) {
 	id := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 	r.NotificationID = &id
 	now := time.Now().UTC()
-	state := &atomicDriverState{notification: &model.ShopVehicleNotifications{ID: id, ShopID: r.ShopID, VehicleID: r.VehicleID, Title: "Earlier", Type: "M1", SaveTime: now, LastUpdated: now}, existingItems: [][]driver.Value{{"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "123", "intervening part", int64(2)}}}
+	state := &atomicDriverState{notification: &model.ShopVehicleNotifications{ID: id, ShopID: r.ShopID, VehicleID: r.VehicleID, Title: "Earlier", Type: "M1", SaveTime: now, LastUpdated: now}, existingItems: [][]driver.Value{{"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "123", "intervening part", int64(2), nil, nil}}}
 	db := sql.OpenDB(atomicConnector{state})
 	defer db.Close()
 	if _, err := NewRepository(db).SaveAtomic(context.Background(), "user", r); err != nil {

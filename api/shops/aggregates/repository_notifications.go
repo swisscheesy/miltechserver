@@ -169,6 +169,8 @@ WITH ranked_items AS (
 		nomenclature,
 		quantity,
 		save_time,
+		nickname,
+		unit_of_measure,
 		ROW_NUMBER() OVER (
 			PARTITION BY notification_id
 			ORDER BY save_time ASC, id ASC
@@ -176,7 +178,7 @@ WITH ranked_items AS (
 	FROM shop_notification_items
 	WHERE notification_id IN (%s)
 )
-SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time
+SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time, nickname, unit_of_measure
 FROM ranked_items
 WHERE ($%d = 0 OR item_rank <= $%d)
 ORDER BY notification_id ASC, save_time ASC, id ASC`, shared.Placeholders(len(notificationIDs)), itemLimitPlaceholder, itemLimitPlaceholder)
@@ -204,6 +206,8 @@ ORDER BY notification_id ASC, save_time ASC, id ASC`, shared.Placeholders(len(no
 			&item.Nomenclature,
 			&item.Quantity,
 			&item.SaveTime,
+			&item.Nickname,
+			&item.UnitOfMeasure,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan notification item: %w", err)

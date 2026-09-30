@@ -55,7 +55,7 @@ func ValidateNotificationSave(r request.NotificationSaveRequest) error {
 	}
 	seen := map[string]bool{}
 	for _, item := range r.Items {
-		if !validID(item.ID) || seen[item.ID] || strings.TrimSpace(item.Niin) == "" || strings.TrimSpace(item.Nomenclature) == "" || item.Quantity <= 0 {
+		if !validID(item.ID) || seen[item.ID] || strings.TrimSpace(item.Niin) == "" || strings.TrimSpace(item.Nomenclature) == "" || item.Quantity <= 0 || !shared.ValidNotificationItemFields(item.Nickname, item.UnitOfMeasure) {
 			return invalidSave()
 		}
 		seen[item.ID] = true

@@ -160,18 +160,37 @@ func (repo *RepositoryImpl) saveAtomicTx(ctx context.Context, tx *sql.Tx, userID
 
 type atomicItemChange struct{ kind, fields string }
 
+// directItemChanged reports whether a desired item differs from the stored
+// one. A nil nickname or unit means the client did not send it (a released
+// client), so it never counts as a change.
+func directItemChanged(stored, desired request.NotificationSaveItem) bool {
+	if stored.Niin != desired.Niin || stored.Nomenclature != desired.Nomenclature || stored.Quantity != desired.Quantity {
+		return true
+	}
+	if desired.Nickname != nil && *desired.Nickname != shared.EffectiveNotificationItemNickname(stored.Nickname) {
+		return true
+	}
+	if desired.UnitOfMeasure != nil && *desired.UnitOfMeasure != shared.EffectiveNotificationItemUnit(stored.UnitOfMeasure) {
+		return true
+	}
+	return false
+}
+
 func replaceDirectItems(ctx context.Context, tx *sql.Tx, r request.NotificationSaveRequest, target string, now time.Time) ([]atomicItemChange, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT id,niin,nomenclature,quantity FROM shop_notification_items WHERE notification_id=$1 ORDER BY id FOR UPDATE`, target)
+	rows, err := tx.QueryContext(ctx, `SELECT id,niin,nomenclature,quantity,nickname,unit_of_measure FROM shop_notification_items WHERE notification_id=$1 ORDER BY id FOR UPDATE`, target)
 	if err != nil {
 		return nil, err
 	}
 	current := map[string]request.NotificationSaveItem{}
 	for rows.Next() {
 		var item request.NotificationSaveItem
-		if err := rows.Scan(&item.ID, &item.Niin, &item.Nomenclature, &item.Quantity); err != nil {
+		var nickname, unitOfMeasure sql.NullString
+		if err := rows.Scan(&item.ID, &item.Niin, &item.Nomenclature, &item.Quantity, &nickname, &unitOfMeasure); err != nil {
 			rows.Close()
 			return nil, err
 		}
+		item.Nickname = shared.NullStringPtr(nickname)
+		item.UnitOfMeasure = shared.NullStringPtr(unitOfMeasure)
 		current[item.ID] = item
 	}
 	err = rows.Err()
@@ -186,10 +205,12 @@ func replaceDirectItems(ctx context.Context, tx *sql.Tx, r request.NotificationS
 		old, exists := current[item.ID]
 		if exists {
 			delete(current, item.ID)
-			if old == item {
+			if !directItemChanged(old, item) {
 				continue
 			}
-			_, err = tx.ExecContext(ctx, `UPDATE shop_notification_items SET niin=$1,nomenclature=$2,quantity=$3 WHERE id=$4 AND notification_id=$5`, item.Niin, item.Nomenclature, item.Quantity, item.ID, target)
+			// COALESCE keeps the stored nickname/unit when a released client
+			// omits them, so its edits never erase values a newer client set.
+			_, err = tx.ExecContext(ctx, `UPDATE shop_notification_items SET niin=$1,nomenclature=$2,quantity=$3,nickname=COALESCE($4,nickname),unit_of_measure=COALESCE($5,unit_of_measure) WHERE id=$6 AND notification_id=$7`, item.Niin, item.Nomenclature, item.Quantity, item.Nickname, item.UnitOfMeasure, item.ID, target)
 			updated = append(updated, item)
 		} else {
 			// A UUID already owned by another notification must never be reassigned.
@@ -201,7 +222,7 @@ func replaceDirectItems(ctx context.Context, tx *sql.Tx, r request.NotificationS
 			if !errors.Is(lookup, sql.ErrNoRows) {
 				return nil, lookup
 			}
-			_, err = tx.ExecContext(ctx, `INSERT INTO shop_notification_items (id,shop_id,notification_id,niin,nomenclature,quantity,save_time) VALUES ($1,$2,$3,$4,$5,$6,$7)`, item.ID, r.ShopID, target, item.Niin, item.Nomenclature, item.Quantity, now)
+			_, err = tx.ExecContext(ctx, `INSERT INTO shop_notification_items (id,shop_id,notification_id,niin,nomenclature,quantity,save_time,nickname,unit_of_measure) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, item.ID, r.ShopID, target, item.Niin, item.Nomenclature, item.Quantity, now, item.Nickname, item.UnitOfMeasure)
 			added = append(added, item)
 		}
 		if err != nil {

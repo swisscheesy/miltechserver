@@ -5,6 +5,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
@@ -33,12 +34,18 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 		response.Error(c, 400, "invalid request")
 		return
 	}
+	if !shared.ValidNotificationItemFields(req.Nickname, req.UnitOfMeasure) {
+		response.Error(c, 400, "invalid request")
+		return
+	}
 
 	item := model.ShopNotificationItems{
 		NotificationID: req.NotificationID,
 		Niin:           req.Niin,
 		Nomenclature:   req.Nomenclature,
 		Quantity:       req.Quantity,
+		Nickname:       req.Nickname,
+		UnitOfMeasure:  req.UnitOfMeasure,
 	}
 
 	service := handler.service
@@ -131,11 +138,17 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 
 	var items []model.ShopNotificationItems
 	for _, reqItem := range req.Items {
+		if !shared.ValidNotificationItemFields(reqItem.Nickname, reqItem.UnitOfMeasure) {
+			response.Error(c, 400, "invalid request")
+			return
+		}
 		item := model.ShopNotificationItems{
 			NotificationID: reqItem.NotificationID,
 			Niin:           reqItem.Niin,
 			Nomenclature:   reqItem.Nomenclature,
 			Quantity:       reqItem.Quantity,
+			Nickname:       reqItem.Nickname,
+			UnitOfMeasure:  reqItem.UnitOfMeasure,
 		}
 		items = append(items, item)
 	}

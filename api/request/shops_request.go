@@ -115,10 +115,12 @@ type UpdateVehicleNotificationRequest struct {
 }
 
 type AddNotificationItemRequest struct {
-	NotificationID string `json:"notification_id" binding:"required"`
-	Niin           string `json:"niin" binding:"required"`
-	Nomenclature   string `json:"nomenclature" binding:"required"`
-	Quantity       int32  `json:"quantity" binding:"required"`
+	NotificationID string  `json:"notification_id" binding:"required"`
+	Niin           string  `json:"niin" binding:"required"`
+	Nomenclature   string  `json:"nomenclature" binding:"required"`
+	Quantity       int32   `json:"quantity" binding:"required"`
+	Nickname       *string `json:"nickname"`
+	UnitOfMeasure  *string `json:"unit_of_measure"`
 }
 
 type AddNotificationItemListRequest struct {
@@ -236,4 +238,9 @@ type NotificationSaveItem struct {
 	Niin         string `json:"niin"`
 	Nomenclature string `json:"nomenclature"`
 	Quantity     int32  `json:"quantity"`
+	// Released clients omit these. Nil means "leave the stored value
+	// unchanged", and omitempty keeps their operation fingerprints identical
+	// to the pre-column contract so retries spanning a deploy still replay.
+	Nickname      *string `json:"nickname,omitempty"`
+	UnitOfMeasure *string `json:"unit_of_measure,omitempty"`
 }

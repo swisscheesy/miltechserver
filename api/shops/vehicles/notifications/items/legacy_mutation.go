@@ -38,10 +38,13 @@ func (repo *RepositoryImpl) createLegacyItems(user *bootstrap.User, items []mode
 		}
 		for _, item := range ordered {
 			var created model.ShopNotificationItems
-			err = tx.QueryRowContext(ctx, `INSERT INTO shop_notification_items (id,shop_id,notification_id,niin,nomenclature,quantity,save_time) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id,shop_id,notification_id,niin,nomenclature,quantity,save_time`, item.ID, item.ShopID, item.NotificationID, item.Niin, item.Nomenclature, item.Quantity, item.SaveTime).Scan(&created.ID, &created.ShopID, &created.NotificationID, &created.Niin, &created.Nomenclature, &created.Quantity, &created.SaveTime)
+			var nickname, unitOfMeasure sql.NullString
+			err = tx.QueryRowContext(ctx, `INSERT INTO shop_notification_items (id,shop_id,notification_id,niin,nomenclature,quantity,save_time,nickname,unit_of_measure) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,shop_id,notification_id,niin,nomenclature,quantity,save_time,nickname,unit_of_measure`, item.ID, item.ShopID, item.NotificationID, item.Niin, item.Nomenclature, item.Quantity, item.SaveTime, item.Nickname, item.UnitOfMeasure).Scan(&created.ID, &created.ShopID, &created.NotificationID, &created.Niin, &created.Nomenclature, &created.Quantity, &created.SaveTime, &nickname, &unitOfMeasure)
 			if err != nil {
 				return err
 			}
+			created.Nickname = shared.NullStringPtr(nickname)
+			created.UnitOfMeasure = shared.NullStringPtr(unitOfMeasure)
 			createdByID[item.ID] = created
 		}
 		return nil
