@@ -114,11 +114,13 @@ func TestMessageSyncConcurrencyRollbackLeavesNoGap(t *testing.T) {
 	ctx := context.Background()
 	committed, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
+	defer func() { _ = committed.Rollback() }() // no-op after Commit/Rollback; releases the counter lock if an assertion fails
 	require.Equal(t, int64(1), txInsert(t, committed, shopID))
 	require.NoError(t, committed.Commit())
 
 	aborted, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
+	defer func() { _ = aborted.Rollback() }() // no-op after Commit/Rollback; releases the counter lock if an assertion fails
 	require.Equal(t, int64(2), txInsert(t, aborted, shopID))
 	require.NoError(t, aborted.Rollback())
 
@@ -128,6 +130,7 @@ func TestMessageSyncConcurrencyRollbackLeavesNoGap(t *testing.T) {
 
 	next, err := testDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
+	defer func() { _ = next.Rollback() }() // no-op after Commit/Rollback; releases the counter lock if an assertion fails
 	require.Equal(t, int64(2), txInsert(t, next, shopID))
 	require.NoError(t, next.Commit())
 }
