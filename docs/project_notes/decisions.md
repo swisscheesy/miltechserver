@@ -664,7 +664,8 @@ Based on the current project setup:
   (about 1.1 s at 100,000 rows on a laptop; production row counts unknown)
 - Accepted residual deadlock: a transaction that touches `shop_messages` and then
   writes `shops` deadlocks with the migration; the migration is the victim, is
-  atomic and can be re-run; no such path exists in current code
+  atomic and can be re-run; none found in the repositories checked (not an
+  exhaustive audit)
 - Every message insert now also writes `shop_message_counters` under the
   invoker's privileges; the application role must be verified on
   `miltech_ng_test` before production

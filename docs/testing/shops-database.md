@@ -378,7 +378,12 @@ committed), a mismatching fifth argument, wrong address, port or role, missing
 or malformed `PGSERVICE`, each inherited `PG*` selector, a missing migration file
 and a migration file whose content differs from the pinned SHA-256 were all
 refused with exit 1 before a database was contacted. No live database was
-contacted and the runner has never applied anything.
+contacted and the runner has never applied anything. On 2026-09-30 the probes
+were repeated after the runner printed its low-traffic advice earlier: `bash
+-n` passes; wrong argument counts, an unknown target and the sentinel for both
+targets (with a non-matching address too) still refuse with exit 1. A copy with
+a fake pin and stub `psql`/`pg_dump` under `/private/tmp` (not committed) showed
+the advice printing after the first guard and before the migration session.
 
 ### After applying: verification
 

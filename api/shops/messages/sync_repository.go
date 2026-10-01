@@ -14,8 +14,10 @@ import (
 	"miltechserver/bootstrap"
 )
 
-// This reader targets the logical M1 schema. It is not wired to production reads
-// until the physical migration and every message writer are verified.
+// This reader targets the schema from migration 018. Its four reads are served
+// only when SHOPS_MESSAGE_SYNC_ENABLED is on (ServiceImpl.syncReader); the
+// message_sync capability additionally requires the readiness probe
+// (SyncReadiness) to find the counter table and the enabled allocator trigger.
 var _ SyncReader = (*RepositoryImpl)(nil)
 var _ SyncReader = (*ServiceImpl)(nil)
 

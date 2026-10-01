@@ -176,19 +176,29 @@ open.
 
 ### Capability semantics
 
-- `message_sync` in `GET /shops/capabilities` is true only when
-  `SHOPS_MESSAGE_SYNC_ENABLED=true` **and** a catalog readiness probe finds the
-  counter table and an enabled allocator trigger. Otherwise it is false and the
-  four reads (`/shops/:shop_id/messages-v2/{initial,history,catch-up,reconcile}`)
-  answer 503.
+Two separate things gate message sync; they are not the same check:
+
+- **Only the flag gates the four reads**
+  (`/shops/:shop_id/messages-v2/{initial,history,catch-up,reconcile}`). With
+  `SHOPS_MESSAGE_SYNC_ENABLED` off they answer 503 `unsupported_contract`. With
+  the flag on, they are served whenever the schema supports the queries: if 018
+  is not applied the reader errors and the endpoint answers 500; if the trigger
+  has been disabled the reads are still served (rows written meanwhile are
+  unnumbered, see `shops-database.md`).
+- **The probe gates only the `message_sync` value in `GET /shops/capabilities`**,
+  which is true only when the flag is on **and** a catalog probe finds the
+  counter table and an enabled `BEFORE INSERT` allocator trigger. With 018
+  absent the probe returns false **without an error**, so no log line is
+  written; `message sync readiness probe failed` is logged only when the probe
+  query itself errors.
 - The probe checks that the schema objects exist. It is **not** proof that the
   backfill completed, that every row is numbered, or that every serving instance
-  runs the new binary and points at the migrated database. Those are separate
-  gates below. A probe failure is logged as `message sync readiness probe
-  failed`.
-- Order matters: the migration must be applied **before** the flag is turned on.
-  With the flag on and 018 not applied, `/capabilities` still reports false
-  (the probe fails) but the sync read endpoints return 500 if called directly.
+  runs the new binary and points at the migrated database. Writers running with
+  `session_replication_role = replica` bypass the trigger without the probe
+  seeing it. Those are separate gates below.
+- Order matters: apply the migration **before** the flag is turned on. With the
+  flag on and 018 not applied, `/capabilities` reports false but the sync reads,
+  if called directly, return 500.
 - Timestamps in sync responses, and the cursor's `created_at`, carry the
   database session's UTC offset (for example `-07:00`), not necessarily `Z`.
   Clients must parse offsets.
@@ -219,19 +229,52 @@ does. Flag-off is the first-line rollback.
 
 1. Pin the pre-018 schema checksums (see `shops-database.md`); the runner refuses
    until then.
-2. Apply 018 to `miltech_ng_test` with the runner and record post-conditions and
-   the database-privilege check (app role can write `shop_message_counters`).
+2. Run the case-sensitive ID preflight and the privilege pre-check from
+   `shops-database.md` (all ID counts must be 0). Apply 018 to `miltech_ng_test`
+   with the runner and record post-conditions and the post-migration privilege
+   check (app role can write `shop_message_counters`; a real message insert
+   through the application succeeds there).
 3. Deploy the new binary to the test environment with
    `SHOPS_MESSAGE_SYNC_ENABLED=false`. Verify `/capabilities` reports
    `message_sync:false`, legacy flows are unchanged, and a message posted from a
    released client build (3.7.0+41 or the oldest supported) is numbered.
 4. Inventory the fleet: every instance, its `DB_NAME`, host and port, and its
    binary version. Uniform new binary required.
-5. Set the flag on and restart all instances; verify `message_sync:true`, the
-   app shows no "Full message refresh is unavailable" banner, and edits and
-   deletes from a second account appear within a poll.
+5. Set the flag on and restart **all** instances together in a low-traffic
+   window; verify `message_sync:true`, the app shows no "Full message refresh is
+   unavailable" banner, and edits and deletes from a second account appear
+   within a poll. Expect already-open client sessions to show the refresh-failed
+   banner while instances restart (see the next section); a brief mixed fleet
+   answers per instance.
 6. Repeat for `miltech_ng` only after test-environment acceptance and a separate
    approval, with its own pre/post hashes.
+
+### Runbook: capability true but a sync endpoint answers 503 or 403
+
+Once a client has seen `message_sync:true` it has **no legacy fallback**
+(`lib/_bloc/shops/cubits/shop_messages_cubit.dart`, lines 106 to 151 in the
+mobile repository, `loadInitialMessages`; mobile path by reference only).
+Client behaviour:
+
+- **Initial load answers 503** (or any error): the whole Messages tab shows
+  `Failed to load messages.` until the tab is re-activated.
+- **Refresh (catch-up or reconcile) answers 503 or 403**: the client shows
+  `Message refresh failed. Unverified messages have been retained.`, keeps the
+  rows it has, and new messages stop appearing until the user leaves and
+  re-enters the shop. It keeps polling (about every 10 s), so a flag turned off
+  produces a 503 per open session per poll until sessions are reopened.
+- A possible later client change, not made here: treat `unsupported_contract`
+  from the initial read as a signal to fall back to the legacy read.
+
+Operator actions: confirm every instance has the flag, binary and database you
+expect; for 500 on the reads check that 018 is applied on that instance's
+database; for 403 on every read of a shop check the ID preflight in
+`shops-database.md` (non-canonical shop ID); for `Incomplete reconciliation`
+loops check message IDs the same way. If unnumbered rows exist (`SELECT shop_id,
+count(*) FROM public.shop_messages WHERE insertion_number IS NULL GROUP BY 1`),
+turn the flag off and use the tested repair in `shops-database.md`. Catch-up
+silently omits unnumbered rows while initial, history and reconcile return 503
+for them. Never disable the allocator trigger while the flag is on.
 
 Migration downtime is real (message reads and writes block; see the measurements
 and the `shops-database.md` section); production row counts are unknown.
