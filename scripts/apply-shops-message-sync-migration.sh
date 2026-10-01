@@ -120,6 +120,7 @@ pg_dump --schema-only --no-owner --no-acl --schema=public \
 actual_checksum=$(shasum -a 256 "$schema_dump" | cut -d ' ' -f 1)
 [[ "$actual_checksum" == "$approved_checksum" ]] || fail 'Live schema fingerprint differs from the approved pre-migration export.'
 
+printf '%s\n' 'Applying in this session. Apply only in a low-traffic window: the migration blocks message reads and writes (and shops writes) until it commits.'
 # The final guard and the fixed include run on one psql connection. ON_ERROR_STOP
 # exits before the include on any failed query or refused conditional branch.
 [[ $(shasum -a 256 "$migration_sql" | cut -d ' ' -f 1) == "$approved_migration_checksum" ]] || fail 'Private migration copy changed before include.'
@@ -130,7 +131,6 @@ actual_checksum=$(shasum -a 256 "$schema_dump" | cut -d ' ' -f 1)
 
 printf 'Migration 018 applied to approved target %s.\n' "$target"
 cat <<'NOTE'
-Apply only in a low-traffic window: the migration blocks message reads and writes (and shops writes) until it commits.
 If a run fails with "deadlock detected" or a lock timeout, the migration is one transaction, so nothing changed; it is safe to re-run.
 Verify before proceeding (see docs/testing/shops-database.md, "Message sync migration 018"):
   - shop_message_counters row count equals the shops row count
@@ -140,5 +140,6 @@ Verify before proceeding (see docs/testing/shops-database.md, "Message sync migr
   - max(insertion_number) per shop equals its counter
   - shop_messages row count is unchanged
   - a message posted through the application is numbered, and the app role can write shop_message_counters
+    (has_table_privilege check in the "Database privilege gate" section; a missing grant fails every message insert)
 Capture the post-migration schema SHA-256 independently.
 NOTE
