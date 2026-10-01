@@ -234,7 +234,10 @@ What it does, in one transaction (`SET LOCAL lock_timeout = '5s'`):
   are numbered too.
 - Creates unique index `shop_messages_shop_insertion_number_key (shop_id,
   insertion_number)` and `idx_shop_messages_shop_created_id (shop_id, created_at
-  DESC, id DESC)`.
+  DESC, id DESC)`. The older `idx_shop_messages_shop_created (shop_id,
+  created_at DESC)` is now redundant with the prefix of the new index; dropping
+  it is a candidate for a later migration 019 (it saves write amplification on
+  every insert). It is deliberately **not** dropped in 018.
 
 Its rollback, `migrations/018_rollback_shop_message_insertion_numbers.sql`,
 drops all of the above. It is never invoked by the runner.
@@ -260,14 +263,38 @@ are not restated here.
 
 ### Preflight evidence
 
-The read-only preflight queries (NULL `created_at` count, non-UUID IDs, per-shop
-volume, existing counter/column/trigger, whether migration 017 columns exist)
-were to be run by the operator on both databases. **Their results have not been
-supplied and are not recorded here.** The only live facts on record are from
-2026-09-27: `miltech_ng` had 57 messages across four shops; `miltech_ng_test`
-had one shop. Migration 018 itself refuses a NULL `created_at`; it does **not**
-check that message IDs are UUIDs, which the sync reader requires. Production row
-counts and message sizes are unknown.
+The read-only preflight queries below are to be run by the operator on both
+databases before applying 018. **Their results have not been supplied and are
+not recorded here.** The only live facts on record are from 2026-09-27:
+`miltech_ng` had 57 messages across four shops; `miltech_ng_test` had one shop.
+Production row counts and message sizes are unknown. Also record the per-shop
+message volume, whether the counter table, column or trigger already exist, and
+whether the migration-017 columns exist.
+
+The ID checks are **case-sensitive** (`!~`, not `!~*`) and cover message IDs,
+message `shop_id` values and shop IDs:
+
+```sql
+SELECT count(*) FILTER (WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') AS bad_message_ids,
+       count(*) FILTER (WHERE shop_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') AS bad_message_shop_ids,
+       count(*) FILTER (WHERE created_at IS NULL) AS null_created_at
+FROM public.shop_messages;
+
+SELECT count(*) FILTER (WHERE id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$') AS bad_shop_ids
+FROM public.shops;
+```
+
+**Every value must be 0; any other result is a stop condition** (do not apply
+018 or enable the flag). Why: the server canonicalises path shop IDs and
+reconcile IDs to lowercase UUIDs (`api/shops/messages/sync_handler.go` and
+`normalizeSyncIDs` in `sync_contract.go`) and compares them with the stored
+text. A stored uppercase or otherwise non-canonical message ID is reported
+missing by reconcile, so the client throws `Incomplete reconciliation` on every
+poll; a non-canonical shop ID fails the membership lookup, so every sync read
+answers 403. Migration 018 refuses only a NULL `created_at`; it does **not**
+check any ID. These queries were run against the scratch cluster used for the
+repair test below (all 0) and an uppercase UUID was confirmed to be flagged; no
+live database was queried.
 
 ### Operator procedure and pre-018 schema pins
 
@@ -283,12 +310,30 @@ The guard requires: database name, `host(inet_server_addr())`, port and role to
 match the arguments; server version 14.18; the migration-015 checks (kept from
 016); `shop_notification_operations` **present** (016 applied);
 `shop_message_counters` absent; no `insertion_number` column; and row-level
-security **not** enabled on `public.shops`. The RLS check is a conservative
-guard: with RLS the counter foreign key validation was assumed to take per-row
-`FOR KEY SHARE` locks on `shops`, the deadlock the migration was designed to
-avoid. PostgreSQL's `CREATE POLICY` documentation says referential integrity
-checks bypass row security, so the guard may be stricter than necessary; it was
-not probed.
+security **not** enabled on `public.shops`.
+
+Why the RLS check exists. The counter table's foreign key is validated by
+PostgreSQL's `RI_Initial_Check`, a single join under the locks the migration
+already holds. It falls back to per-row validation (`SELECT ... FOR KEY SHARE`
+on each referenced `shops` row, the lock pattern that deadlocked against
+`shared.LockShopMutation`) when row-level security applies to the checking
+role (a non-owner without `BYPASSRLS`) or when that role lacks `SELECT` on the
+referenced table. A superuser or the table owner is not subject to RLS, so the
+`postgres` runner would be unaffected; the guard is deliberately conservative.
+This replaces an earlier rationale that cited the `CREATE POLICY` note about
+referential-integrity checks bypassing row security, which concerns the
+per-row queries and not whether `RI_Initial_Check` takes the fast path. It was
+probed on 2026-09-30 on a scratch PostgreSQL 14.18 cluster (script
+`/private/tmp/msgsync-repair/rls-probe.sh`, not committed): another session
+held `SELECT ... FOR UPDATE` on one `shops` row and `ALTER TABLE ... ADD
+FOREIGN KEY` was run with a 2 s `lock_timeout`. Observed: it completed
+immediately as the superuser with RLS off, as the superuser with RLS on, and as
+a non-superuser owner holding `SELECT` and `REFERENCES` with RLS off; it timed
+out with `while locking tuple ... in relation "shops"` (the per-row `FOR KEY
+SHARE` query) as that non-superuser owner with RLS enabled, and also without RLS
+when the role lacked `SELECT` on `shops`. Only those four observations are
+claimed; the `RI_Initial_Check` mechanism itself is from PostgreSQL source
+behaviour and was not otherwise probed here.
 
 **Pins are not set.** The runner's two `approved_checksum` values are the
 sentinel `UNPINNED`, and the runner exits 1 with `Refused: pre-018 schema
@@ -350,14 +395,42 @@ enabling the flag:
 - The `shop_messages` row count is unchanged.
 - A message posted through the application (or by a released client) is
   numbered.
-- **Database privilege gate.** The trigger is `SECURITY INVOKER`. After 018,
-  every message insert by the application role also inserts into and updates
-  `shop_message_counters`, so that role must own the new table or hold
-  privileges on it (for example through default privileges of the role that
-  runs the migration). The runner's role is `postgres`; the application role
-  is not on record. Verify on `miltech_ng_test`, with the real
-  application role, that a message insert succeeds **before** production. If
-  privileges are missing, every message insert fails, in the legacy path too.
+- **Database privilege gate** (next section): the application role can read and
+  write `shop_message_counters`, proven by a real message insert through the
+  application on `miltech_ng_test`.
+
+### Database privilege gate (mandatory operator pre-step)
+
+The allocator trigger is `SECURITY INVOKER`. After 018, every message insert by
+the application role also inserts into and updates `shop_message_counters`, so
+that role must own the new table or hold privileges on it. The runner connects
+as `postgres` and the application role name is not on record, so the runner does
+not check this (it cannot know the role); it is a documented operator step.
+`<app_role>` below is the role in the server's `DB_USER`/DSN, to be confirmed by
+the operator.
+
+Before applying, as the runner role, check that the app role writes the sibling
+table 016 created the same way. If the application writes it today, default
+privileges or a shared role are already in place:
+
+```sql
+SELECT has_table_privilege('<app_role>', 'public.shop_notification_operations', 'INSERT,UPDATE');
+```
+
+After applying (still before deploying the binary or enabling the flag):
+
+```sql
+SELECT has_table_privilege('<app_role>', 'public.shop_message_counters', 'INSERT,UPDATE,SELECT');
+```
+
+Both must return `t`. Consequence if the post-migration check is `f`: **every
+message insert fails after the migration commits, including released clients on
+the legacy path**, because the trigger's counter write is denied. Remedy: a
+`GRANT INSERT, UPDATE, SELECT ON public.shop_message_counters TO <app_role>` or
+an `ALTER DEFAULT PRIVILEGES` for the runner role; decide which with the
+operator. This document does not run either. The migration must first be applied
+to `miltech_ng_test`, and a real message insert through the application, as the
+application role, must succeed there (and be numbered) before `miltech_ng`.
 
 ### Lock behaviour, downtime and retry
 
@@ -377,21 +450,144 @@ and fixed (details in the measurements document).
 
 **Accepted residual cycle.** Any transaction that touches `shop_messages` (even
 a `SELECT`) and then writes `shops` deadlocks with the migration. The migration
-is the deadlock victim and rolls back. Current application code has no such path
-(checked writers: settings, core and members repositories; message create, edit
-and delete). If a run fails with `deadlock detected` or a lock timeout, it is
-atomic, nothing changed, and it is safe to re-run.
+is the deadlock victim and rolls back. No such path was found in the
+repositories checked (settings, core and members repositories; message create,
+edit and delete); this is not an exhaustive audit. If a run fails with
+`deadlock detected` or a lock timeout, it is atomic, nothing changed, and it is
+safe to re-run.
+
+Why edit and delete are not that path: they read `shop_messages` first
+(`ACCESS SHARE`) and then lock the shop row with `SELECT ... FOR UPDATE`, which
+takes only `ROW SHARE` on `shops`, compatible with the migration's `SHARE ROW
+EXCLUSIVE`, and the migration holds no `shops` row locks, so no wait cycle can
+form. They also never write `shops` afterwards; a later `UPDATE` of `shops`
+(`ROW EXCLUSIVE`) would conflict, so that is the second condition for staying
+safe.
+
+### Operating with the flag on: rules and incident runbook
+
+- **Never disable the allocator trigger while the flag is on**, and do not run
+  writers with `session_replication_role = replica` (logical-replication apply
+  workers, some restore and bulk-load tools). Replica-mode sessions skip
+  `ORIGIN`-enabled triggers, so they insert unnumbered rows, and the readiness
+  probe (`tgenabled = 'O'` in the catalog) cannot see it. Unnumbered rows make
+  initial, history and reconcile answer 503 for the affected shop, while
+  catch-up **silently omits** them.
+- Detect: `SELECT shop_id, count(*) FROM public.shop_messages WHERE
+  insertion_number IS NULL GROUP BY 1;` returns no rows after a healthy
+  migration; any row after an incident is a repair case.
+- Repair (after any incident that returned rows): turn the flag off on every
+  instance first, then run the repair below. It assigns numbers **above** each
+  affected shop's current counter or highest stored number to the unnumbered
+  rows (so numbers already served to clients do not change), in
+  `(created_at, id)` order, advances or creates the counter, and re-enables the
+  trigger, all in one transaction under the same lock order as 018 (`shops`
+  `SHARE ROW EXCLUSIVE`, then `shop_messages` `ACCESS EXCLUSIVE`, `lock_timeout`
+  5 s; a timeout or deadlock rolls back atomically and can be re-run). It is
+  idempotent: with no unnumbered rows it changes nothing. Rows with a NULL
+  `created_at` sort last; the sync reader treats such rows as unavailable.
+
+```sql
+-- Repair for shop_messages rows that have insertion_number IS NULL. Run only
+-- with SHOPS_MESSAGE_SYNC_ENABLED=false on every instance.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+LOCK TABLE public.shops IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE public.shop_messages IN ACCESS EXCLUSIVE MODE;
+
+-- New numbers start above both the shop's counter and its highest number
+-- already stored, so every number a client may already hold stays unchanged.
+CREATE TEMP TABLE repaired_message_numbers ON COMMIT DROP AS
+SELECT m.id,
+       m.shop_id,
+       shop_base.base_number
+         + row_number() OVER (PARTITION BY m.shop_id ORDER BY m.created_at, m.id) AS new_number
+FROM public.shop_messages AS m
+JOIN (
+    SELECT sm.shop_id,
+           GREATEST(COALESCE(c.last_number, 0), COALESCE(max(sm.insertion_number), 0)) AS base_number
+    FROM public.shop_messages AS sm
+    LEFT JOIN public.shop_message_counters AS c ON c.shop_id = sm.shop_id
+    GROUP BY sm.shop_id, c.last_number
+    HAVING bool_or(sm.insertion_number IS NULL)
+) AS shop_base ON shop_base.shop_id = m.shop_id
+WHERE m.insertion_number IS NULL;
+
+UPDATE public.shop_messages AS m
+SET insertion_number = r.new_number
+FROM repaired_message_numbers AS r
+WHERE m.id = r.id;
+
+-- Advance (or create) each affected shop's counter so the next trigger insert
+-- continues after the repaired rows.
+INSERT INTO public.shop_message_counters (shop_id, last_number)
+SELECT shop_id, max(new_number)
+FROM repaired_message_numbers
+GROUP BY shop_id
+ON CONFLICT (shop_id) DO UPDATE
+SET last_number = GREATEST(public.shop_message_counters.last_number, EXCLUDED.last_number);
+
+-- The usual cause is a disabled trigger; restore it inside the same transaction.
+ALTER TABLE public.shop_messages ENABLE TRIGGER shop_messages_assign_insertion_number;
+
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM public.shop_messages WHERE insertion_number IS NULL) THEN
+        RAISE EXCEPTION 'repair left unnumbered messages';
+    END IF;
+END $$;
+
+SELECT shop_id, count(*) AS repaired_rows, min(new_number) AS first_new_number, max(new_number) AS last_new_number
+FROM repaired_message_numbers
+GROUP BY shop_id
+ORDER BY shop_id;
+COMMIT;
+```
+
+  Tested on 2026-09-30 on a throwaway local PostgreSQL 14.18 cluster built like
+  `scripts/test-shops-isolated.sh` (approved baseline, then 016, 017 and 018;
+  scratch scripts `/private/tmp/msgsync-repair/run-test.sh`, not committed).
+  Messages were inserted through the trigger, the trigger was disabled with
+  `ALTER TABLE ... DISABLE TRIGGER`, and unnumbered rows were inserted into
+  four shops (plus one clean shop): some rows already numbered with a current
+  counter, all rows unnumbered with a counter of 0, a missing counter row, a
+  counter behind the stored maximum, and equal `created_at` ties. The SQL block
+  above was extracted from this document and executed verbatim. Asserted: no NULL remains; no
+  duplicate `(shop_id, insertion_number)`; already-served numbers unchanged;
+  repaired rows are strictly above the prior counter or stored maximum
+  (for example shop A had counter 2 and its two repaired rows became 3 and 4;
+  shop E had counter 1 but stored maximum 3, and its repaired row became 4);
+  every counter equals its shop's maximum; the trigger is enabled afterwards;
+  and a subsequent trigger insert continued from counter + 1 (`a5=5`, `b3=3`,
+  `d2=2`); a second run was a no-op. Numbers within a shop were contiguous in
+  every tested case, but contiguity is not guaranteed when the counter was ahead
+  of the stored maximum (gaps are harmless to clients). The repair does not
+  restore messages that were never inserted.
+- **Flag-flip procedure.** Enable the flag by restarting **all** instances
+  together in a low-traffic window. Sessions already on the legacy
+  path are expected to stay on it until reopened; sessions that saw
+  `message_sync:true` and then meet a restarting or flag-off instance show the
+  refresh-failed banner until reopened (see `shops-release-contracts.md`). A
+  brief mixed fleet answers `/capabilities` and the sync reads per instance.
 
 ### Rollback
 
 First-line rollback is `SHOPS_MESSAGE_SYNC_ENABLED=false` on every instance: no
-schema change is needed, and the trigger keeps numbering messages. The 018
-rollback file is for a full schema revert, run only with the flag off on every
-instance; it locks `shops` in `ACCESS EXCLUSIVE` mode, blocking reads and writes
-of `shops` for the few milliseconds it runs (its contention behaviour was not
-probed). Watermarks already given to clients become meaningless; clients
-re-initialize when the capability reads false. Rehearse only on disposable
-databases.
+schema change is needed, and the trigger keeps numbering messages. This is more
+than "clients re-initialise on their next load": a session that already holds
+`message_sync:true` has no legacy fallback, so it polls into 503 about every
+10 s and shows the refresh-failed banner until the user leaves and re-enters the
+shop (details in `shops-release-contracts.md`).
+
+The 018 rollback file is for a full schema revert, run only with the flag off on
+every instance; it locks `shops` in `ACCESS EXCLUSIVE` mode, blocking reads and
+writes of `shops` for the few milliseconds it runs (its contention behaviour was
+not probed). Watermarks already given to clients become meaningless. Caveat for
+a rollback **followed by re-applying 018**: the backfill renumbers by
+`(created_at, id)`, not by original insertion order, so numbers differ from the
+ones served earlier. A client session that survived the whole cycle can skip
+messages or receive 400 (bound < start) from catch-up. Require every client to
+restart or reopen the shop after a rollback and re-apply cycle. Rehearse only on
+disposable databases.
 
 ### Known failures unrelated to 018
 
