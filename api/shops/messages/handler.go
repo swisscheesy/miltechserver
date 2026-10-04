@@ -1,14 +1,18 @@
 package messages
 
 import (
-	"fmt"
+	"errors"
+	"io"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -192,74 +196,71 @@ func (handler *Handler) DeleteShopMessage(c *gin.Context) {
 
 // UploadMessageImage handles image upload for shop messages
 func (handler *Handler) UploadMessageImage(c *gin.Context) {
-	ctxUser, ok := c.Get("user")
+	ctxUser, _ := c.Get("user")
 	user, _ := ctxUser.(*bootstrap.User)
-
-	if !ok {
+	if user == nil || user.UserID == "" {
 		response.Error(c, 401, "unauthorized")
-		slog.Info("Unauthorized request")
 		return
 	}
-
-	// Get shop_id from query parameter or form data
+	// Install the whole-body bound before any multipart/form access. Keep multipart file
+	// buffering bounded; cleanup covers every return.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 6*1024*1024)
+	defer func() {
+		if c.Request.MultipartForm != nil {
+			if err := c.Request.MultipartForm.RemoveAll(); err != nil {
+				slog.Warn("Multipart cleanup failed")
+			}
+		}
+	}()
+	if err := c.Request.ParseMultipartForm(1024 * 1024); err != nil {
+		response.Error(c, 400, "invalid or oversized multipart body")
+		return
+	}
+	form := c.Request.MultipartForm
+	if len(form.File) != 1 || len(form.File["file"]) != 1 || len(form.Value) > 1 || len(form.Value["shop_id"]) > 1 {
+		response.Error(c, 400, "invalid multipart parts")
+		return
+	}
+	for key := range form.Value {
+		if key != "shop_id" {
+			response.Error(c, 400, "invalid multipart field")
+			return
+		}
+	}
 	shopID := c.Query("shop_id")
-	if shopID == "" {
-		shopID = c.PostForm("shop_id")
+	if values := form.Value["shop_id"]; len(values) == 1 {
+		if len(values[0]) > 36 || (shopID != "" && shopID != values[0]) {
+			response.Error(c, 400, "invalid shop_id")
+			return
+		}
+		shopID = values[0]
 	}
-	if shopID == "" {
-		response.Error(c, 400, "shop_id is required")
+	if id, err := uuid.Parse(shopID); err != nil || id == uuid.Nil {
+		response.Error(c, 400, "invalid shop_id")
 		return
 	}
-
-	// Get the uploaded file
-	file, header, err := c.Request.FormFile("file")
+	header := form.File["file"][0]
+	file, err := header.Open()
 	if err != nil {
-		slog.Error("Error getting uploaded file", "error", err)
-		response.Error(c, 400, "failed to get uploaded file")
+		response.Error(c, 400, "failed to read uploaded file")
 		return
 	}
 	defer file.Close()
-
-	// Check file size before reading
-	if header.Size > 5*1024*1024 { // 5MB
-		response.Error(c, 400, "file size exceeds maximum allowed size of 5MB")
+	imageData, err := io.ReadAll(io.LimitReader(file, maxImageSize+1))
+	if err != nil || len(imageData) == 0 || len(imageData) > maxImageSize || c.Request.Context().Err() != nil {
+		response.Error(c, 400, "invalid image data")
 		return
 	}
-
-	// Read file data
-	imageData := make([]byte, header.Size)
-	_, err = file.Read(imageData)
+	upload, err := handler.service.UploadMessageImage(c.Request.Context(), user, shopID, imageData, header.Header.Get("Content-Type"))
 	if err != nil {
-		slog.Error("Error reading file data", "error", err)
-		response.Error(c, 500, "failed to read file data")
+		status := 500
+		if errors.Is(err, shared.ErrShopAccessDenied) {
+			status = 403
+		}
+		response.Error(c, status, "failed to upload image")
 		return
 	}
-
-	// Get content type from header
-	contentType := header.Header.Get("Content-Type")
-
-	// Upload to blob storage
-	service := handler.service
-	messageID, fileExtension, imageURL, err := service.UploadMessageImage(c.Request.Context(), user, shopID, imageData, contentType)
-	if err != nil {
-		slog.Error("Error uploading image to blob storage", "error", err)
-		response.Error(c, 500, fmt.Sprintf("failed to upload image: %v", err))
-		return
-	}
-
-	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
-	// Message and has no parameter to carry this success text. The nested
-	// gin.H{} here is the Data field's payload shape, not an envelope.
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "Image uploaded successfully",
-		Data: gin.H{
-			"message_id":     messageID,
-			"shop_id":        shopID,
-			"image_url":      imageURL,
-			"file_extension": fileExtension,
-		},
-	})
+	c.JSON(200, response.StandardResponse{Status: 200, Message: "Image uploaded successfully", Data: upload})
 }
 
 // DeleteMessageImage handles deletion of orphaned message images

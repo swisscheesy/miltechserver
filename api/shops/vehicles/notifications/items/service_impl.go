@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"time"
 
@@ -22,21 +23,32 @@ func NewService(repo Repository) *ServiceImpl {
 }
 
 func (service *ServiceImpl) AddNotificationItem(ctx context.Context, user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
+	ctx = WithAuditCorrelation(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := shared.ValidateItemFields(item.Niin, item.Nomenclature, item.Quantity); err != nil {
+		return nil, err
+	}
+	if err := shared.ValidateItemEnrichment(item.Nickname, item.UnitOfMeasure); err != nil {
+		return nil, err
+	}
+
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, item.NotificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, item.NotificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, notification.VehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -49,7 +61,7 @@ func (service *ServiceImpl) AddNotificationItem(ctx context.Context, user *boots
 	item.ShopID = notification.ShopID
 	item.SaveTime = time.Now()
 
-	createdItem, err := service.repo.CreateNotificationItem(user, item)
+	createdItem, err := service.repo.CreateNotificationItem(ctx, user, item)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add notification item: %w", err)
 	}
@@ -61,6 +73,7 @@ func (service *ServiceImpl) AddNotificationItem(ctx context.Context, user *boots
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		item.NotificationID,
 		notification.ShopID,
@@ -81,12 +94,12 @@ func (service *ServiceImpl) GetNotificationItems(ctx context.Context, user *boot
 		return nil, errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -95,7 +108,7 @@ func (service *ServiceImpl) GetNotificationItems(ctx context.Context, user *boot
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	items, err := service.repo.GetNotificationItems(user, notificationID)
+	items, err := service.repo.GetNotificationItems(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification items: %w", err)
 	}
@@ -112,7 +125,7 @@ func (service *ServiceImpl) GetShopNotificationItems(ctx context.Context, user *
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -121,7 +134,7 @@ func (service *ServiceImpl) GetShopNotificationItems(ctx context.Context, user *
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	items, err := service.repo.GetShopNotificationItems(user, shopID)
+	items, err := service.repo.GetShopNotificationItems(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notification items: %w", err)
 	}
@@ -134,6 +147,25 @@ func (service *ServiceImpl) GetShopNotificationItems(ctx context.Context, user *
 }
 
 func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
+	ctx = WithAuditCorrelation(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if err := shared.ValidateItemFields(item.Niin, item.Nomenclature, item.Quantity); err != nil {
+			return nil, err
+		}
+		if err := shared.ValidateItemEnrichment(item.Nickname, item.UnitOfMeasure); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, item := range items {
+		if item.NotificationID != items[0].NotificationID {
+			return nil, &shared.ValidationError{}
+		}
+	}
+
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
@@ -142,17 +174,17 @@ func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *b
 		return nil, errors.New("no items to add")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, items[0].NotificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, items[0].NotificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, notification.VehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -168,7 +200,7 @@ func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *b
 		items[i].SaveTime = now
 	}
 
-	createdItems, err := service.repo.CreateNotificationItemList(user, items)
+	createdItems, err := service.repo.CreateNotificationItemList(ctx, user, items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add notification items: %w", err)
 	}
@@ -180,6 +212,7 @@ func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *b
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		items[0].NotificationID,
 		notification.ShopID,
@@ -196,26 +229,27 @@ func (service *ServiceImpl) AddNotificationItemList(ctx context.Context, user *b
 }
 
 func (service *ServiceImpl) RemoveNotificationItem(ctx context.Context, user *bootstrap.User, itemID string) error {
+	ctx = WithAuditCorrelation(ctx)
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
 
-	item, err := service.repo.GetNotificationItemByID(user, itemID)
+	item, err := service.repo.GetNotificationItemByID(ctx, user, itemID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification item: %w", err)
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, item.NotificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, item.NotificationID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, notification.VehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -224,7 +258,7 @@ func (service *ServiceImpl) RemoveNotificationItem(ctx context.Context, user *bo
 		return errors.New("access denied: user is not a member of this shop")
 	}
 
-	err = service.repo.DeleteNotificationItem(user, itemID)
+	err = service.repo.DeleteNotificationItem(ctx, user, itemID)
 	if err != nil {
 		return fmt.Errorf("failed to remove notification item: %w", err)
 	}
@@ -236,6 +270,7 @@ func (service *ServiceImpl) RemoveNotificationItem(ctx context.Context, user *bo
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		item.NotificationID,
 		item.ShopID,
@@ -251,98 +286,52 @@ func (service *ServiceImpl) RemoveNotificationItem(ctx context.Context, user *bo
 	return nil
 }
 
-func (service *ServiceImpl) RemoveNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) error {
-	if user == nil {
-		return errors.New("unauthorized user")
+func (service *ServiceImpl) RemoveNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) (int64, error) {
+	ctx = WithAuditCorrelation(ctx)
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
-
+	if user == nil || user.UserID == "" {
+		return 0, errors.New("unauthorized user")
+	}
 	if len(itemIDs) == 0 {
-		return errors.New("no items to remove")
+		return 0, errors.New("no items to remove")
 	}
-
-	items, err := service.repo.GetNotificationItemsByIDs(user, itemIDs)
+	// The repository authorizes all persisted survivors under its transaction locks.
+	count, err := service.repo.DeleteNotificationItemList(ctx, user, itemIDs)
 	if err != nil {
-		return fmt.Errorf("failed to get notification items: %w", err)
+		return 0, fmt.Errorf("failed to remove notification items: %w", err)
 	}
-
-	if len(items) == 0 {
-		slog.Warn("No notification items found for deletion", "user_id", user.UserID, "requested_count", len(itemIDs))
-		return errors.New("no notification items found")
-	}
-
-	firstItem := items[0]
-	notification, err := service.repo.GetVehicleNotificationByID(user, firstItem.NotificationID)
-	if err != nil {
-		return fmt.Errorf("failed to get notification: %w", err)
-	}
-
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
-	if err != nil {
-		return fmt.Errorf("failed to get vehicle: %w", err)
-	}
-
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
-	if err != nil {
-		return fmt.Errorf("failed to verify membership: %w", err)
-	}
-
-	if !isMember {
-		return errors.New("access denied: user is not a member of this shop")
-	}
-
-	for _, item := range items {
-		if item.NotificationID != firstItem.NotificationID {
-			return errors.New("cannot delete items from multiple notifications in a single operation")
-		}
-	}
-
-	err = service.repo.DeleteNotificationItemList(user, itemIDs)
-	if err != nil {
-		return fmt.Errorf("failed to remove notification items: %w", err)
-	}
-
-	fieldChanges, err := buildItemRemovalFieldChanges(items)
-	if err != nil {
-		slog.Warn("Failed to build field changes for item removals", "error", err)
-		fieldChanges = fmt.Sprintf(`{"fields_changed": ["items"], "item_count": %d}`, len(items))
-	}
-
-	service.recordNotificationChange(
-		user,
-		firstItem.NotificationID,
-		firstItem.ShopID,
-		notification.VehicleID,
-		"items_removed",
-		fieldChanges,
-		notification.Title,
-		notification.Type,
-		vehicle.Admin,
-	)
-
-	slog.Info("Notification items removed", "user_id", user.UserID, "count", len(items), "notification_id", firstItem.NotificationID)
-	return nil
+	slog.Info("Notification items removed", "user_id", user.UserID, "count", count)
+	return count, nil
 }
 
-// itemAuditInfo represents item details captured in audit trail
-type itemAuditInfo struct {
-	Niin         string `json:"niin"`
-	Nomenclature string `json:"nomenclature"`
-	Quantity     int32  `json:"quantity"`
+// ItemAuditSnapshot preserves the physical row at the time of the event.
+type ItemAuditSnapshot struct {
+	ItemID        string  `json:"item_id"`
+	Nickname      *string `json:"nickname"`
+	UnitOfMeasure *string `json:"unit_of_measure"`
+	Niin          string  `json:"niin"`
+	Nomenclature  string  `json:"nomenclature"`
+	Quantity      int32   `json:"quantity"`
 }
 
 func buildItemAdditionFieldChanges(items []model.ShopNotificationItems) (string, error) {
 	type FieldChangesData struct {
-		FieldsChanged []string        `json:"fields_changed"`
-		ItemCount     int             `json:"item_count"`
-		ItemsAdded    []itemAuditInfo `json:"items_added"`
+		FieldsChanged []string            `json:"fields_changed"`
+		ItemCount     int                 `json:"item_count"`
+		ItemsAdded    []ItemAuditSnapshot `json:"items_added"`
 	}
 
-	itemsInfo := make([]itemAuditInfo, len(items))
+	itemsInfo := make([]ItemAuditSnapshot, len(items))
 	for i, item := range items {
-		itemsInfo[i] = itemAuditInfo{
-			Niin:         item.Niin,
-			Nomenclature: item.Nomenclature,
-			Quantity:     item.Quantity,
+		itemsInfo[i] = ItemAuditSnapshot{
+			ItemID:        item.ID,
+			Nickname:      item.Nickname,
+			UnitOfMeasure: item.UnitOfMeasure,
+			Niin:          item.Niin,
+			Nomenclature:  item.Nomenclature,
+			Quantity:      item.Quantity,
 		}
 	}
 
@@ -362,17 +351,20 @@ func buildItemAdditionFieldChanges(items []model.ShopNotificationItems) (string,
 
 func buildItemRemovalFieldChanges(items []model.ShopNotificationItems) (string, error) {
 	type FieldChangesData struct {
-		FieldsChanged []string        `json:"fields_changed"`
-		ItemCount     int             `json:"item_count"`
-		ItemsRemoved  []itemAuditInfo `json:"items_removed"`
+		FieldsChanged []string            `json:"fields_changed"`
+		ItemCount     int                 `json:"item_count"`
+		ItemsRemoved  []ItemAuditSnapshot `json:"items_removed"`
 	}
 
-	itemsInfo := make([]itemAuditInfo, len(items))
+	itemsInfo := make([]ItemAuditSnapshot, len(items))
 	for i, item := range items {
-		itemsInfo[i] = itemAuditInfo{
-			Niin:         item.Niin,
-			Nomenclature: item.Nomenclature,
-			Quantity:     item.Quantity,
+		itemsInfo[i] = ItemAuditSnapshot{
+			ItemID:        item.ID,
+			Nickname:      item.Nickname,
+			UnitOfMeasure: item.UnitOfMeasure,
+			Niin:          item.Niin,
+			Nomenclature:  item.Nomenclature,
+			Quantity:      item.Quantity,
 		}
 	}
 
@@ -391,6 +383,7 @@ func buildItemRemovalFieldChanges(items []model.ShopNotificationItems) (string, 
 }
 
 func (service *ServiceImpl) recordNotificationChange(
+	ctx context.Context,
 	user *bootstrap.User,
 	notificationID string,
 	shopID string,
@@ -416,8 +409,17 @@ func (service *ServiceImpl) recordNotificationChange(
 		VehicleAdmin:      &vehicleAdmin,
 	}
 
-	err := service.repo.CreateNotificationChange(user, change)
+	err := service.repo.CreateNotificationChange(ctx, user, change)
 	if err != nil {
-		slog.Warn("Failed to record notification change", "error", err, "notification_id", notificationID, "change_type", changeType)
+		WarnLegacyAuditFailure(ctx, changeType, shopID, vehicleID, notificationID, user.UserID, err)
 	}
+}
+
+// Compatibility wrappers keep existing notification callers on the shared
+// server correlation contract used by vehicle deletion too.
+func WithAuditCorrelation(ctx context.Context) context.Context {
+	return shared.WithAuditCorrelation(ctx)
+}
+func WarnLegacyAuditFailure(ctx context.Context, operation, shopID, vehicleID, notificationID, actorID string, err error) {
+	shared.WarnLegacyAuditFailure(ctx, operation, shopID, vehicleID, notificationID, actorID, err)
 }

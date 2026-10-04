@@ -1,6 +1,7 @@
 package items
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -18,22 +19,22 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
-func (repo *RepositoryImpl) CreateNotificationItem(user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
-	created, err := repo.createLegacyItems(user, []model.ShopNotificationItems{item})
+func (repo *RepositoryImpl) CreateNotificationItem(ctx context.Context, user *bootstrap.User, item model.ShopNotificationItems) (*model.ShopNotificationItems, error) {
+	created, err := repo.createLegacyItems(ctx, user, []model.ShopNotificationItems{item})
 	if err != nil {
 		return nil, err
 	}
 	return &created[0], nil
 }
 
-func (repo *RepositoryImpl) GetNotificationItems(user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) GetNotificationItems(ctx context.Context, user *bootstrap.User, notificationID string) ([]model.ShopNotificationItems, error) {
 	stmt := SELECT(ShopNotificationItems.AllColumns).
 		FROM(ShopNotificationItems).
 		WHERE(ShopNotificationItems.NotificationID.EQ(String(notificationID))).
 		ORDER_BY(ShopNotificationItems.SaveTime.ASC())
 
 	var items []model.ShopNotificationItems
-	err := stmt.Query(repo.db, &items)
+	err := stmt.QueryContext(ctx, repo.db, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification items: %w", err)
 	}
@@ -41,14 +42,14 @@ func (repo *RepositoryImpl) GetNotificationItems(user *bootstrap.User, notificat
 	return items, nil
 }
 
-func (repo *RepositoryImpl) GetShopNotificationItems(user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) GetShopNotificationItems(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error) {
 	stmt := SELECT(ShopNotificationItems.AllColumns).
 		FROM(ShopNotificationItems).
 		WHERE(ShopNotificationItems.ShopID.EQ(String(shopID))).
 		ORDER_BY(ShopNotificationItems.SaveTime.DESC())
 
 	var items []model.ShopNotificationItems
-	err := stmt.Query(repo.db, &items)
+	err := stmt.QueryContext(ctx, repo.db, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notification items: %w", err)
 	}
@@ -56,13 +57,13 @@ func (repo *RepositoryImpl) GetShopNotificationItems(user *bootstrap.User, shopI
 	return items, nil
 }
 
-func (repo *RepositoryImpl) GetNotificationItemByID(user *bootstrap.User, itemID string) (*model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) GetNotificationItemByID(ctx context.Context, user *bootstrap.User, itemID string) (*model.ShopNotificationItems, error) {
 	stmt := SELECT(ShopNotificationItems.AllColumns).
 		FROM(ShopNotificationItems).
 		WHERE(ShopNotificationItems.ID.EQ(String(itemID)))
 
 	var item model.ShopNotificationItems
-	err := stmt.Query(repo.db, &item)
+	err := stmt.QueryContext(ctx, repo.db, &item)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification item: %w", err)
 	}
@@ -70,7 +71,7 @@ func (repo *RepositoryImpl) GetNotificationItemByID(user *bootstrap.User, itemID
 	return &item, nil
 }
 
-func (repo *RepositoryImpl) GetNotificationItemsByIDs(user *bootstrap.User, itemIDs []string) ([]model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) GetNotificationItemsByIDs(ctx context.Context, user *bootstrap.User, itemIDs []string) ([]model.ShopNotificationItems, error) {
 	if len(itemIDs) == 0 {
 		return []model.ShopNotificationItems{}, nil
 	}
@@ -85,7 +86,7 @@ func (repo *RepositoryImpl) GetNotificationItemsByIDs(user *bootstrap.User, item
 		WHERE(ShopNotificationItems.ID.IN(expressions...))
 
 	var items []model.ShopNotificationItems
-	err := stmt.Query(repo.db, &items)
+	err := stmt.QueryContext(ctx, repo.db, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification items: %w", err)
 	}
@@ -93,25 +94,26 @@ func (repo *RepositoryImpl) GetNotificationItemsByIDs(user *bootstrap.User, item
 	return items, nil
 }
 
-func (repo *RepositoryImpl) CreateNotificationItemList(user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
-	return repo.createLegacyItems(user, items)
+func (repo *RepositoryImpl) CreateNotificationItemList(ctx context.Context, user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error) {
+	return repo.createLegacyItems(ctx, user, items)
 }
 
-func (repo *RepositoryImpl) DeleteNotificationItem(user *bootstrap.User, itemID string) error {
-	return repo.deleteLegacyItems(user, []string{itemID}, true)
+func (repo *RepositoryImpl) DeleteNotificationItem(ctx context.Context, user *bootstrap.User, itemID string) error {
+	_, err := repo.deleteLegacyItems(ctx, user, []string{itemID}, true)
+	return err
 }
 
-func (repo *RepositoryImpl) DeleteNotificationItemList(user *bootstrap.User, itemIDs []string) error {
-	return repo.deleteLegacyItems(user, itemIDs, false)
+func (repo *RepositoryImpl) DeleteNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) (int64, error) {
+	return repo.deleteLegacyItems(ctx, user, itemIDs, false)
 }
 
-func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
+func (repo *RepositoryImpl) GetVehicleNotificationByID(ctx context.Context, user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
 	stmt := SELECT(ShopVehicleNotifications.AllColumns).
 		FROM(ShopVehicleNotifications).
 		WHERE(ShopVehicleNotifications.ID.EQ(String(notificationID)))
 
 	var notification model.ShopVehicleNotifications
-	err := stmt.Query(repo.db, &notification)
+	err := stmt.QueryContext(ctx, repo.db, &notification)
 	if err != nil {
 		return nil, fmt.Errorf("vehicle notification not found: %w", err)
 	}
@@ -119,13 +121,13 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	return &notification, nil
 }
 
-func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
+func (repo *RepositoryImpl) GetShopVehicleByID(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
 	stmt := SELECT(ShopVehicle.AllColumns).
 		FROM(ShopVehicle).
 		WHERE(ShopVehicle.ID.EQ(String(vehicleID)))
 
 	var vehicle model.ShopVehicle
-	err := stmt.Query(repo.db, &vehicle)
+	err := stmt.QueryContext(ctx, repo.db, &vehicle)
 	if err != nil {
 		return nil, fmt.Errorf("shop vehicle not found: %w", err)
 	}
@@ -133,7 +135,7 @@ func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID s
 	return &vehicle, nil
 }
 
-func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (repo *RepositoryImpl) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
 		FROM(ShopMembers).
 		WHERE(
@@ -144,7 +146,7 @@ func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID stri
 	var result struct {
 		Count int64 `sql:"primary_key"`
 	}
-	err := stmt.Query(repo.db, &result)
+	err := stmt.QueryContext(ctx, repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
@@ -152,7 +154,7 @@ func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID stri
 	return result.Count > 0, nil
 }
 
-func (repo *RepositoryImpl) CreateNotificationChange(user *bootstrap.User, change model.ShopVehicleNotificationChanges) error {
+func (repo *RepositoryImpl) CreateNotificationChange(ctx context.Context, user *bootstrap.User, change model.ShopVehicleNotificationChanges) error {
 	rawSQL := `
 		INSERT INTO shop_vehicle_notification_changes (
 			notification_id,
@@ -167,7 +169,7 @@ func (repo *RepositoryImpl) CreateNotificationChange(user *bootstrap.User, chang
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 
-	_, err := repo.db.Exec(
+	_, err := repo.db.ExecContext(ctx,
 		rawSQL,
 		change.NotificationID,
 		change.ShopID,

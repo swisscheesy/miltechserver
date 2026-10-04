@@ -44,15 +44,10 @@ func (service *ServiceImpl) CreateShop(ctx context.Context, user *bootstrap.User
 	shop.CreatedAt = &now
 	shop.UpdatedAt = &now
 
-	createdShop, err := service.repo.CreateShop(user, shop)
+	createdShop, err := service.repo.CreateShop(ctx, user, shop)
 	if err != nil {
 		slog.Error("Failed to create shop", "error", err, "user_id", user.UserID)
 		return nil, fmt.Errorf("failed to create shop: %w", err)
-	}
-
-	err = service.repo.AddMemberToShop(user, shop.ID, "admin")
-	if err != nil {
-		slog.Error("Failed to add creator as admin to shop", "error", err, "user_id", user.UserID, "shop_id", shop.ID)
 	}
 
 	slog.Info("Shop created successfully", "user_id", user.UserID, "shop_id", shop.ID, "shop_name", shop.Name)
@@ -64,7 +59,7 @@ func (service *ServiceImpl) UpdateShop(ctx context.Context, user *bootstrap.User
 		return nil, errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shop.ID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shop.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -73,7 +68,7 @@ func (service *ServiceImpl) UpdateShop(ctx context.Context, user *bootstrap.User
 		return nil, errors.New("access denied: only shop admins can update shops")
 	}
 
-	updatedShop, err := service.repo.UpdateShop(user, shop)
+	updatedShop, err := service.repo.UpdateShop(ctx, user, shop)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update shop: %w", err)
 	}
@@ -87,16 +82,10 @@ func (service *ServiceImpl) DeleteShop(ctx context.Context, user *bootstrap.User
 		return errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
-	if err != nil {
-		return fmt.Errorf("failed to verify admin status: %w", err)
+	if err := service.repo.DeleteShop(ctx, user, shopID); err != nil {
+		return fmt.Errorf("failed to delete shop: %w", err)
 	}
-
-	if !isAdmin {
-		return errors.New("only shop administrators can delete shops")
-	}
-
-	return service.deleteShopWithBlobCleanup(ctx, user, shopID)
+	return nil
 }
 
 func (service *ServiceImpl) GetShopsByUser(ctx context.Context, user *bootstrap.User) ([]model.Shops, error) {
@@ -104,7 +93,7 @@ func (service *ServiceImpl) GetShopsByUser(ctx context.Context, user *bootstrap.
 		return nil, errors.New("unauthorized user")
 	}
 
-	shops, err := service.repo.GetShopsByUser(user)
+	shops, err := service.repo.GetShopsByUser(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shops: %w", err)
 	}
@@ -121,7 +110,7 @@ func (service *ServiceImpl) GetShopByID(ctx context.Context, user *bootstrap.Use
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -130,7 +119,7 @@ func (service *ServiceImpl) GetShopByID(ctx context.Context, user *bootstrap.Use
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	shop, err := service.repo.GetShopByID(user, shopID)
+	shop, err := service.repo.GetShopByID(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop: %w", err)
 	}
@@ -143,7 +132,7 @@ func (service *ServiceImpl) GetUserDataWithShops(ctx context.Context, user *boot
 		return nil, errors.New("unauthorized user")
 	}
 
-	shopsWithStats, err := service.repo.GetShopsWithStatsForUser(user)
+	shopsWithStats, err := service.repo.GetShopsWithStatsForUser(ctx, user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user shops with stats: %w", err)
 	}
@@ -180,25 +169,4 @@ func (service *ServiceImpl) GetShopEquipmentOverview(ctx context.Context, user *
 	}
 
 	return &response.ShopEquipmentOverviewResponse{Shops: shops}, nil
-}
-
-// deleteShopWithBlobCleanup is a private helper that deletes a shop and cleans up associated blobs
-// This is used by both DeleteShop (admin deletion) and LeaveShop (last member deletion)
-func (service *ServiceImpl) deleteShopWithBlobCleanup(ctx context.Context, user *bootstrap.User, shopID string) error {
-	err := service.repo.DeleteShop(user, shopID)
-	if err != nil {
-		slog.Error("Failed to delete shop", "error", err, "user_id", user.UserID, "shop_id", shopID)
-		return fmt.Errorf("failed to delete shop: %w", err)
-	}
-
-	err = service.repo.DeleteShopMessageBlobs(shopID)
-	if err != nil {
-		slog.Warn("Failed to delete shop message blobs during shop deletion",
-			"shop_id", shopID,
-			"user_id", user.UserID,
-			"error", err)
-	}
-
-	slog.Info("Shop deleted successfully", "user_id", user.UserID, "shop_id", shopID)
-	return nil
 }

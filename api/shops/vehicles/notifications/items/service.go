@@ -12,5 +12,5 @@ type Service interface {
 	GetShopNotificationItems(ctx context.Context, user *bootstrap.User, shopID string) ([]model.ShopNotificationItems, error)
 	AddNotificationItemList(ctx context.Context, user *bootstrap.User, items []model.ShopNotificationItems) ([]model.ShopNotificationItems, error)
 	RemoveNotificationItem(ctx context.Context, user *bootstrap.User, itemID string) error
-	RemoveNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) error
+	RemoveNotificationItemList(ctx context.Context, user *bootstrap.User, itemIDs []string) (int64, error)
 }

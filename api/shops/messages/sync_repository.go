@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -21,7 +22,7 @@ import (
 var _ SyncReader = (*RepositoryImpl)(nil)
 var _ SyncReader = (*ServiceImpl)(nil)
 
-func (repo *RepositoryImpl) syncRead(ctx context.Context, user *bootstrap.User, shopID string, read func(*sql.Tx) error) error {
+func (repo *RepositoryImpl) syncRead(ctx context.Context, user *bootstrap.User, shopID string, read func(*sql.Tx, int64) error) error {
 	if user == nil || user.UserID == "" {
 		return &shared.Failure{Code: "unauthorized", PublicMessage: "Unauthorized", Status: 401}
 	}
@@ -30,51 +31,59 @@ func (repo *RepositoryImpl) syncRead(ctx context.Context, user *bootstrap.User, 
 	}
 	tx, err := repo.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
 	if err != nil {
-		return err
+		return syncReadFailure(err)
 	}
 	defer tx.Rollback()
 	var member bool
 	err = tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM shop_members WHERE shop_id = $1 AND user_id = $2)`, shopID, user.UserID).Scan(&member)
 	if err != nil {
-		return err
+		return syncReadFailure(err)
 	}
 	if !member {
 		return shared.ErrShopAccessDenied
 	}
-	if err = read(tx); err != nil {
+	watermark, err := ValidateShopMessageNumbering(ctx, tx, shopID)
+	if err != nil {
 		return err
 	}
-	return tx.Commit()
-}
-func syncWatermark(ctx context.Context, tx *sql.Tx, shopID string) (int64, error) {
-	var n int64
-	err := tx.QueryRowContext(ctx, `SELECT last_number FROM shop_message_counters WHERE shop_id = $1`, shopID).Scan(&n)
-	if errors.Is(err, sql.ErrNoRows) {
-		return watermarkWithoutCounter(ctx, tx, shopID)
+	if err = read(tx, watermark); err != nil {
+		return syncReadFailure(err)
 	}
-	if err != nil {
-		return 0, err
+	if err = tx.Commit(); err != nil {
+		return syncReadFailure(err)
 	}
-	if n < 0 {
-		return 0, syncUnavailable()
-	}
-	return n, nil
+	return nil
 }
 
-// The allocator trigger creates a Shop's counter with its first message, so a
-// Shop created after migration 018 has none until then and starts at zero.
-// Messages without a counter mean numbering is incomplete: never fabricate a
-// watermark for them.
-func watermarkWithoutCounter(ctx context.Context, tx *sql.Tx, shopID string) (int64, error) {
-	var hasMessages bool
-	err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM shop_messages WHERE shop_id = $1)`, shopID).Scan(&hasMessages)
-	if err != nil {
-		return 0, err
+func syncReadFailure(err error) error {
+	var failure *shared.Failure
+	if errors.As(err, &failure) {
+		return err
 	}
-	if hasMessages {
+	slog.Warn("message sync read unavailable", "category", "query_or_context")
+	return syncUnavailable()
+}
+
+// ValidateShopMessageNumbering covers the entire Shop in the caller's snapshot,
+// including rows excluded by a page/cursor/ID filter. Deleted numbers stay valid.
+func ValidateShopMessageNumbering(ctx context.Context, tx *sql.Tx, shopID string) (int64, error) {
+	var counter sql.NullInt64
+	var count, maximum int64
+	var invalid bool
+	err := tx.QueryRowContext(ctx, `SELECT
+   (SELECT last_number FROM public.shop_message_counters WHERE shop_id=$1),
+   count(*), COALESCE(max(insertion_number),0),
+   COALESCE(bool_or(insertion_number IS NULL OR insertion_number <= 0 OR created_at IS NULL),false)
+ FROM public.shop_messages WHERE shop_id=$1`, shopID).Scan(&counter, &count, &maximum, &invalid)
+	if err != nil {
+		slog.Warn("message sync integrity unavailable", "category", "query")
 		return 0, syncUnavailable()
 	}
-	return 0, nil
+	if invalid || (!counter.Valid && count > 0) || (counter.Valid && (counter.Int64 < 0 || counter.Int64 < maximum)) {
+		slog.Warn("message sync integrity unavailable", "category", "numbering")
+		return 0, syncUnavailable()
+	}
+	return counter.Int64, nil
 }
 
 const syncProjection = `SELECT m.id,m.shop_id,m.user_id,m.message,m.created_at,m.updated_at,m.is_edited,m.parent_id,NULLIF(BTRIM(u.username),''),m.insertion_number
@@ -139,11 +148,7 @@ func (repo *RepositoryImpl) InitialMessages(ctx context.Context, user *bootstrap
 		return nil, syncInvalid()
 	}
 	var page *MessageInitial
-	err := repo.syncRead(ctx, user, shopID, func(tx *sql.Tx) error {
-		watermark, err := syncWatermark(ctx, tx, shopID)
-		if err != nil {
-			return err
-		}
+	err := repo.syncRead(ctx, user, shopID, func(tx *sql.Tx, watermark int64) error {
 		rows, err := readSyncRows(ctx, tx, `m.shop_id = $1 ORDER BY m.created_at DESC,m.id DESC LIMIT $2`, shopID, limit+1)
 		if err != nil {
 			return err
@@ -169,7 +174,7 @@ func (repo *RepositoryImpl) MessageHistory(ctx context.Context, user *bootstrap.
 		return nil, err
 	}
 	var page *MessageHistory
-	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx) error {
+	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx, _ int64) error {
 		rows, err := readSyncRows(ctx, tx, `m.shop_id = $1 AND (m.created_at,m.id) < ($2,$3) ORDER BY m.created_at DESC,m.id DESC LIMIT $4`, shopID, anchor.CreatedAt, anchor.ID, limit+1)
 		if err != nil {
 			return err
@@ -198,16 +203,12 @@ func (repo *RepositoryImpl) CatchUpMessages(ctx context.Context, user *bootstrap
 		}
 	}
 	var page *MessageCatchUp
-	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx) error {
-		current, err := syncWatermark(ctx, tx, shopID)
-		if err != nil {
-			return err
-		}
+	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx, current int64) error {
 		if through == nil {
 			bound = current
 		}
-		if bound > current || bound < start {
-			return syncInvalid()
+		if bound > current || start > current {
+			return syncResetRequired()
 		}
 		rows, err := readSyncRows(ctx, tx, `m.shop_id = $1 AND m.insertion_number > $2 AND m.insertion_number <= $3 ORDER BY m.insertion_number ASC LIMIT $4`, shopID, start, bound, limit+1)
 		if err != nil {
@@ -235,7 +236,7 @@ func (repo *RepositoryImpl) ReconcileMessages(ctx context.Context, user *bootstr
 		return nil, err
 	}
 	var page *MessageReconcile
-	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx) error {
+	err = repo.syncRead(ctx, user, shopID, func(tx *sql.Tx, _ int64) error {
 		page = &MessageReconcile{Rows: []response.ShopMessageResponse{}, MissingIDs: []string{}}
 		if len(ids) == 0 {
 			return nil

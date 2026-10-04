@@ -109,15 +109,19 @@ func userPmcsAccessFamily(path string) string {
 }
 
 func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
+	setupRoutes(db, router, middleware.AuthenticationMiddleware(authClient), authClient, env, blobClient)
+}
+
+func setupRoutes(db *sql.DB, router *gin.Engine, authenticate gin.HandlerFunc, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
 	v1Route := router.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
 	testRoutes := router.Group("/api/v1/test")
-	testRoutes.Use(middleware.AuthenticationMiddleware(authClient))
+	testRoutes.Use(authenticate)
 	NewTestRouter(db, testRoutes)
 
 	authRoutes := router.Group("/api/v1/auth")
-	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
+	authRoutes.Use(authenticate)
 	userPmcsConfig := userpmcsshared.DefaultConfig()
 	if env != nil {
 		var err error

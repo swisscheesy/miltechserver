@@ -123,6 +123,9 @@ func clearEquipmentServicesTables(t *testing.T, db *sql.DB) {
 
 	_, err := db.Exec(
 		`TRUNCATE TABLE
+ shop_message_blob_cleanup_jobs,
+ shop_message_asset_references,
+ shop_message_uploads,
 			equipment_services,
 			shop_notification_items,
 			shop_vehicle_notification_changes,

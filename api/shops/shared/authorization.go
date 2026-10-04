@@ -5,26 +5,28 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lib/pq"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/bootstrap"
+	"slices"
 	"sort"
 
 	. "github.com/go-jet/jet/v2/postgres"
 )
 
 type ShopAuthorization interface {
-	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
-	IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error)
-	GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error)
+	IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error)
+	IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error)
+	GetUserRoleInShop(ctx context.Context, user *bootstrap.User, shopID string) (string, error)
 
-	CanUserModifyVehicle(user *bootstrap.User, vehicleID string) (bool, error)
-	CanUserModifyList(user *bootstrap.User, listID string) (bool, error)
-	CanUserModifyNotification(user *bootstrap.User, notificationID string) (bool, error)
+	CanUserModifyVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) (bool, error)
+	CanUserModifyList(ctx context.Context, user *bootstrap.User, listID string) (bool, error)
+	CanUserModifyNotification(ctx context.Context, user *bootstrap.User, notificationID string) (bool, error)
 
-	RequireShopMember(user *bootstrap.User, shopID string) error
-	RequireShopAdmin(user *bootstrap.User, shopID string) error
+	RequireShopMember(ctx context.Context, user *bootstrap.User, shopID string) error
+	RequireShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) error
 }
 
 type AuthorizationAware interface {
@@ -39,7 +41,7 @@ func NewShopAuthorization(db *sql.DB) *ShopAuthorizationImpl {
 	return &ShopAuthorizationImpl{db: db}
 }
 
-func (auth *ShopAuthorizationImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
@@ -51,7 +53,7 @@ func (auth *ShopAuthorizationImpl) IsUserMemberOfShop(user *bootstrap.User, shop
 	var result []struct {
 		Exists int `sql:"exists"`
 	}
-	err := stmt.Query(auth.db, &result)
+	err := stmt.QueryContext(ctx, auth.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
@@ -59,7 +61,7 @@ func (auth *ShopAuthorizationImpl) IsUserMemberOfShop(user *bootstrap.User, shop
 	return len(result) > 0, nil
 }
 
-func (auth *ShopAuthorizationImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
@@ -72,7 +74,7 @@ func (auth *ShopAuthorizationImpl) IsUserShopAdmin(user *bootstrap.User, shopID 
 	var result []struct {
 		Exists int `sql:"exists"`
 	}
-	err := stmt.Query(auth.db, &result)
+	err := stmt.QueryContext(ctx, auth.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check admin status: %w", err)
 	}
@@ -80,7 +82,7 @@ func (auth *ShopAuthorizationImpl) IsUserShopAdmin(user *bootstrap.User, shopID 
 	return len(result) > 0, nil
 }
 
-func (auth *ShopAuthorizationImpl) GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error) {
+func (auth *ShopAuthorizationImpl) GetUserRoleInShop(ctx context.Context, user *bootstrap.User, shopID string) (string, error) {
 	stmt := SELECT(ShopMembers.Role).
 		FROM(ShopMembers).
 		WHERE(
@@ -89,7 +91,7 @@ func (auth *ShopAuthorizationImpl) GetUserRoleInShop(user *bootstrap.User, shopI
 		)
 
 	var role string
-	err := stmt.Query(auth.db, &role)
+	err := stmt.QueryContext(ctx, auth.db, &role)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", errors.New("user is not a member of this shop")
@@ -100,7 +102,7 @@ func (auth *ShopAuthorizationImpl) GetUserRoleInShop(user *bootstrap.User, shopI
 	return role, nil
 }
 
-func (auth *ShopAuthorizationImpl) CanUserModifyVehicle(user *bootstrap.User, vehicleID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) CanUserModifyVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) (bool, error) {
 	stmt := SELECT(
 		ShopVehicle.ID,
 		ShopVehicle.ShopID,
@@ -109,7 +111,7 @@ func (auth *ShopAuthorizationImpl) CanUserModifyVehicle(user *bootstrap.User, ve
 		WHERE(ShopVehicle.ID.EQ(String(vehicleID)))
 
 	var vehicle model.ShopVehicle
-	err := stmt.Query(auth.db, &vehicle)
+	err := stmt.QueryContext(ctx, auth.db, &vehicle)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, ErrVehicleNotFound
@@ -117,7 +119,7 @@ func (auth *ShopAuthorizationImpl) CanUserModifyVehicle(user *bootstrap.User, ve
 		return false, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := auth.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := auth.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil || !isMember {
 		return false, err
 	}
@@ -126,10 +128,10 @@ func (auth *ShopAuthorizationImpl) CanUserModifyVehicle(user *bootstrap.User, ve
 		return true, nil
 	}
 
-	return auth.IsUserShopAdmin(user, vehicle.ShopID)
+	return auth.IsUserShopAdmin(ctx, user, vehicle.ShopID)
 }
 
-func (auth *ShopAuthorizationImpl) CanUserModifyList(user *bootstrap.User, listID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) CanUserModifyList(ctx context.Context, user *bootstrap.User, listID string) (bool, error) {
 	stmt := SELECT(
 		ShopLists.ID,
 		ShopLists.ShopID,
@@ -137,7 +139,7 @@ func (auth *ShopAuthorizationImpl) CanUserModifyList(user *bootstrap.User, listI
 		WHERE(ShopLists.ID.EQ(String(listID)))
 
 	var list model.ShopLists
-	err := stmt.Query(auth.db, &list)
+	err := stmt.QueryContext(ctx, auth.db, &list)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, ErrListNotFound
@@ -145,11 +147,11 @@ func (auth *ShopAuthorizationImpl) CanUserModifyList(user *bootstrap.User, listI
 		return false, fmt.Errorf("failed to get list: %w", err)
 	}
 
-	isMember, err := auth.IsUserMemberOfShop(user, list.ShopID)
+	isMember, err := auth.IsUserMemberOfShop(ctx, user, list.ShopID)
 	if err != nil || !isMember {
 		return false, err
 	}
-	adminOnlyLists, err := auth.getShopAdminOnlyListsSetting(list.ShopID)
+	adminOnlyLists, err := auth.getShopAdminOnlyListsSetting(ctx, list.ShopID)
 	if err != nil {
 		return false, err
 	}
@@ -158,10 +160,10 @@ func (auth *ShopAuthorizationImpl) CanUserModifyList(user *bootstrap.User, listI
 		return true, nil
 	}
 
-	return auth.IsUserShopAdmin(user, list.ShopID)
+	return auth.IsUserShopAdmin(ctx, user, list.ShopID)
 }
 
-func (auth *ShopAuthorizationImpl) CanUserModifyNotification(user *bootstrap.User, notificationID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) CanUserModifyNotification(ctx context.Context, user *bootstrap.User, notificationID string) (bool, error) {
 	stmt := SELECT(
 		ShopVehicleNotifications.ID,
 		ShopVehicleNotifications.ShopID,
@@ -169,7 +171,7 @@ func (auth *ShopAuthorizationImpl) CanUserModifyNotification(user *bootstrap.Use
 		WHERE(ShopVehicleNotifications.ID.EQ(String(notificationID)))
 
 	var notification model.ShopVehicleNotifications
-	err := stmt.Query(auth.db, &notification)
+	err := stmt.QueryContext(ctx, auth.db, &notification)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, ErrNotificationNotFound
@@ -177,11 +179,11 @@ func (auth *ShopAuthorizationImpl) CanUserModifyNotification(user *bootstrap.Use
 		return false, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	return auth.IsUserMemberOfShop(user, notification.ShopID)
+	return auth.IsUserMemberOfShop(ctx, user, notification.ShopID)
 }
 
-func (auth *ShopAuthorizationImpl) RequireShopMember(user *bootstrap.User, shopID string) error {
-	isMember, err := auth.IsUserMemberOfShop(user, shopID)
+func (auth *ShopAuthorizationImpl) RequireShopMember(ctx context.Context, user *bootstrap.User, shopID string) error {
+	isMember, err := auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return err
 	}
@@ -191,8 +193,8 @@ func (auth *ShopAuthorizationImpl) RequireShopMember(user *bootstrap.User, shopI
 	return nil
 }
 
-func (auth *ShopAuthorizationImpl) RequireShopAdmin(user *bootstrap.User, shopID string) error {
-	isAdmin, err := auth.IsUserShopAdmin(user, shopID)
+func (auth *ShopAuthorizationImpl) RequireShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) error {
+	isAdmin, err := auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return err
 	}
@@ -202,7 +204,7 @@ func (auth *ShopAuthorizationImpl) RequireShopAdmin(user *bootstrap.User, shopID
 	return nil
 }
 
-func (auth *ShopAuthorizationImpl) getShopAdminOnlyListsSetting(shopID string) (bool, error) {
+func (auth *ShopAuthorizationImpl) getShopAdminOnlyListsSetting(ctx context.Context, shopID string) (bool, error) {
 	stmt := SELECT(Shops.AdminOnlyLists).
 		FROM(Shops).
 		WHERE(Shops.ID.EQ(String(shopID)))
@@ -210,7 +212,7 @@ func (auth *ShopAuthorizationImpl) getShopAdminOnlyListsSetting(shopID string) (
 	var result struct {
 		AdminOnlyLists bool
 	}
-	err := stmt.Query(auth.db, &result)
+	err := stmt.QueryContext(ctx, auth.db, &result)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, ErrShopNotFound
@@ -332,6 +334,99 @@ func AuthorizeListMutation(ctx context.Context, tx *sql.Tx, userID, shopID strin
 		}
 	}
 	return nil
+}
+
+// AuthorizeExistingListItems is deletion-only: absent physical rows carry no
+// authority and must not turn a retried batch into a missing-resource error.
+// Strict mutations continue to use AuthorizeListMutation.
+func AuthorizeExistingListItems(ctx context.Context, tx *sql.Tx, userID string, itemIDs []string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if userID == "" {
+		return nil, errors.New("unauthorized user")
+	}
+	ordered := append([]string(nil), itemIDs...)
+	sort.Strings(ordered)
+	ordered = slices.Compact(ordered)
+	itemLists := make(map[string]string, len(ordered))
+	listOwners := make(map[string]string)
+	shopID := ""
+	for _, id := range ordered {
+		var listID, owner string
+		err := tx.QueryRowContext(ctx, `SELECT i.list_id,l.shop_id FROM shop_list_items i JOIN shop_lists l ON l.id=i.list_id WHERE i.id=$1`, id).Scan(&listID, &owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, authorizationQueryError("resolve list item", ErrListNotFound, err)
+		}
+		if shopID != "" && shopID != owner {
+			return nil, ErrListAccessDenied
+		}
+		shopID = owner
+		itemLists[id] = listID
+		listOwners[listID] = owner
+	}
+	if len(itemLists) == 0 {
+		return []string{}, nil
+	}
+	admin, only, err := LockShopMutation(ctx, tx, shopID, userID)
+	if err == nil && !CanManageListItems(true, admin, only) {
+		err = ErrListAccessDenied
+	}
+	if errors.Is(err, ErrShopNotFound) || errors.Is(err, ErrShopAccessDenied) || errors.Is(err, ErrListAccessDenied) {
+		// A concurrent deletion may empty the batch while authority changes.
+		// No surviving resource means there is no mutation to authorize.
+		var exists bool
+		if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM shop_list_items WHERE id=ANY($1))`, pq.Array(ordered)).Scan(&exists); queryErr != nil {
+			return nil, queryErr
+		}
+		if !exists {
+			return []string{}, nil
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	listIDs := make([]string, 0, len(listOwners))
+	for id := range listOwners {
+		listIDs = append(listIDs, id)
+	}
+	sort.Strings(listIDs)
+	for _, id := range listIDs {
+		var owner string
+		err := tx.QueryRowContext(ctx, `SELECT shop_id FROM shop_lists WHERE id=$1 FOR UPDATE`, id).Scan(&owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, authorizationQueryError("lock list", ErrListNotFound, err)
+		}
+		if owner != shopID {
+			return nil, ErrListAccessDenied
+		}
+	}
+	survivors := make([]string, 0, len(itemLists))
+	for _, id := range ordered {
+		expected, exists := itemLists[id]
+		if !exists {
+			continue
+		}
+		var listID string
+		err := tx.QueryRowContext(ctx, `SELECT list_id FROM shop_list_items WHERE id=$1 FOR UPDATE`, id).Scan(&listID)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, authorizationQueryError("lock list item", ErrListNotFound, err)
+		}
+		if listID != expected {
+			return nil, ErrListAccessDenied
+		}
+		survivors = append(survivors, id)
+	}
+	return survivors, nil
 }
 
 // AuthorizeOwnedMutation preserves author-only edits and author/admin deletes.

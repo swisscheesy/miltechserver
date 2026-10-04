@@ -41,7 +41,11 @@ func (service *ServiceImpl) CreateShopVehicle(ctx context.Context, user *bootstr
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, vehicle.ShopID)
+	if err := validateBaseUsage(&vehicle.Mileage, &vehicle.Hours); err != nil {
+		return nil, err
+	}
+
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -60,7 +64,7 @@ func (service *ServiceImpl) CreateShopVehicle(ctx context.Context, user *bootstr
 		vehicle.Uoc = "UNK"
 	}
 
-	createdVehicle, err := service.repo.CreateShopVehicle(user, vehicle)
+	createdVehicle, err := service.repo.CreateShopVehicle(ctx, user, vehicle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop vehicle: %w", err)
 	}
@@ -74,7 +78,7 @@ func (service *ServiceImpl) GetShopVehicles(ctx context.Context, user *bootstrap
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -83,7 +87,7 @@ func (service *ServiceImpl) GetShopVehicles(ctx context.Context, user *bootstrap
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	vehicles, err := service.repo.GetShopVehicles(user, shopID)
+	vehicles, err := service.repo.GetShopVehicles(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop vehicles: %w", err)
 	}
@@ -100,12 +104,12 @@ func (service *ServiceImpl) GetShopVehicleByID(ctx context.Context, user *bootst
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop vehicle: %w", err)
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -117,66 +121,57 @@ func (service *ServiceImpl) GetShopVehicleByID(ctx context.Context, user *bootst
 	return vehicle, nil
 }
 
-func (service *ServiceImpl) UpdateShopVehicle(ctx context.Context, user *bootstrap.User, vehicle model.ShopVehicle) error {
+func (service *ServiceImpl) UpdateShopVehicle(ctx context.Context, user *bootstrap.User, input VehicleUpdateInput) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
-	if err := validateAbsoluteTrackedUsage(vehicle); err != nil {
+	if err := validateAbsoluteTrackedUsage(input); err != nil {
 		return err
 	}
-
-	currentVehicle, err := service.repo.GetShopVehicleByID(user, vehicle.ID)
+	isUsageOnly := isTrackedUsageUpdate(input)
+	if !isUsageOnly {
+		if err := validateBaseUsage(input.Metadata.Mileage, input.Metadata.Hours); err != nil {
+			return err
+		}
+		if input.Metadata.Admin != nil && *input.Metadata.Admin == "" {
+			return fmt.Errorf("%w: admin cannot be empty", ErrInvalidUsageAdjustment)
+		}
+	}
+	currentVehicle, err := service.repo.GetShopVehicleByID(ctx, user, input.Metadata.VehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get current vehicle: %w", err)
 	}
-
-	vehicle.ShopID = currentVehicle.ShopID
-	isMember, err := service.auth.IsUserMemberOfShop(user, currentVehicle.ShopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, currentVehicle.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify membership: %w", err)
 	}
-
 	if !isMember {
 		return errors.New("access denied: user is not a member of this shop")
 	}
-
+	if isUsageOnly {
+		update := ShopVehicleUsageUpdate{VehicleID: input.Metadata.VehicleID, TrackedMileage: input.TrackedMileage, TrackedHours: input.TrackedHours, LastUpdated: time.Now().UTC()}
+		if err := service.repo.UpdateShopVehicleUsage(ctx, user, update); err != nil {
+			return fmt.Errorf("failed to update shop vehicle usage: %w", err)
+		}
+		slog.Info("Shop vehicle usage updated", "user_id", user.UserID, "vehicle_id", input.Metadata.VehicleID)
+		return nil
+	}
 	isCreator := currentVehicle.CreatorID == user.UserID
-	isAdmin, err := service.auth.IsUserShopAdmin(user, currentVehicle.ShopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, currentVehicle.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
-
 	if !isCreator && !isAdmin {
-		if !isTrackedUsageUpdate(vehicle) {
-			return errors.New("access denied: only vehicle creator or shop admin can update equipment details")
-		}
-
-		usageUpdate := ShopVehicleUsageUpdate{
-			VehicleID:      vehicle.ID,
-			TrackedMileage: vehicle.TrackedMileage,
-			TrackedHours:   vehicle.TrackedHours,
-			LastUpdated:    time.Now().UTC(),
-		}
-		if err := service.repo.UpdateShopVehicleUsage(user, usageUpdate); err != nil {
-			return fmt.Errorf("failed to update shop vehicle usage: %w", err)
-		}
-
-		slog.Info("Shop vehicle usage updated", "user_id", user.UserID, "vehicle_id", vehicle.ID)
-		return nil
+		return errors.New("access denied: only vehicle creator or shop admin can update equipment details")
 	}
-
-	if vehicle.Uoc == "" {
-		vehicle.Uoc = "UNK"
+	if input.Metadata.Uoc != nil && *input.Metadata.Uoc == "" {
+		value := "UNK"
+		input.Metadata.Uoc = &value
 	}
-
-	vehicle.LastUpdated = time.Now().UTC()
-
-	err = service.repo.UpdateShopVehicle(user, vehicle)
-	if err != nil {
+	if err := service.repo.UpdateShopVehicleMetadata(ctx, user, input); err != nil {
 		return fmt.Errorf("failed to update shop vehicle: %w", err)
 	}
-
-	slog.Info("Shop vehicle updated", "user_id", user.UserID, "vehicle_id", vehicle.ID)
+	slog.Info("Shop vehicle updated", "user_id", user.UserID, "vehicle_id", input.Metadata.VehicleID)
 	return nil
 }
 
@@ -194,7 +189,7 @@ func (service *ServiceImpl) AdjustShopVehicleUsage(
 		return nil, err
 	}
 
-	currentVehicle, err := service.repo.GetShopVehicleByID(user, adjustment.VehicleID)
+	currentVehicle, err := service.repo.GetShopVehicleByID(ctx, user, adjustment.VehicleID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, qrm.ErrNoRows) {
 			return nil, shared.ErrVehicleNotFound
@@ -202,12 +197,12 @@ func (service *ServiceImpl) AdjustShopVehicleUsage(
 		return nil, fmt.Errorf("failed to get current vehicle: %w", err)
 	}
 
-	if err := service.auth.RequireShopMember(user, currentVehicle.ShopID); err != nil {
+	if err := service.auth.RequireShopMember(ctx, user, currentVehicle.ShopID); err != nil {
 		return nil, err
 	}
 
 	adjustment.LastUpdated = time.Now().UTC()
-	updatedVehicle, err := service.repo.AdjustShopVehicleUsage(ctx, adjustment)
+	updatedVehicle, err := service.repo.AdjustShopVehicleUsage(ctx, user, adjustment)
 	if err != nil {
 		return nil, fmt.Errorf("failed to adjust shop vehicle usage: %w", err)
 	}
@@ -245,7 +240,7 @@ func normalizeUsageAdjustment(adjustment UsageAdjustment) (UsageAdjustment, erro
 	return adjustment, nil
 }
 
-func validateAbsoluteTrackedUsage(vehicle model.ShopVehicle) error {
+func validateAbsoluteTrackedUsage(vehicle VehicleUpdateInput) error {
 	if vehicle.TrackedMileage != nil && *vehicle.TrackedMileage < 0 {
 		return fmt.Errorf("%w: tracked_mileage cannot be negative", ErrInvalidUsageAdjustment)
 	}
@@ -255,34 +250,22 @@ func validateAbsoluteTrackedUsage(vehicle model.ShopVehicle) error {
 	return nil
 }
 
-func isTrackedUsageUpdate(vehicle model.ShopVehicle) bool {
-	// The usage client carries admin and base readings from its snapshot. The
-	// usage-only repository ignores them so stale values cannot overwrite details.
-	hasUsageValue := vehicle.TrackedMileage != nil || vehicle.TrackedHours != nil
-	return hasUsageValue &&
-		vehicle.Niin == "" &&
-		vehicle.Model == "" &&
-		vehicle.Serial == "" &&
-		vehicle.Uoc == "" &&
-		vehicle.Comment == ""
-}
-
 func (service *ServiceImpl) DeleteShopVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, vehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	if err := service.auth.RequireShopMember(user, vehicle.ShopID); err != nil {
+	if err := service.auth.RequireShopMember(ctx, user, vehicle.ShopID); err != nil {
 		return err
 	}
 
 	isCreator := vehicle.CreatorID == user.UserID
-	isAdmin, err := service.auth.IsUserShopAdmin(user, vehicle.ShopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -291,7 +274,7 @@ func (service *ServiceImpl) DeleteShopVehicle(ctx context.Context, user *bootstr
 		return errors.New("access denied: only vehicle creator or shop admin can delete vehicles")
 	}
 
-	err = service.repo.DeleteShopVehicle(user, vehicleID)
+	err = service.repo.DeleteShopVehicle(ctx, user, vehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop vehicle: %w", err)
 	}

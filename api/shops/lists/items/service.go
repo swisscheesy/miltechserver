@@ -13,5 +13,5 @@ type Service interface {
 	UpdateListItem(ctx context.Context, user *bootstrap.User, item model.ShopListItems) error
 	RemoveListItem(ctx context.Context, user *bootstrap.User, itemID string) error
 	AddListItemBatch(ctx context.Context, user *bootstrap.User, items []model.ShopListItems) ([]response.ShopListItemWithUsername, error)
-	RemoveListItemBatch(ctx context.Context, user *bootstrap.User, itemIDs []string) error
+	RemoveListItemBatch(ctx context.Context, user *bootstrap.User, itemIDs []string) (int64, error)
 }

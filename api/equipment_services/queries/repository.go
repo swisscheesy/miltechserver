@@ -1,7 +1,7 @@
 package queries
 
 import (
-	"time"
+	"context"
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
@@ -9,6 +9,6 @@ import (
 )
 
 type Repository interface {
-	GetByShop(user *bootstrap.User, shopID string, filters request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error)
-	GetByEquipment(user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) ([]model.EquipmentServices, int64, error)
+	GetByShop(ctx context.Context, user *bootstrap.User, shopID string, filters request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error)
+	GetByEquipment(ctx context.Context, user *bootstrap.User, equipmentID string, req request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error)
 }

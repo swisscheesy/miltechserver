@@ -10,6 +10,8 @@ import (
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"net/http"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,10 +19,18 @@ import (
 
 const (
 	maxImageSize = 5 * 1024 * 1024
+	// LegacyCursorReloadMessage is the safe legacy error text when an ID anchor
+	// can no longer supply its stored timestamp. Clients must reload their page.
+	LegacyCursorReloadMessage = "Message cursor is unavailable; reload messages"
 )
+
+func legacyCursorReload() error {
+	return &shared.Failure{Code: "reset_required", PublicMessage: LegacyCursorReloadMessage, Status: http.StatusConflict}
+}
 
 type ServiceImpl struct {
 	repo               Repository
+	blobs              BlobStore
 	auth               shared.ShopAuthorization
 	messageSyncEnabled bool
 }
@@ -41,11 +51,15 @@ func (service *ServiceImpl) WithMessageSync(enabled bool) *ServiceImpl {
 }
 
 func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) shared.AuthorizationAware {
-	return &ServiceImpl{
-		repo:               service.repo,
-		auth:               auth,
-		messageSyncEnabled: service.messageSyncEnabled,
-	}
+	copied := *service
+	copied.auth = auth
+	return &copied
+}
+
+func (service *ServiceImpl) WithBlobStore(blobs BlobStore) *ServiceImpl {
+	copied := *service
+	copied.blobs = blobs
+	return &copied
 }
 
 func (service *ServiceImpl) CreateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) (*response.ShopMessageResponse, error) {
@@ -53,7 +67,7 @@ func (service *ServiceImpl) CreateShopMessage(ctx context.Context, user *bootstr
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, message.ShopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, message.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -69,7 +83,9 @@ func (service *ServiceImpl) CreateShopMessage(ctx context.Context, user *bootstr
 	message.UpdatedAt = &now
 	message.IsEdited = func() *bool { b := false; return &b }()
 
-	createdMessage, err := service.repo.CreateShopMessage(user, message)
+	// Parent ownership must be checked by the repository under the same locks
+	// as insertion; a service-level read would race parent deletion.
+	createdMessage, err := service.repo.CreateShopMessage(ctx, user, message)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop message: %w", err)
 	}
@@ -83,7 +99,7 @@ func (service *ServiceImpl) GetShopMessages(ctx context.Context, user *bootstrap
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -92,7 +108,7 @@ func (service *ServiceImpl) GetShopMessages(ctx context.Context, user *bootstrap
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	messages, err := service.repo.GetShopMessages(user, shopID)
+	messages, err := service.repo.GetShopMessages(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop messages: %w", err)
 	}
@@ -116,7 +132,7 @@ func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *
 		req.Limit = 20
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -137,7 +153,10 @@ func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *
 			isBefore = false
 		}
 
-		cursorMessage, err := service.repo.GetShopMessageByID(user, *cursorID)
+		cursorMessage, err := service.repo.GetShopMessageByID(ctx, user, *cursorID)
+		if errors.Is(err, ErrMessageNotFound) {
+			return nil, legacyCursorReload()
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to load cursor message: %w", err)
 		}
@@ -145,10 +164,10 @@ func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *
 			return nil, errors.New("cursor message does not belong to this shop")
 		}
 		if cursorMessage.CreatedAt == nil {
-			return nil, errors.New("cursor message missing created_at")
+			return nil, legacyCursorReload()
 		}
 
-		messages, err := service.repo.GetShopMessagesByCursor(user, shopID, *cursorMessage.CreatedAt, isBefore, req.Limit+1)
+		messages, err := service.repo.GetShopMessagesByCursor(ctx, user, shopID, cursorMessage.ID, *cursorMessage.CreatedAt, isBefore, req.Limit+1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get cursor-based shop messages: %w", err)
 		}
@@ -168,6 +187,10 @@ func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *
 			nextCursor = &lastMessageID
 		}
 
+		// Continuation follows selection order, before restoring legacy DESC display.
+		if !isBefore {
+			slices.Reverse(messages)
+		}
 		return &response.PaginatedShopMessagesResponse{
 			Messages:   messages,
 			Pagination: nil,
@@ -177,12 +200,12 @@ func (service *ServiceImpl) GetShopMessagesPaginated(ctx context.Context, user *
 
 	offset := (req.Page - 1) * req.Limit
 
-	messages, err := service.repo.GetShopMessagesPaginated(user, shopID, offset, req.Limit)
+	messages, err := service.repo.GetShopMessagesPaginated(ctx, user, shopID, offset, req.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get paginated shop messages: %w", err)
 	}
 
-	totalCount, err := service.repo.GetShopMessagesCount(user, shopID)
+	totalCount, err := service.repo.GetShopMessagesCount(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop messages count: %w", err)
 	}
@@ -222,7 +245,7 @@ func (service *ServiceImpl) UpdateShopMessage(ctx context.Context, user *bootstr
 	message.UpdatedAt = &now
 	message.IsEdited = func() *bool { b := true; return &b }()
 
-	err := service.repo.UpdateShopMessage(user, message)
+	err := service.repo.UpdateShopMessage(ctx, user, message)
 	if err != nil {
 		return fmt.Errorf("failed to update shop message: %w", err)
 	}
@@ -236,52 +259,55 @@ func (service *ServiceImpl) DeleteShopMessage(ctx context.Context, user *bootstr
 		return errors.New("unauthorized user")
 	}
 
-	message, err := service.repo.GetShopMessageByID(user, messageID)
-	if err != nil {
-		return fmt.Errorf("failed to get shop message: %w", err)
-	}
-
-	err = service.repo.DeleteShopMessage(user, messageID)
+	err := service.repo.DeleteShopMessage(ctx, user, messageID)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop message: %w", err)
-	}
-
-	if message != nil && message.Message != "" {
-		err = service.repo.DeleteBlobByURL(message.Message)
-		if err != nil {
-			slog.Warn("Failed to delete blob during message deletion",
-				"message_id", messageID,
-				"user_id", user.UserID,
-				"error", err)
-		}
 	}
 
 	slog.Info("Shop message deleted", "user_id", user.UserID, "message_id", messageID)
 	return nil
 }
 
-func (service *ServiceImpl) UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error) {
-	if user == nil {
-		return "", "", "", errors.New("unauthorized user")
+func (service *ServiceImpl) UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (ImageUpload, error) {
+	if user == nil || user.UserID == "" {
+		return ImageUpload{}, errors.New("unauthorized user")
 	}
-
-	if len(imageData) > maxImageSize {
-		return "", "", "", fmt.Errorf("image size exceeds maximum allowed size of %d bytes", maxImageSize)
+	shop, err := uuid.Parse(shopID)
+	if err != nil || shop == uuid.Nil {
+		return ImageUpload{}, errors.New("invalid shop ID")
 	}
-
-	if len(imageData) == 0 {
-		return "", "", "", errors.New("image data is empty")
+	if len(imageData) == 0 || len(imageData) > maxImageSize {
+		return ImageUpload{}, errors.New("invalid image size")
 	}
-
-	messageID := uuid.New().String()
-
-	fileExtension, imageURL, err := service.repo.UploadMessageImage(user, messageID, shopID, imageData, contentType)
+	if service.blobs == nil {
+		return ImageUpload{}, errors.New("asset storage unavailable")
+	}
+	if contentType == "" {
+		contentType = http.DetectContentType(imageData)
+	}
+	ctx, cancel := context.WithTimeout(ctx, UploadOperationTimeout)
+	defer cancel()
+	asset, err := service.repo.ReserveMessageImage(ctx, user, shopID, getFileExtensionFromMIME(contentType))
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to upload message image: %w", err)
+		return ImageUpload{}, fmt.Errorf("reserve message image: %w", err)
 	}
-
-	slog.Info("Shop message image uploaded via service", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
-	return messageID, fileExtension, imageURL, nil
+	err = service.blobs.Upload(ctx, asset, imageData, contentType)
+	if err == nil {
+		err = service.repo.FinalizeMessageImage(ctx, user, asset.ID)
+	}
+	if err != nil {
+		// A canceled request cannot authorize detached business work. The lease lets
+		// the cleanup worker recover interrupted PUTs. Conditional compensation also
+		// protects ready assets when finalization committed but its response was lost.
+		if ctx.Err() == nil {
+			if cleanupErr := service.repo.FailMessageImage(ctx, asset); cleanupErr != nil {
+				slog.Warn("Message upload compensation deferred", "upload_id", asset.ID)
+				err = errors.Join(err, cleanupErr)
+			}
+		}
+		return ImageUpload{}, fmt.Errorf("upload message image: %w", err)
+	}
+	return ImageUpload{MessageID: asset.ID, ShopID: asset.ShopID, ImageURL: asset.URL, FileExtension: asset.Extension}, nil
 }
 
 func (service *ServiceImpl) DeleteMessageImage(ctx context.Context, user *bootstrap.User, shopID string, messageID string) error {
@@ -289,12 +315,12 @@ func (service *ServiceImpl) DeleteMessageImage(ctx context.Context, user *bootst
 		return errors.New("unauthorized user")
 	}
 
-	err := service.repo.DeleteMessageImageBlob(user, messageID, shopID)
+	err := service.repo.DeleteMessageImageBlob(ctx, user, messageID, shopID)
 	if err != nil {
 		return fmt.Errorf("failed to delete message image: %w", err)
 	}
 
-	slog.Info("Shop message image deleted", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
+	slog.Info("shop_message_image_cleanup_queued", "user_id", user.UserID, "shop_id", shopID, "message_id", messageID)
 	return nil
 }
 

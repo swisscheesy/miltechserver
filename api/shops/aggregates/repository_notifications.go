@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lib/pq"
 
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
@@ -11,7 +12,7 @@ import (
 	"miltechserver/bootstrap"
 )
 
-func (repo *RepositoryImpl) GetVehicleByIDForMember(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
+func (repo *RepositoryImpl) getVehicleByIDForMember(ctx context.Context, tx *sql.Tx, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
 	const query = `
 SELECT
 	v.id, v.creator_id, v.niin, v.admin, v.model, v.serial, v.uoc,
@@ -25,7 +26,7 @@ LIMIT 1`
 	var vehicle model.ShopVehicle
 	var trackedMileage sql.NullInt64
 	var trackedHours sql.NullInt64
-	err := repo.db.QueryRowContext(ctx, query, vehicleID, user.UserID).Scan(
+	err := tx.QueryRowContext(ctx, query, vehicleID, user.UserID).Scan(
 		&vehicle.ID,
 		&vehicle.CreatorID,
 		&vehicle.Niin,
@@ -54,8 +55,8 @@ LIMIT 1`
 	return &vehicle, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context, vehicleID string, limits SnapshotLimits) ([]response.VehicleNotificationWithItems, error) {
-	notifications, err := repo.getVehicleNotifications(ctx, vehicleID, limits.NotificationsLimit)
+func (repo *RepositoryImpl) getVehicleNotificationsWithItems(ctx context.Context, tx *sql.Tx, vehicleID string, limits SnapshotLimits) ([]response.VehicleNotificationWithItems, error) {
+	notifications, err := repo.getVehicleNotifications(ctx, tx, vehicleID, limits.NotificationsLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +69,7 @@ func (repo *RepositoryImpl) GetVehicleNotificationsWithItems(ctx context.Context
 		notificationIDs[i] = notification.ID
 	}
 
-	items, err := repo.getItemsByNotificationIDs(ctx, notificationIDs, limits.NotificationItemsLimit)
+	items, err := repo.getItemsByNotificationIDs(ctx, tx, notificationIDs, limits.NotificationItemsLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +130,10 @@ func scanVehicleNotification(scanner rowScanner) (model.ShopVehicleNotifications
 	return notification, nil
 }
 
-func (repo *RepositoryImpl) getVehicleNotifications(ctx context.Context, vehicleID string, limit int) ([]model.ShopVehicleNotifications, error) {
+func (repo *RepositoryImpl) getVehicleNotifications(ctx context.Context, tx *sql.Tx, vehicleID string, limit int) ([]model.ShopVehicleNotifications, error) {
 	query := buildNotificationsQuery("n.vehicle_id = $1", "", 2)
 
-	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
+	rows, err := tx.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query vehicle notifications: %w", err)
 	}
@@ -153,13 +154,12 @@ func (repo *RepositoryImpl) getVehicleNotifications(ctx context.Context, vehicle
 	return notifications, nil
 }
 
-func (repo *RepositoryImpl) getItemsByNotificationIDs(ctx context.Context, notificationIDs []string, perNotificationLimit int) ([]model.ShopNotificationItems, error) {
+func (repo *RepositoryImpl) getItemsByNotificationIDs(ctx context.Context, tx *sql.Tx, notificationIDs []string, perNotificationLimit int) ([]model.ShopNotificationItems, error) {
 	if len(notificationIDs) == 0 {
 		return []model.ShopNotificationItems{}, nil
 	}
 
-	itemLimitPlaceholder := len(notificationIDs) + 1
-	query := fmt.Sprintf(`
+	query := (`
 WITH ranked_items AS (
 	SELECT
 		id,
@@ -176,20 +176,16 @@ WITH ranked_items AS (
 			ORDER BY save_time ASC, id ASC
 		) AS item_rank
 	FROM shop_notification_items
-	WHERE notification_id IN (%s)
+	WHERE notification_id = ANY($1::text[])
 )
 SELECT id, shop_id, notification_id, niin, nomenclature, quantity, save_time, nickname, unit_of_measure
 FROM ranked_items
-WHERE ($%d = 0 OR item_rank <= $%d)
-ORDER BY notification_id ASC, save_time ASC, id ASC`, shared.Placeholders(len(notificationIDs)), itemLimitPlaceholder, itemLimitPlaceholder)
+WHERE ($2 = 0 OR item_rank <= $2)
+ORDER BY notification_id ASC, save_time ASC, id ASC`)
 
-	args := make([]any, 0, len(notificationIDs)+1)
-	for _, id := range notificationIDs {
-		args = append(args, id)
-	}
-	args = append(args, perNotificationLimit)
+	args := []any{pq.Array(notificationIDs), perNotificationLimit}
 
-	rows, err := repo.db.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query notification items: %w", err)
 	}

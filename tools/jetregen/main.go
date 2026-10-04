@@ -1,28 +1,12 @@
-// Command jetregen regenerates .gen/ with snake_case json tags on every model
-// field. The plain `jet` CLI omits json tags, and API responses marshal these
-// models directly, so running the CLI would silently rename response keys
-// (shop_id -> ShopID) for every client.
-//
-// Usage, from the repository root:
-//
-//	JET_DSN="postgresql://postgres:<password>@<host>:5432/miltech_ng?sslmode=disable" go run ./tools/jetregen
+// Command jetregen generates canonical models with snake_case JSON tags.
 package main
 
 import (
-	"fmt"
-	"log"
-	"os"
-
-	"github.com/go-jet/jet/v2/generator/metadata"
-	"github.com/go-jet/jet/v2/generator/postgres"
-	"github.com/go-jet/jet/v2/generator/template"
-	postgresdialect "github.com/go-jet/jet/v2/postgres"
+	"database/sql"
 	_ "github.com/lib/pq"
-)
-
-const (
-	schemaName = "public"
-	outputDir  = "./.gen"
+	"log"
+	"miltechserver/internal/jetgen"
+	"os"
 )
 
 func main() {
@@ -30,27 +14,20 @@ func main() {
 	if dsn == "" {
 		log.Fatal("JET_DSN is required")
 	}
-
-	err := postgres.GenerateDSN(dsn, schemaName, outputDir, jsonTaggedTemplate())
+	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("jet generation failed: %v", err)
+		log.Fatal("invalid Jet database configuration")
 	}
-}
-
-func jsonTaggedTemplate() template.Template {
-	return template.Default(postgresdialect.Dialect).
-		UseSchema(func(schema metadata.Schema) template.Schema {
-			return template.DefaultSchema(schema).
-				UseModel(template.DefaultModel().
-					UseTable(jsonTaggedModel).
-					UseView(jsonTaggedModel))
-		})
-}
-
-func jsonTaggedModel(table metadata.Table) template.TableModel {
-	return template.DefaultTableModel(table).
-		UseField(func(column metadata.Column) template.TableModelField {
-			return template.DefaultTableModelField(column).
-				UseTags(fmt.Sprintf(`json:"%s"`, column.Name))
-		})
+	defer db.Close()
+	schema := os.Getenv("JET_SCHEMA")
+	if schema == "" {
+		schema = "public"
+	}
+	output := os.Getenv("JET_OUTPUT_DIR")
+	if output == "" {
+		output = ".gen"
+	}
+	if err := jetgen.Generate(db, jetgen.Config{Schema: schema, OutputDirectory: output}); err != nil {
+		log.Fatal(err)
+	}
 }

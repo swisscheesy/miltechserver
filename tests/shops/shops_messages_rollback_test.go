@@ -1,6 +1,7 @@
 package shops_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -38,21 +39,21 @@ func TestCreateShopMessageRollsBackOnDuplicateID(t *testing.T) {
 		IsEdited:  &isEdited,
 	}
 
-	created, err := repo.CreateShopMessage(user, original)
+	created, err := repo.CreateShopMessage(context.Background(), user, original)
 	require.NoError(t, err)
 	require.Equal(t, "original message", created.Message)
 
 	conflicting := original
 	conflicting.Message = "must not overwrite or duplicate"
 
-	_, err = repo.CreateShopMessage(user, conflicting)
+	_, err = repo.CreateShopMessage(context.Background(), user, conflicting)
 	require.Error(t, err, "duplicate primary key insert must fail")
 
-	fetched, err := repo.GetShopMessageByID(user, original.ID)
+	fetched, err := repo.GetShopMessageByID(context.Background(), user, original.ID)
 	require.NoError(t, err)
 	require.Equal(t, "original message", fetched.Message, "rollback must leave the original row untouched")
 
-	count, err := repo.GetShopMessagesCount(user, shopID)
+	count, err := repo.GetShopMessagesCount(context.Background(), user, shopID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count, "the failed transaction must not have left a partial write")
 }

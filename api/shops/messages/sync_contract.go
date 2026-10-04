@@ -51,6 +51,9 @@ func syncInvalid() error {
 func syncUnavailable() error {
 	return &shared.Failure{Code: "unsupported_contract", PublicMessage: "Message synchronization is unavailable", Status: 503}
 }
+func syncResetRequired() *shared.Failure {
+	return &shared.Failure{Code: "message_sync_reset_required", PublicMessage: "Message synchronization requires a new initial snapshot", Status: 409}
+}
 func validSyncLimit(limit int) bool { return limit >= 1 && limit <= 100 }
 func syncNumber(value string) (int64, error) {
 	if value == "" {

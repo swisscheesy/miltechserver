@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 
@@ -12,7 +13,7 @@ import (
 )
 
 type UsernameResolver interface {
-	GetUsernameByUserID(userID string) (string, error)
+	GetUsernameByUserID(ctx context.Context, userID string) (string, error)
 }
 
 type UsernameRepository struct {
@@ -27,12 +28,15 @@ func NewUsernameRepository(db *sql.DB) *UsernameRepository {
 	return &UsernameRepository{db: db}
 }
 
-func (repo *UsernameRepository) GetUsernameByUserID(userID string) (string, error) {
+func (repo *UsernameRepository) GetUsernameByUserID(ctx context.Context, userID string) (string, error) {
 	stmt := SELECT(Users.Username).FROM(Users).WHERE(Users.UID.EQ(String(userID)))
 
 	var result usernameResult
-	err := stmt.Query(repo.db, &result)
+	err := stmt.QueryContext(ctx, repo.db, &result)
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		slog.Warn("Failed to get username for user", "user_id", userID, "error", err)
 		return "Unknown User", nil
 	}
@@ -56,7 +60,10 @@ func NewUsernameCache(resolver UsernameResolver) *UsernameCache {
 	}
 }
 
-func (cache *UsernameCache) GetUsernameByUserID(userID string) (string, error) {
+func (cache *UsernameCache) GetUsernameByUserID(ctx context.Context, userID string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if userID == "" {
 		return "Unknown User", nil
 	}
@@ -65,7 +72,10 @@ func (cache *UsernameCache) GetUsernameByUserID(userID string) (string, error) {
 		return username, nil
 	}
 
-	username, err := cache.resolver.GetUsernameByUserID(userID)
+	username, err := cache.resolver.GetUsernameByUserID(ctx, userID)
+	if err != nil {
+		return username, err
+	}
 	if username == "" {
 		username = "Unknown User"
 	}
@@ -93,14 +103,20 @@ func MapServiceToResponse(svc model.EquipmentServices, username string) response
 	}
 }
 
-func MapServicesToResponses(services []model.EquipmentServices, resolver UsernameResolver) []response.EquipmentServiceResponse {
+func MapServicesToResponses(ctx context.Context, services []model.EquipmentServices, resolver UsernameResolver) ([]response.EquipmentServiceResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	responses := make([]response.EquipmentServiceResponse, len(services))
 	for i, svc := range services {
-		username, _ := resolver.GetUsernameByUserID(svc.CreatedBy)
+		username, err := resolver.GetUsernameByUserID(ctx, svc.CreatedBy)
+		if err != nil {
+			return nil, err
+		}
 		if username == "" {
 			username = "Unknown User"
 		}
 		responses[i] = MapServiceToResponse(svc, username)
 	}
-	return responses
+	return responses, nil
 }

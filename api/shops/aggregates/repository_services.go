@@ -38,10 +38,10 @@ ORDER BY c.changed_at DESC, c.id ASC
 LIMIT NULLIF($%d, 0)`, membershipJoin, whereClause, limitPlaceholder)
 }
 
-func (repo *RepositoryImpl) GetVehicleRecentChanges(ctx context.Context, vehicleID string, limit int) ([]response.NotificationChangeWithUsername, error) {
+func (repo *RepositoryImpl) getVehicleRecentChanges(ctx context.Context, tx *sql.Tx, vehicleID string, limit int) ([]response.NotificationChangeWithUsername, error) {
 	query := buildRecentChangesQuery("c.vehicle_id = $1", "", 2)
 
-	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
+	rows, err := tx.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query vehicle notification changes: %w", err)
 	}
@@ -153,10 +153,10 @@ func scanEquipmentService(scanner rowScanner) (response.EquipmentServiceResponse
 	return service, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleServices(ctx context.Context, vehicleID string, limit int) ([]response.EquipmentServiceResponse, error) {
+func (repo *RepositoryImpl) getVehicleServices(ctx context.Context, tx *sql.Tx, vehicleID string, limit int) ([]response.EquipmentServiceResponse, error) {
 	query := buildServiceQuery("es.equipment_id = $1", "", 2)
 
-	rows, err := repo.db.QueryContext(ctx, query, vehicleID, limit)
+	rows, err := tx.QueryContext(ctx, query, vehicleID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query vehicle equipment services: %w", err)
 	}

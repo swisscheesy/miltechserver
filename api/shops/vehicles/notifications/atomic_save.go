@@ -14,7 +14,6 @@ import (
 	"miltechserver/bootstrap"
 	"net/http"
 	"sort"
-	"strings"
 )
 
 type AtomicSaver interface {
@@ -30,12 +29,7 @@ func ValidateNotificationSave(r request.NotificationSaveRequest) error {
 	if !validID(r.OperationID) || !validID(r.ShopID) || !validID(r.VehicleID) || (r.NotificationID != nil && !validID(*r.NotificationID)) {
 		return invalidSave()
 	}
-	if strings.TrimSpace(r.Details.Title) == "" {
-		return invalidSave()
-	}
-	switch r.Details.Type {
-	case "M1", "PM", "MW":
-	default:
+	if shared.ValidateNotificationFields(r.Details.Title, r.Details.Type) != nil {
 		return invalidSave()
 	}
 	switch r.Attachment.Intent {
@@ -55,7 +49,7 @@ func ValidateNotificationSave(r request.NotificationSaveRequest) error {
 	}
 	seen := map[string]bool{}
 	for _, item := range r.Items {
-		if !validID(item.ID) || seen[item.ID] || strings.TrimSpace(item.Niin) == "" || strings.TrimSpace(item.Nomenclature) == "" || item.Quantity <= 0 || !shared.ValidNotificationItemFields(item.Nickname, item.UnitOfMeasure) {
+		if !validID(item.ID) || seen[item.ID] || shared.ValidateItemFields(item.Niin, item.Nomenclature, item.Quantity) != nil || !shared.ValidNotificationItemFields(item.Nickname, item.UnitOfMeasure) {
 			return invalidSave()
 		}
 		seen[item.ID] = true
@@ -118,7 +112,7 @@ func (handler *Handler) SaveAtomic(c *gin.Context) {
 		return
 	}
 	saver, ok := handler.service.(AtomicSaver)
-	if !ok {
+	if !ok || handler.atomicReady == nil || !handler.atomicReady(c.Request.Context()) {
 		shared.WriteFailure(c, &shared.Failure{Code: "unsupported_contract", PublicMessage: "Notification save unavailable", Status: 503}, 503, "Notification save unavailable")
 		return
 	}

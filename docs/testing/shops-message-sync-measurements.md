@@ -124,3 +124,25 @@ Server-side query time for those requests is small: reconcile executes in 0.18 t
 - Insert throughput impact of the trigger and two extra indexes.
 - Table and index bloat and write-ahead log from the backfill. The `UPDATE` rewrites every row, so the table is expected to hold roughly twice its live size (old row versions) until autovacuum or `VACUUM` reclaims it, and to generate WAL of a similar order of size, which affects replicas, replication lag and backups. These are expectations from how PostgreSQL updates rows; neither the size growth nor the WAL volume was measured.
 - Contention behaviour of the rollback migration, and the second lock wait (`shop_messages`) under contention with a long-running transaction.
+
+## Separate aggregate measurements
+
+Complete PMCS history capacity, payload, memory, and query plans are recorded in [Shops aggregate PMCS history capacity measurements](shops-aggregate-pmcs-history-measurements.md). Those results measure an aggregate history read and do not establish message sync throughput.
+
+## Remediation interpretation — 2026-10-04
+
+The measurements above describe the original disposable 018 experiments, not
+the current fleet or live target. Migration 019 now bridges legacy inserts into
+Shop-before-counter locking. Supported external writers must be inventoried and
+any counter-first writers fenced before application; local lock regressions do
+not prove fleet compatibility or predict live hold times. Numeric restore ABA
+remains unresolved without an epoch protocol.
+
+The physical `TestLegacyCursorCurrentWriterCommitOrderLimitation` records that a
+current writer can commit behind an observed legacy timestamp cursor. This is
+an **OPEN release limitation**, not lossless catch-up or an owner waiver.
+Timestamp interpretation remains preserved pending an explicit owner decision.
+Actual active invitation population, instance count, per-UID authenticated and
+effective edge budgets remain unknown, so C06 is a release blocker. No measured
+message-query latency establishes invite guessing safety. See the
+[release gate sheet](shops-server-remediation-release.md).

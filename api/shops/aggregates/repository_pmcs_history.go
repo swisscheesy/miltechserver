@@ -2,6 +2,7 @@ package aggregates
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -13,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *bootstrap.User) ([]response.EquipmentWithPmcsHistory, error) {
+func (repo *RepositoryImpl) getEquipmentPmcsHistory(ctx context.Context, tx *sql.Tx, user *bootstrap.User) ([]response.EquipmentWithPmcsHistory, error) {
 	equipmentStmt := SELECT(
 		ShopVehicle.ID.AS("id"),
 		ShopVehicle.ShopID.AS("shop_id"),
@@ -48,16 +49,11 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		Serial string `sql:"serial"`
 		Niin   string `sql:"niin"`
 	}
-	if err := equipmentStmt.QueryContext(ctx, repo.db, &equipmentRows); err != nil {
+	if err := equipmentStmt.QueryContext(ctx, tx, &equipmentRows); err != nil {
 		return nil, fmt.Errorf("failed to query equipment for pmcs history: %w", err)
 	}
 	if len(equipmentRows) == 0 {
 		return []response.EquipmentWithPmcsHistory{}, nil
-	}
-
-	equipmentIDs := make([]Expression, 0, len(equipmentRows))
-	for _, row := range equipmentRows {
-		equipmentIDs = append(equipmentIDs, String(row.ID))
 	}
 
 	var inspections []struct {
@@ -68,21 +64,21 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		UserPmcsInspections.AllColumns,
 		Users.Username.AS("performed_by_username"),
 	).
-		FROM(UserPmcsInspections.LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspections.PerformedBy))).
-		WHERE(UserPmcsInspections.EquipmentID.IN(equipmentIDs...)).
+		FROM(
+			UserPmcsInspections.
+				INNER_JOIN(ShopVehicle, ShopVehicle.ID.EQ(UserPmcsInspections.EquipmentID)).
+				INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)).
+				LEFT_JOIN(Users, Users.UID.EQ(UserPmcsInspections.PerformedBy)),
+		).
+		WHERE(ShopMembers.UserID.EQ(String(user.UserID))).
 		ORDER_BY(UserPmcsInspections.EquipmentID.ASC(), UserPmcsInspections.PerformedDate.DESC())
 
-	if err := inspectionsStmt.QueryContext(ctx, repo.db, &inspections); err != nil {
+	if err := inspectionsStmt.QueryContext(ctx, tx, &inspections); err != nil {
 		return nil, fmt.Errorf("failed to query pmcs inspections for equipment history: %w", err)
 	}
 
 	faultCountByInspectionID := make(map[uuid.UUID]int)
 	if len(inspections) > 0 {
-		inspectionIDs := make([]Expression, 0, len(inspections))
-		for _, inspection := range inspections {
-			inspectionIDs = append(inspectionIDs, UUID(inspection.ID))
-		}
-
 		var counts []struct {
 			PmcsID uuid.UUID `sql:"pmcs_id"`
 			Total  int32     `sql:"total"`
@@ -90,11 +86,16 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		countStmt := SELECT(
 			UserPmcsFaults.PmcsID.AS("pmcs_id"),
 			COUNT(UserPmcsFaults.PmcsID).AS("total"),
-		).FROM(UserPmcsFaults).
-			WHERE(UserPmcsFaults.PmcsID.IN(inspectionIDs...)).
+		).FROM(
+			UserPmcsFaults.
+				INNER_JOIN(UserPmcsInspections, UserPmcsInspections.ID.EQ(UserPmcsFaults.PmcsID)).
+				INNER_JOIN(ShopVehicle, ShopVehicle.ID.EQ(UserPmcsInspections.EquipmentID)).
+				INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)),
+		).
+			WHERE(ShopMembers.UserID.EQ(String(user.UserID))).
 			GROUP_BY(UserPmcsFaults.PmcsID)
 
-		if err := countStmt.QueryContext(ctx, repo.db, &counts); err != nil {
+		if err := countStmt.QueryContext(ctx, tx, &counts); err != nil {
 			return nil, fmt.Errorf("failed to count pmcs faults for equipment history: %w", err)
 		}
 		for _, count := range counts {
@@ -104,11 +105,6 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 
 	commentCountByInspectionID := make(map[uuid.UUID]int)
 	if len(inspections) > 0 {
-		inspectionIDs := make([]Expression, 0, len(inspections))
-		for _, inspection := range inspections {
-			inspectionIDs = append(inspectionIDs, UUID(inspection.ID))
-		}
-
 		var commentCounts []struct {
 			PmcsID uuid.UUID `sql:"pmcs_id"`
 			Total  int32     `sql:"total"`
@@ -116,11 +112,16 @@ func (repo *RepositoryImpl) GetEquipmentPmcsHistory(ctx context.Context, user *b
 		commentCountStmt := SELECT(
 			UserPmcsInspectionComments.PmcsID.AS("pmcs_id"),
 			COUNT(UserPmcsInspectionComments.PmcsID).AS("total"),
-		).FROM(UserPmcsInspectionComments).
-			WHERE(UserPmcsInspectionComments.PmcsID.IN(inspectionIDs...)).
+		).FROM(
+			UserPmcsInspectionComments.
+				INNER_JOIN(UserPmcsInspections, UserPmcsInspections.ID.EQ(UserPmcsInspectionComments.PmcsID)).
+				INNER_JOIN(ShopVehicle, ShopVehicle.ID.EQ(UserPmcsInspections.EquipmentID)).
+				INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(ShopVehicle.ShopID)),
+		).
+			WHERE(ShopMembers.UserID.EQ(String(user.UserID))).
 			GROUP_BY(UserPmcsInspectionComments.PmcsID)
 
-		if err := commentCountStmt.QueryContext(ctx, repo.db, &commentCounts); err != nil {
+		if err := commentCountStmt.QueryContext(ctx, tx, &commentCounts); err != nil {
 			return nil, fmt.Errorf("failed to count pmcs inspection comments for equipment history: %w", err)
 		}
 		for _, count := range commentCounts {

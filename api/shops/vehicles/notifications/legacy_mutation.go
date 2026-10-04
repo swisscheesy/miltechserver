@@ -3,9 +3,9 @@ package notifications
 import (
 	"context"
 	"database/sql"
-	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/shops/shared"
+	notificationitems "miltechserver/api/shops/vehicles/notifications/items"
 	"miltechserver/bootstrap"
 )
 
@@ -13,8 +13,12 @@ import (
 // Legacy service fakes retain their existing audit contract.
 func (*RepositoryImpl) OwnsLegacyNotificationAudits() {}
 
-func (repo *RepositoryImpl) createLegacyNotification(user *bootstrap.User, n model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
-	ctx := context.Background()
+func (repo *RepositoryImpl) createLegacyNotification(ctx context.Context, user *bootstrap.User, n model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
+	if err := shared.ValidateNotificationFields(n.Title, n.Type); err != nil {
+		return nil, err
+	}
+
+	ctx = notificationitems.WithAuditCorrelation(ctx)
 	var admin string
 	err := shared.WithNotificationMutation(ctx, repo.db, func(tx *sql.Tx) error {
 		if _, _, err := shared.LockShopMutation(ctx, tx, n.ShopID, user.UserID); err != nil {
@@ -35,11 +39,15 @@ func (repo *RepositoryImpl) createLegacyNotification(user *bootstrap.User, n mod
 	if err != nil {
 		return nil, err
 	}
-	repo.recordLegacyAudit(user, n, admin, "create", `{"fields_changed":["created"]}`, false)
+	repo.recordLegacyAudit(ctx, user, n, admin, "create", `{"fields_changed":["created"]}`, false)
 	return &n, nil
 }
-func (repo *RepositoryImpl) updateLegacyNotification(user *bootstrap.User, u VehicleNotificationUpdate) error {
-	ctx := context.Background()
+func (repo *RepositoryImpl) updateLegacyNotification(ctx context.Context, user *bootstrap.User, u VehicleNotificationUpdate) error {
+	if err := shared.ValidateNotificationFields(u.Notification.Title, u.Notification.Type); err != nil {
+		return err
+	}
+
+	ctx = notificationitems.WithAuditCorrelation(ctx)
 	var next model.ShopVehicleNotifications
 	var admin, fields, kind string
 	err := shared.WithNotificationMutation(ctx, repo.db, func(tx *sql.Tx) error {
@@ -71,11 +79,11 @@ func (repo *RepositoryImpl) updateLegacyNotification(user *bootstrap.User, u Veh
 	if err != nil {
 		return err
 	}
-	repo.recordLegacyAudit(user, next, admin, kind, fields, false)
+	repo.recordLegacyAudit(ctx, user, next, admin, kind, fields, false)
 	return nil
 }
-func (repo *RepositoryImpl) deleteLegacyNotification(user *bootstrap.User, id string) error {
-	ctx := context.Background()
+func (repo *RepositoryImpl) deleteLegacyNotification(ctx context.Context, user *bootstrap.User, id string) error {
+	ctx = notificationitems.WithAuditCorrelation(ctx)
 	var n model.ShopVehicleNotifications
 	var admin string
 	err := shared.WithNotificationMutation(ctx, repo.db, func(tx *sql.Tx) error {
@@ -93,16 +101,16 @@ func (repo *RepositoryImpl) deleteLegacyNotification(user *bootstrap.User, id st
 	if err != nil {
 		return err
 	}
-	repo.recordLegacyAudit(user, n, admin, "delete", `{"fields_changed":["deleted"]}`, true)
+	repo.recordLegacyAudit(ctx, user, n, admin, "delete", `{"fields_changed":["deleted"]}`, true)
 	return nil
 }
-func (repo *RepositoryImpl) recordLegacyAudit(user *bootstrap.User, n model.ShopVehicleNotifications, admin, kind, fields string, deleted bool) {
+func (repo *RepositoryImpl) recordLegacyAudit(ctx context.Context, user *bootstrap.User, n model.ShopVehicleNotifications, admin, kind, fields string, deleted bool) {
 	var id *string = &n.ID
 	if deleted {
 		id = nil
 	}
 	change := model.ShopVehicleNotificationChanges{NotificationID: id, ShopID: n.ShopID, VehicleID: &n.VehicleID, ChangedBy: &user.UserID, ChangeType: kind, FieldChanges: fields, NotificationTitle: &n.Title, NotificationType: &n.Type, VehicleAdmin: &admin}
-	if err := repo.CreateNotificationChange(user, change); err != nil {
-		slog.Warn("Failed to record notification change", "error", err, "change_type", kind)
+	if err := repo.CreateNotificationChange(ctx, user, change); err != nil {
+		notificationitems.WarnLegacyAuditFailure(ctx, kind, n.ShopID, n.VehicleID, n.ID, user.UserID, err)
 	}
 }

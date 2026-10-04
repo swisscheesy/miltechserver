@@ -63,8 +63,15 @@ type PaginationMetadata struct {
 }
 
 type ShopMessageResponse struct {
-	model.ShopMessages
-	AuthorUsername *string `sql:"author_username" json:"author_username"`
+	ID             string     `json:"id"`
+	ShopID         string     `json:"shop_id"`
+	UserID         string     `json:"user_id"`
+	Message        string     `json:"message"`
+	CreatedAt      *time.Time `json:"created_at"`
+	UpdatedAt      *time.Time `json:"updated_at"`
+	IsEdited       *bool      `json:"is_edited"`
+	ParentID       *string    `json:"parent_id"`
+	AuthorUsername *string    `sql:"author_username" json:"author_username"`
 }
 
 type PaginatedShopMessagesResponse struct {
@@ -245,4 +252,9 @@ type PmcsHistorySummary struct {
 	CreatedAt            time.Time  `json:"created_at"`
 	PerformedBy          *string    `json:"performed_by,omitempty"`
 	PerformedByUsername  *string    `json:"performed_by_username,omitempty"`
+}
+
+// NewShopMessageResponse keeps storage-only columns out of the legacy wire contract.
+func NewShopMessageResponse(message model.ShopMessages, authorUsername *string) ShopMessageResponse {
+	return ShopMessageResponse{ID: message.ID, ShopID: message.ShopID, UserID: message.UserID, Message: message.Message, CreatedAt: message.CreatedAt, UpdatedAt: message.UpdatedAt, IsEdited: message.IsEdited, ParentID: message.ParentID, AuthorUsername: authorUsername}
 }

@@ -84,30 +84,27 @@ func (handler *Handler) getByEquipment(c *gin.Context) {
 		return
 	}
 
-	var startDate, endDate *time.Time
 	if req.StartDate != nil {
-		parsed, err := time.Parse(time.RFC3339, *req.StartDate)
+		_, err := time.Parse(time.RFC3339, *req.StartDate)
 		if err != nil {
 			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 			// "details") that response.Error()'s single message string cannot represent.
 			shopsContract.WriteValidationError(c, "invalid start_date format")
 			return
 		}
-		startDate = &parsed
 	}
 
 	if req.EndDate != nil {
-		parsed, err := time.Parse(time.RFC3339, *req.EndDate)
+		_, err := time.Parse(time.RFC3339, *req.EndDate)
 		if err != nil {
 			// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 			// "details") that response.Error()'s single message string cannot represent.
 			shopsContract.WriteValidationError(c, "invalid end_date format")
 			return
 		}
-		endDate = &parsed
 	}
 
-	services, err := handler.service.GetByEquipment(c.Request.Context(), user, equipmentID, req.Limit, req.Offset, startDate, endDate)
+	services, err := handler.service.GetByEquipment(c.Request.Context(), user, equipmentID, req)
 	if err != nil {
 		c.Error(err)
 		return

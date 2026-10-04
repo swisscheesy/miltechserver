@@ -158,7 +158,11 @@ func clearShopTables(t *testing.T, db *sql.DB) {
 
 	_, err := db.Exec(
 		`TRUNCATE TABLE
+ shop_message_blob_cleanup_jobs,
+ shop_message_asset_references,
+ shop_message_uploads,
 			shop_notification_operations,
+            shop_notification_item_metadata,
 			shop_notification_items,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,

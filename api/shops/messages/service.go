@@ -14,6 +14,6 @@ type Service interface {
 	GetShopMessagesPaginated(ctx context.Context, user *bootstrap.User, shopID string, req request.GetShopMessagesPaginatedRequest) (*response.PaginatedShopMessagesResponse, error)
 	UpdateShopMessage(ctx context.Context, user *bootstrap.User, message model.ShopMessages) error
 	DeleteShopMessage(ctx context.Context, user *bootstrap.User, messageID string) error
-	UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (string, string, string, error)
+	UploadMessageImage(ctx context.Context, user *bootstrap.User, shopID string, imageData []byte, contentType string) (ImageUpload, error)
 	DeleteMessageImage(ctx context.Context, user *bootstrap.User, shopID string, messageID string) error
 }

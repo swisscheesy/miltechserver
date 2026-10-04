@@ -138,22 +138,18 @@ func TestBatchAuthorizationEveryResource(t *testing.T) {
 			if scenario == "same-shop" {
 				require.Equal(t, 200, remove.Code)
 				require.Contains(t, remove.Body.String(), `"count":2`)
+			} else if scenario == "missing" {
+				assertBatchRemovalCount(t, remove, 1)
+				require.Zero(t, atomicRowCount(t, "shop_list_items", "id=$1", a))
 			} else {
 				require.GreaterOrEqual(t, remove.Code, 400)
-				if scenario == "missing" {
-					body := decodeStandardResponse(t, remove.Body)
-					require.Equal(t, 500, remove.Code)
-					require.Equal(t, 500, body.Status)
-					require.Equal(t, "null", string(body.Data))
-					require.Contains(t, body.Message, "list item not found")
-					require.NotContains(t, body.Message, "sql:")
-					require.NotContains(t, body.Message, "pq:")
-				}
 			}
 			count := 0
 			require.NoError(t, testDB.QueryRow(`SELECT count(*) FROM shop_list_items`).Scan(&count))
 			if scenario == "same-shop" {
 				require.Equal(t, after-2, count)
+			} else if scenario == "missing" {
+				require.Equal(t, after-1, count)
 			} else {
 				require.Equal(t, after, count)
 			}

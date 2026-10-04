@@ -1,6 +1,7 @@
 package calendar
 
 import (
+	"context"
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -8,5 +9,5 @@ import (
 )
 
 type Repository interface {
-	GetInDateRange(user *bootstrap.User, shopID string, startDate, endDate time.Time, equipmentID *string) ([]model.EquipmentServices, error)
+	GetInDateRange(ctx context.Context, user *bootstrap.User, shopID string, startDate, endDate time.Time, equipmentID *string) ([]model.EquipmentServices, error)
 }

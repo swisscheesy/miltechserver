@@ -117,7 +117,7 @@ func syncMembership(member bool) syncQuery {
 	return syncQuery{contains: "SELECT EXISTS", args: []driver.Value{syncShop, "member"}, rows: [][]driver.Value{{member}}}
 }
 func syncCounter(n int64) syncQuery {
-	return syncQuery{contains: "SELECT last_number FROM shop_message_counters", args: []driver.Value{syncShop}, rows: [][]driver.Value{{n}}}
+	return syncQuery{contains: "SELECT last_number FROM public.shop_message_counters", args: []driver.Value{syncShop}, rows: [][]driver.Value{{n, int64(1), n, false}}}
 }
 func syncRow(id string, n int64) []driver.Value {
 	return []driver.Value{id, syncShop, "member", "body", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), nil, false, nil, "Member", n}
@@ -160,7 +160,7 @@ func TestMessageSyncReaderDenialDoesNotReportMissing(t *testing.T) {
 	}
 }
 func TestMessageSyncReaderReconcileScopedAndDeduplicated(t *testing.T) {
-	repo, _ := syncRepo(t, syncMembership(true), syncQuery{contains: "m.shop_id = $1 AND m.id IN ($2,$3)", args: []driver.Value{syncShop, syncID, syncOtherID}, rows: [][]driver.Value{syncRow(syncID, 1)}})
+	repo, _ := syncRepo(t, syncMembership(true), syncCounter(1), syncQuery{contains: "m.shop_id = $1 AND m.id IN ($2,$3)", args: []driver.Value{syncShop, syncID, syncOtherID}, rows: [][]driver.Value{syncRow(syncID, 1)}})
 	page, err := repo.ReconcileMessages(context.Background(), syncUser, syncShop, []string{syncID, syncOtherID, syncID})
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestMessageSyncReaderDeletedHistoryAnchor(t *testing.T) {
 	row := syncRow(syncID, 1)
 	timestamp := row[4].(time.Time)
 	cursor := "eyJ2IjoyLCJzaG9wX2lkIjoiMTExMTExMTEtMTExMS00MTExLTgxMTEtMTExMTExMTExMTExIiwiY3JlYXRlZF9hdCI6IjIwMjYtMDEtMDFUMDA6MDA6MDBaIiwiaWQiOiIyMjIyMjIyMi0yMjIyLTQyMjItODIyMi0yMjIyMjIyMjIyMjIifQ"
-	repo, _ := syncRepo(t, syncMembership(true), syncQuery{contains: "(m.created_at,m.id) < ($2,$3)", args: []driver.Value{syncShop, timestamp, syncID, int64(51)}, rows: [][]driver.Value{syncRow(syncOtherID, 1)}})
+	repo, _ := syncRepo(t, syncMembership(true), syncCounter(1), syncQuery{contains: "(m.created_at,m.id) < ($2,$3)", args: []driver.Value{syncShop, timestamp, syncID, int64(51)}, rows: [][]driver.Value{syncRow(syncOtherID, 1)}})
 	page, err := repo.MessageHistory(context.Background(), syncUser, syncShop, cursor, 50)
 	if err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestMessageSyncReaderBurstOver100KeepsHeldBound(t *testing.T) {
 	}
 }
 func TestMessageSyncReaderRemovalBetweenReconcileChunks(t *testing.T) {
-	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "m.shop_id = $1 AND m.id IN ($2)", rows: [][]driver.Value{syncRow(syncID, 1)}}, syncMembership(false))
+	repo, c := syncRepo(t, syncMembership(true), syncCounter(1), syncQuery{contains: "m.shop_id = $1 AND m.id IN ($2)", rows: [][]driver.Value{syncRow(syncID, 1)}}, syncMembership(false))
 	first, err := repo.ReconcileMessages(context.Background(), syncUser, syncShop, []string{syncID})
 	if err != nil || len(first.Rows) != 1 {
 		t.Fatalf("%+v %v", first, err)
@@ -249,7 +249,7 @@ func requireSyncUnavailable(t *testing.T, err error) {
 	}
 }
 func TestMessageSyncReaderMissingCounterFailsInitial(t *testing.T) {
-	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{}}, syncHasMessages(true))
+	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{{nil, int64(1), int64(1), false}}})
 	page, err := repo.InitialMessages(context.Background(), syncUser, syncShop, 50)
 	if err == nil || page != nil || c.committed {
 		t.Fatalf("%+v %v", page, err)
@@ -259,7 +259,7 @@ func TestMessageSyncReaderMissingCounterFailsInitial(t *testing.T) {
 
 // A Shop created after migration 018 has no counter until its first message.
 func TestMessageSyncReaderMissingCounterWithoutMessagesStartsAtZero(t *testing.T) {
-	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{}}, syncHasMessages(false), syncQuery{contains: "ORDER BY m.created_at DESC,m.id DESC", args: []driver.Value{syncShop, int64(51)}, rows: [][]driver.Value{}})
+	repo, c := syncRepo(t, syncMembership(true), syncQuery{contains: "SELECT last_number", rows: [][]driver.Value{{nil, int64(0), int64(0), false}}}, syncQuery{contains: "ORDER BY m.created_at DESC,m.id DESC", args: []driver.Value{syncShop, int64(51)}, rows: [][]driver.Value{}})
 	page, err := repo.InitialMessages(context.Background(), syncUser, syncShop, 50)
 	if err != nil {
 		t.Fatal(err)

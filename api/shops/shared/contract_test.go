@@ -1,15 +1,18 @@
 package shared_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 	"miltechserver/api/middleware"
 	"miltechserver/api/response"
 	"miltechserver/api/shops/capabilities"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
@@ -73,7 +76,7 @@ func TestContractCapabilitiesByFlag(t *testing.T) {
 		t.Run(fmt.Sprintf("enabled=%t", enabled), func(t *testing.T) {
 			r := gin.New()
 			g := r.Group("", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{}) })
-			capabilities.RegisterRoutes(g, capabilities.Flags{AtomicNotificationSave: enabled})
+			capabilities.RegisterRoutes(g, capabilities.Flags{AtomicNotificationSave: enabled, AtomicNotificationReady: func(context.Context) bool { return true }})
 			for _, selector := range []string{"", "99", "2"} {
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest("GET", "/shops/capabilities", nil)
@@ -177,6 +180,62 @@ func TestContractSanitizesInternalErrorAndPreservesLegacyEnvelope(t *testing.T) 
 					t.Fatal(body)
 				}
 			}
+		}
+	}
+}
+
+// Omitting the scoped post-handler writer leaves standalone routes at empty 200;
+// writing every queued error or ignoring Written appends a second JSON body.
+func TestContractQueuedErrorsWriteOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, globalHandler := range []bool{false, true} {
+		for _, selector := range []string{"", "99", "2"} {
+			t.Run(fmt.Sprintf("global=%t/selector=%q", globalHandler, selector), func(t *testing.T) {
+				router := gin.New()
+				if globalHandler {
+					router.Use(middleware.ErrorHandler)
+				}
+				router.Group("", shared.ContractMiddleware).GET("/error", func(c *gin.Context) {
+					_ = c.Error(shared.ErrListNotFound)
+					_ = c.Error(errors.New("private-error-sentinel"))
+				})
+				request := httptest.NewRequest(http.MethodGet, "/error", nil)
+				request.Header.Set(shared.ContractHeader, selector)
+				recorder := httptest.NewRecorder()
+				router.ServeHTTP(recorder, request)
+				if selector == "2" {
+					require.Equal(t, http.StatusNotFound, recorder.Code)
+					require.JSONEq(t, `{"status":404,"message":"list not found","code":"list_not_found","data":null}`, recorder.Body.String())
+				} else {
+					require.Equal(t, http.StatusInternalServerError, recorder.Code)
+					require.JSONEq(t, `{"status":500,"message":"list not found","data":null}`, recorder.Body.String())
+				}
+				require.NotContains(t, recorder.Body.String(), "private-error-sentinel")
+			})
+		}
+	}
+}
+
+func TestContractQueuedErrorsPreserveWrittenResponse(t *testing.T) {
+	const originalBody = `{"status":202,"message":"already accepted","data":{"id":"existing"}}`
+	for _, globalHandler := range []bool{false, true} {
+		for _, selector := range []string{"", "2"} {
+			t.Run(fmt.Sprintf("global=%t/selector=%q", globalHandler, selector), func(t *testing.T) {
+				router := gin.New()
+				if globalHandler {
+					router.Use(middleware.ErrorHandler)
+				}
+				router.Group("", shared.ContractMiddleware).GET("/written", func(c *gin.Context) {
+					c.Data(http.StatusAccepted, "application/json", []byte(originalBody))
+					_ = c.Error(errors.New("private-error-sentinel"))
+				})
+				request := httptest.NewRequest(http.MethodGet, "/written", nil)
+				request.Header.Set(shared.ContractHeader, selector)
+				prewritten := httptest.NewRecorder()
+				router.ServeHTTP(prewritten, request)
+				require.Equal(t, http.StatusAccepted, prewritten.Code)
+				require.JSONEq(t, originalBody, prewritten.Body.String())
+			})
 		}
 	}
 }

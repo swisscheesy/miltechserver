@@ -42,7 +42,7 @@ func (service *ServiceImpl) CreateShopList(ctx context.Context, user *bootstrap.
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, list.ShopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, list.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -51,7 +51,7 @@ func (service *ServiceImpl) CreateShopList(ctx context.Context, user *bootstrap.
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(ctx, user, list.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify list modification permissions: %w", err)
 	}
@@ -65,7 +65,7 @@ func (service *ServiceImpl) CreateShopList(ctx context.Context, user *bootstrap.
 	list.CreatedAt = now
 	list.UpdatedAt = now
 
-	createdList, err := service.repo.CreateShopList(user, list)
+	createdList, err := service.repo.CreateShopList(ctx, user, list)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create shop list: %w", err)
 	}
@@ -79,7 +79,7 @@ func (service *ServiceImpl) GetShopLists(ctx context.Context, user *bootstrap.Us
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -88,7 +88,7 @@ func (service *ServiceImpl) GetShopLists(ctx context.Context, user *bootstrap.Us
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	lists, err := service.repo.GetShopLists(user, shopID)
+	lists, err := service.repo.GetShopLists(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop lists with usernames: %w", err)
 	}
@@ -105,12 +105,12 @@ func (service *ServiceImpl) GetShopListByID(ctx context.Context, user *bootstrap
 		return nil, errors.New("unauthorized user")
 	}
 
-	list, err := service.repo.GetShopListByID(user, listID)
+	list, err := service.repo.GetShopListByID(ctx, user, listID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop list: %w", err)
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, list.ShopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, list.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -127,12 +127,12 @@ func (service *ServiceImpl) UpdateShopList(ctx context.Context, user *bootstrap.
 		return errors.New("unauthorized user")
 	}
 
-	currentList, err := service.repo.GetShopListByID(user, list.ID)
+	currentList, err := service.repo.GetShopListByID(ctx, user, list.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
-	canModify, err := service.canUserModifyListWithAdminOnlyCheck(user, currentList.ShopID)
+	canModify, err := service.canUserModifyListWithAdminOnlyCheck(ctx, user, currentList.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify list modification permissions: %w", err)
 	}
@@ -142,7 +142,7 @@ func (service *ServiceImpl) UpdateShopList(ctx context.Context, user *bootstrap.
 
 	list.UpdatedAt = time.Now()
 
-	err = service.repo.UpdateShopList(user, list)
+	err = service.repo.UpdateShopList(ctx, user, list)
 	if err != nil {
 		return fmt.Errorf("failed to update shop list: %w", err)
 	}
@@ -156,12 +156,12 @@ func (service *ServiceImpl) DeleteShopList(ctx context.Context, user *bootstrap.
 		return errors.New("unauthorized user")
 	}
 
-	list, err := service.repo.GetShopListByID(user, listID)
+	list, err := service.repo.GetShopListByID(ctx, user, listID)
 	if err != nil {
 		return fmt.Errorf("failed to get list: %w", err)
 	}
 
-	canDelete, err := service.canUserModifyListWithAdminOnlyCheck(user, list.ShopID)
+	canDelete, err := service.canUserModifyListWithAdminOnlyCheck(ctx, user, list.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify list modification permissions: %w", err)
 	}
@@ -169,7 +169,7 @@ func (service *ServiceImpl) DeleteShopList(ctx context.Context, user *bootstrap.
 		return errors.New("access denied: insufficient permissions to delete lists")
 	}
 
-	err = service.repo.DeleteShopList(user, listID)
+	err = service.repo.DeleteShopList(ctx, user, listID)
 	if err != nil {
 		return fmt.Errorf("failed to delete shop list: %w", err)
 	}
@@ -181,12 +181,12 @@ func (service *ServiceImpl) DeleteShopList(ctx context.Context, user *bootstrap.
 // canUserModifyListWithAdminOnlyCheck checks if user can modify lists based on shop's admin_only_lists setting
 // If admin_only_lists is true, only shop admins can modify lists
 // If admin_only_lists is false, all shop members can modify lists
-func (service *ServiceImpl) canUserModifyListWithAdminOnlyCheck(user *bootstrap.User, shopID string) (bool, error) {
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+func (service *ServiceImpl) canUserModifyListWithAdminOnlyCheck(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil || !isMember {
 		return false, err
 	}
-	adminOnlyLists, err := service.settingsRepo.GetShopAdminOnlyListsSetting(shopID)
+	adminOnlyLists, err := service.settingsRepo.GetShopAdminOnlyListsSetting(ctx, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
 	}
@@ -195,7 +195,7 @@ func (service *ServiceImpl) canUserModifyListWithAdminOnlyCheck(user *bootstrap.
 		return true, nil
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify admin status: %w", err)
 	}

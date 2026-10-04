@@ -11,6 +11,7 @@ import (
 	"miltechserver/api/request"
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
+	notificationitems "miltechserver/api/shops/vehicles/notifications/items"
 	"sort"
 	"time"
 )
@@ -43,10 +44,12 @@ func (repo *RepositoryImpl) SaveAtomic(ctx context.Context, userID string, r req
 	}
 	// Never publish a receipt after a failed/uncertain commit. The caller retries
 	// the identical operation ID to resolve a lost commit acknowledgement.
+	notificationitems.PersistMetadataAmbiguity(ctx, repo.db, userID, err)
 	return response.NotificationSaveReceipt{}, shared.ClassifyFailure(err)
 }
 
 func (repo *RepositoryImpl) saveAtomicTx(ctx context.Context, tx *sql.Tx, userID string, r request.NotificationSaveRequest, target string, fingerprint [32]byte) (response.NotificationSaveReceipt, error) {
+	ctx = notificationitems.MetadataMutationContext(ctx)
 	receipt := response.NotificationSaveReceipt{OperationID: r.OperationID, NotificationID: target, CommittedAt: time.Now().UTC()}
 	result, err := tx.ExecContext(ctx, `INSERT INTO shop_notification_operations (user_id,operation_id,fingerprint,notification_id,committed_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (user_id,operation_id) DO NOTHING`, userID, r.OperationID, fingerprint[:], target, receipt.CommittedAt)
 	if err != nil {
@@ -201,19 +204,37 @@ func replaceDirectItems(ctx context.Context, tx *sql.Tx, r request.NotificationS
 	desired := append([]request.NotificationSaveItem{}, r.Items...)
 	sort.Slice(desired, func(i, j int) bool { return desired[i].ID < desired[j].ID })
 	added, updated, removed := []request.NotificationSaveItem{}, []request.NotificationSaveItem{}, []request.NotificationSaveItem{}
+	desiredIDs := map[string]bool{}
+	for _, item := range desired {
+		desiredIDs[item.ID] = true
+	}
+	// Capture all original raw candidates before any deletion/edit can hide a
+	// disagreement. This also retains the old logical key when NIIN changes.
+	currentIDs := make([]string, 0, len(current))
+	for id := range current {
+		currentIDs = append(currentIDs, id)
+	}
+	sort.Strings(currentIDs)
+	for _, id := range currentIDs {
+		item := current[id]
+		if err := notificationitems.RetainItemMetadata(ctx, tx, model.ShopNotificationItems{ID: item.ID, NotificationID: target, Niin: item.Niin, Nickname: item.Nickname, UnitOfMeasure: item.UnitOfMeasure}); err != nil {
+			return nil, err
+		}
+		if !desiredIDs[id] {
+			removed = append(removed, item)
+		}
+	}
+	for _, item := range removed {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM shop_notification_items WHERE id=$1 AND notification_id=$2`, item.ID, target); err != nil {
+			return nil, err
+		}
+	}
 	for _, item := range desired {
 		old, exists := current[item.ID]
-		if exists {
-			delete(current, item.ID)
-			if !directItemChanged(old, item) {
-				continue
-			}
-			// COALESCE keeps the stored nickname/unit when a released client
-			// omits them, so its edits never erase values a newer client set.
-			_, err = tx.ExecContext(ctx, `UPDATE shop_notification_items SET niin=$1,nomenclature=$2,quantity=$3,nickname=COALESCE($4,nickname),unit_of_measure=COALESCE($5,unit_of_measure) WHERE id=$6 AND notification_id=$7`, item.Niin, item.Nomenclature, item.Quantity, item.Nickname, item.UnitOfMeasure, item.ID, target)
-			updated = append(updated, item)
-		} else {
-			// A UUID already owned by another notification must never be reassigned.
+		if exists && !directItemChanged(old, item) {
+			continue
+		}
+		if !exists {
 			var owner string
 			lookup := tx.QueryRowContext(ctx, `SELECT notification_id FROM shop_notification_items WHERE id=$1`, item.ID).Scan(&owner)
 			if lookup == nil {
@@ -222,19 +243,20 @@ func replaceDirectItems(ctx context.Context, tx *sql.Tx, r request.NotificationS
 			if !errors.Is(lookup, sql.ErrNoRows) {
 				return nil, lookup
 			}
+		}
+		resolved, err := notificationitems.ResolveRetainedMetadata(ctx, tx, notificationitems.MetadataIntent{ItemID: item.ID, NotificationID: target, Niin: item.Niin, Nickname: item.Nickname, UnitOfMeasure: item.UnitOfMeasure})
+		if err != nil {
+			return nil, err
+		}
+		item.Nickname, item.UnitOfMeasure = resolved.Nickname, resolved.UnitOfMeasure
+		if exists {
+			_, err = tx.ExecContext(ctx, `UPDATE shop_notification_items SET niin=$1,nomenclature=$2,quantity=$3,nickname=$4,unit_of_measure=$5 WHERE id=$6 AND notification_id=$7`, item.Niin, item.Nomenclature, item.Quantity, item.Nickname, item.UnitOfMeasure, item.ID, target)
+			updated = append(updated, item)
+		} else {
 			_, err = tx.ExecContext(ctx, `INSERT INTO shop_notification_items (id,shop_id,notification_id,niin,nomenclature,quantity,save_time,nickname,unit_of_measure) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, item.ID, r.ShopID, target, item.Niin, item.Nomenclature, item.Quantity, now, item.Nickname, item.UnitOfMeasure)
 			added = append(added, item)
 		}
 		if err != nil {
-			return nil, err
-		}
-	}
-	for _, item := range current {
-		removed = append(removed, item)
-	}
-	sort.Slice(removed, func(i, j int) bool { return removed[i].ID < removed[j].ID })
-	for _, item := range removed {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM shop_notification_items WHERE id=$1 AND notification_id=$2`, item.ID, target); err != nil {
 			return nil, err
 		}
 	}

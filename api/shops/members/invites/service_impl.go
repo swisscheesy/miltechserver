@@ -40,7 +40,7 @@ func (service *ServiceImpl) GenerateInviteCode(ctx context.Context, user *bootst
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -65,7 +65,7 @@ func (service *ServiceImpl) GenerateInviteCode(ctx context.Context, user *bootst
 	now := time.Now()
 	inviteCode.CreatedAt = &now
 
-	createdCode, err := service.repo.CreateInviteCode(user, inviteCode)
+	createdCode, err := service.repo.CreateInviteCode(ctx, user, inviteCode)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create invite code: %w", err)
 	}
@@ -79,7 +79,7 @@ func (service *ServiceImpl) GetInviteCodesByShop(ctx context.Context, user *boot
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -88,7 +88,7 @@ func (service *ServiceImpl) GetInviteCodesByShop(ctx context.Context, user *boot
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	codes, err := service.repo.GetInviteCodesByShop(user, shopID)
+	codes, err := service.repo.GetInviteCodesByShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get invite codes: %w", err)
 	}
@@ -105,12 +105,12 @@ func (service *ServiceImpl) DeactivateInviteCode(ctx context.Context, user *boot
 		return errors.New("unauthorized user")
 	}
 
-	inviteCode, err := service.repo.GetInviteCodeByID(codeID)
+	inviteCode, err := service.repo.GetInviteCodeByID(ctx, codeID)
 	if err != nil {
 		return fmt.Errorf("failed to get invite code: %w", err)
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, inviteCode.ShopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, inviteCode.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -119,7 +119,7 @@ func (service *ServiceImpl) DeactivateInviteCode(ctx context.Context, user *boot
 		return errors.New("only shop administrators can deactivate invite codes")
 	}
 
-	err = service.repo.DeactivateInviteCode(user, codeID)
+	err = service.repo.DeactivateInviteCode(ctx, user, codeID)
 	if err != nil {
 		return fmt.Errorf("failed to deactivate invite code: %w", err)
 	}
@@ -133,12 +133,12 @@ func (service *ServiceImpl) DeleteInviteCode(ctx context.Context, user *bootstra
 		return errors.New("unauthorized user")
 	}
 
-	inviteCode, err := service.repo.GetInviteCodeByID(codeID)
+	inviteCode, err := service.repo.GetInviteCodeByID(ctx, codeID)
 	if err != nil {
 		return fmt.Errorf("failed to get invite code: %w", err)
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, inviteCode.ShopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, inviteCode.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -147,7 +147,7 @@ func (service *ServiceImpl) DeleteInviteCode(ctx context.Context, user *bootstra
 		return errors.New("only shop administrators can delete invite codes")
 	}
 
-	err = service.repo.DeleteInviteCode(user, codeID)
+	err = service.repo.DeleteInviteCode(ctx, user, codeID)
 	if err != nil {
 		return fmt.Errorf("failed to delete invite code: %w", err)
 	}

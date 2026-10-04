@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/request"
+	dbutil "miltechserver/api/shared/db"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 	"strings"
@@ -26,13 +27,13 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 }
 
 // GetShopAdminOnlyListsSetting retrieves the admin_only_lists setting for a shop
-func (repo *RepositoryImpl) GetShopAdminOnlyListsSetting(shopID string) (bool, error) {
+func (repo *RepositoryImpl) GetShopAdminOnlyListsSetting(ctx context.Context, shopID string) (bool, error) {
 	stmt := SELECT(Shops.AllColumns).
 		FROM(Shops).
 		WHERE(Shops.ID.EQ(String(shopID)))
 
 	var shop model.Shops
-	err := stmt.Query(repo.db, &shop)
+	err := stmt.QueryContext(ctx, repo.db, &shop)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, errors.New("shop not found")
@@ -44,58 +45,59 @@ func (repo *RepositoryImpl) GetShopAdminOnlyListsSetting(shopID string) (bool, e
 }
 
 // UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
-func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
+func (repo *RepositoryImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context, user *bootstrap.User, shopID string, adminOnlyLists bool) error {
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		admin, _, err := shared.LockShopMutation(ctx, tx, shopID, user.UserID)
+		if err != nil {
+			return err
+		}
+		if !admin {
+			return shared.ErrShopAdminRequired
+		}
+
+		now := time.Now()
+
+		stmt := Shops.UPDATE(
+			Shops.AdminOnlyLists,
+			Shops.UpdatedAt,
+		).SET(
+			Shops.AdminOnlyLists.SET(Bool(adminOnlyLists)),
+			Shops.UpdatedAt.SET(TimestampzT(now)),
+		).WHERE(
+			Shops.ID.EQ(String(shopID)),
+		)
+
+		result, err := stmt.ExecContext(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+
+		if rowsAffected == 0 {
+			return errors.New("shop not found")
+		}
+
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
-	if err != nil {
-		return err
-	}
-	if !admin {
-		return shared.ErrShopAdminRequired
-	}
-
-	now := time.Now()
-
-	stmt := Shops.UPDATE(
-		Shops.AdminOnlyLists,
-		Shops.UpdatedAt,
-	).SET(
-		Shops.AdminOnlyLists.SET(Bool(adminOnlyLists)),
-		Shops.UpdatedAt.SET(TimestampzT(now)),
-	).WHERE(
-		Shops.ID.EQ(String(shopID)),
-	)
-
-	result, err := stmt.Exec(tx)
-	if err != nil {
-		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("shop not found")
-	}
-
 	slog.Info("Shop admin_only_lists setting updated", "shop_id", shopID, "admin_only_lists", adminOnlyLists)
-	return tx.Commit()
+	return nil
 }
 
 // GetShopSettings retrieves all settings for a shop
-func (repo *RepositoryImpl) GetShopSettings(shopID string) (*request.ShopSettings, error) {
+func (repo *RepositoryImpl) GetShopSettings(ctx context.Context, shopID string) (*request.ShopSettings, error) {
 	stmt := SELECT(Shops.AllColumns).
 		FROM(Shops).
 		WHERE(Shops.ID.EQ(String(shopID)))
 
 	var shop model.Shops
-	err := stmt.Query(repo.db, &shop)
+	err := stmt.QueryContext(ctx, repo.db, &shop)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errors.New("shop not found")
@@ -111,55 +113,48 @@ func (repo *RepositoryImpl) GetShopSettings(shopID string) (*request.ShopSetting
 }
 
 // UpdateShopSettings updates shop settings with support for partial updates
-func (repo *RepositoryImpl) UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) error {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
+func (repo *RepositoryImpl) UpdateShopSettings(ctx context.Context, user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) error {
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		admin, _, err := shared.LockShopMutation(ctx, tx, shopID, user.UserID)
+		if err != nil {
+			return err
+		}
+		if !admin {
+			return shared.ErrShopAdminRequired
+		}
+
+		now := time.Now()
+
+		if updates.AdminOnlyLists == nil {
+			return errors.New("no settings to update")
+		}
+
+		stmt := Shops.UPDATE(Shops.UpdatedAt, Shops.AdminOnlyLists).SET(
+			Shops.UpdatedAt.SET(TimestampzT(now)),
+			Shops.AdminOnlyLists.SET(Bool(*updates.AdminOnlyLists)),
+		).WHERE(Shops.ID.EQ(String(shopID)))
+
+		result, err := stmt.ExecContext(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("failed to update shop settings: %w", err)
+		}
+
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+
+		if rowsAffected == 0 {
+			return errors.New("shop not found")
+		}
+
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
-	if err != nil {
-		return err
-	}
-	if !admin {
-		return shared.ErrShopAdminRequired
-	}
-
-	now := time.Now()
-
-	if updates.AdminOnlyLists == nil {
-		return errors.New("no settings to update")
-	}
-
-	updateBuilder := Shops.UPDATE(Shops.UpdatedAt)
-	setClause := updateBuilder.SET(Shops.UpdatedAt.SET(TimestampzT(now)))
-
-	if updates.AdminOnlyLists != nil {
-		setClause = Shops.UPDATE(Shops.UpdatedAt, Shops.AdminOnlyLists).
-			SET(
-				Shops.UpdatedAt.SET(TimestampzT(now)),
-				Shops.AdminOnlyLists.SET(Bool(*updates.AdminOnlyLists)),
-			)
-	}
-
-	stmt := setClause.WHERE(Shops.ID.EQ(String(shopID)))
-
-	result, err := stmt.Exec(tx)
-	if err != nil {
-		return fmt.Errorf("failed to update shop settings: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("shop not found")
-	}
-
 	slog.Info("Shop settings updated", "shop_id", shopID, "updates", formatSettingsUpdate(updates))
-	return tx.Commit()
+	return nil
 }
 
 func formatSettingsUpdate(updates request.UpdateShopSettingsRequest) string {

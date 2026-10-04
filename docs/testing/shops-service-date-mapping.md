@@ -51,3 +51,13 @@ baseline/migration boundary is absent. Physical fresh/populated upgrades,
 legacy-to-date/date-to-legacy preservation, ambiguous-row handling, old/new
 cross-writes and old-server expanded-schema rollback remain BLOCKED. The full
 E3 coverage map is in the mobile remediation verification report.
+
+## Server remediation checkpoint — 2026-10-04
+
+Mapping remains **BLOCKED** with both capabilities false. This server-only task
+adds no date conversion, backfill, or client work. Historical E3 fixture/setup
+failures above describe that checkpoint; the current protected wrapper now
+rehearses 019–023 with tagged generation, which does not supply any live mapping
+or released-parser/device evidence. Owner target/session/writer samples and both
+directions of the mapping still require explicit approval. See the
+[release gate sheet](shops-server-remediation-release.md).

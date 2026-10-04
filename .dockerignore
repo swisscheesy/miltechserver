@@ -1,0 +1,52 @@
+# Runtime secrets must be mounted, never sent to a builder.
+**/.env
+**/.env.*
+**/fire_auth_key*.json
+**/service-account*.json
+**/service_account*.json
+**/credentials*.json
+**/*.pem
+**/*.key
+**/.aws
+**/.azure
+**/.ssh
+
+# VCS, agent state, worktrees and local tools can contain credentials or stale artifacts.
+**/.git
+**/.git/**
+**/.agent
+**/.agents
+**/.claude
+**/.codex
+**/.gemini
+**/.superpowers
+**/.codegraph
+**/.worktrees
+**/worktrees
+**/.idea
+**/.vscode
+**/.history
+**/.DS_Store
+**/.gocache
+**/gocache
+**/__debug_bin*
+**/miltechserver
+**/*.test
+**/*.out
+**/node_modules
+**/.svelte-kit
+frontend/build
+.gen/.jetgen.lock
+.gen/.jetgen-stage-*
+.gen/**/*.jetgen-backup
+
+# Keep .gen: the server must compile from the canonical tagged generated inputs.
+
+# Ordinary root/nested logs and local scratch must never enter COPY . . layers.
+**/*.log
+**/logs
+**/*.tmp
+**/*.temp
+**/tmp
+**/temp
+**/scratch

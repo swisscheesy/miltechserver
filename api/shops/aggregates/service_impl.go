@@ -53,8 +53,8 @@ func optionalLimitPtr(value int) *int {
 	return &value
 }
 
-func (s *ServiceImpl) requireShopMember(user *bootstrap.User, shopID string) error {
-	if err := s.auth.RequireShopMember(user, shopID); err != nil {
+func (s *ServiceImpl) requireShopMember(ctx context.Context, user *bootstrap.User, shopID string) error {
+	if err := s.auth.RequireShopMember(ctx, user, shopID); err != nil {
 		if errors.Is(err, shared.ErrShopAccessDenied) {
 			return fmt.Errorf("%w: %w", ErrAccessDenied, err)
 		}
@@ -67,12 +67,15 @@ func (s *ServiceImpl) GetListsWithItems(ctx context.Context, user *bootstrap.Use
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
-	if err := s.requireShopMember(user, shopID); err != nil {
+	if err := s.requireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 	limits = normalizeListTreeLimits(limits)
 	lists, err := s.repo.GetListsWithItems(ctx, user, shopID, limits)
 	if err != nil {
+		if errors.Is(err, shared.ErrShopAccessDenied) {
+			return nil, fmt.Errorf("%w: %w", ErrAccessDenied, err)
+		}
 		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
 	}
 	if lists == nil {
@@ -108,66 +111,24 @@ func (s *ServiceImpl) GetVehicleMaintenanceSnapshot(ctx context.Context, user *b
 	limits.NotificationItemsLimit = normalizeOptionalLimit(limits.NotificationItemsLimit, maxNotificationItemsLimitPerNotification)
 	limits.ServicesLimit = normalizeOptionalLimit(limits.ServicesLimit, maxServicesLimit)
 	limits.ChangesLimit = normalizeOptionalLimit(limits.ChangesLimit, maxChangesLimit)
-	vehicle, err := s.repo.GetVehicleByIDForMember(ctx, user, vehicleID)
+	result, err := s.repo.GetVehicleMaintenanceSnapshot(ctx, user, vehicleID, limits)
 	if err != nil {
 		if errors.Is(err, shared.ErrVehicleAccessDenied) {
 			return nil, fmt.Errorf("%w: %w", ErrAccessDenied, err)
 		}
 		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
 	}
-	if vehicle == nil {
-		return nil, fmt.Errorf("%w: vehicle lookup returned nil", ErrAggregateUnavailable)
+	if result == nil {
+		return nil, fmt.Errorf("%w: vehicle snapshot returned nil", ErrAggregateUnavailable)
 	}
-	notifications, err := s.repo.GetVehicleNotificationsWithItems(ctx, vehicleID, limits)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
-	}
-	changes, err := s.repo.GetVehicleRecentChanges(ctx, vehicleID, limits.ChangesLimit)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
-	}
-	services, err := s.repo.GetVehicleServices(ctx, vehicleID, limits.ServicesLimit)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAggregateUnavailable, err)
-	}
-	if notifications == nil {
-		notifications = []response.VehicleNotificationWithItems{}
-	}
-	if changes == nil {
-		changes = []response.NotificationChangeWithUsername{}
-	}
-	if services == nil {
-		services = []response.EquipmentServiceResponse{}
-	}
-	itemCount := int64(0)
-	for _, notification := range notifications {
-		itemCount += int64(len(notification.Items))
-	}
-	return &response.VehicleMaintenanceSnapshotResponse{
-		Vehicle:       *vehicle,
-		Notifications: notifications,
-		RecentChanges: changes,
-		Services:      services,
-		Counts: response.VehicleMaintenanceSnapshotCounts{
-			Notifications:     int64(len(notifications)),
-			NotificationItems: itemCount,
-			RecentChanges:     int64(len(changes)),
-			Services:          int64(len(services)),
-		},
-		Limits: response.VehicleMaintenanceSnapshotLimits{
-			Notifications:                    optionalLimitPtr(limits.NotificationsLimit),
-			NotificationItemsPerNotification: optionalLimitPtr(limits.NotificationItemsLimit),
-			Services:                         optionalLimitPtr(limits.ServicesLimit),
-			RecentChanges:                    optionalLimitPtr(limits.ChangesLimit),
-		},
-	}, nil
+	return result, nil
 }
 
 func (s *ServiceImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
-	if err := s.requireShopMember(user, shopID); err != nil {
+	if err := s.requireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 	options.VehiclesLimit = normalizeOptionalLimit(options.VehiclesLimit, maxVehiclesLimit)

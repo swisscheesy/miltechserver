@@ -3,7 +3,6 @@ package queries
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
@@ -30,17 +29,20 @@ func (service *ServiceImpl) GetByShop(ctx context.Context, user *bootstrap.User,
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	if err := service.authorization.RequireShopMember(user, shopID); err != nil {
+	if err := service.authorization.RequireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 
-	services, totalCount, err := service.repo.GetByShop(user, shopID, req)
+	services, totalCount, err := service.repo.GetByShop(ctx, user, shopID, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get equipment services: %w", err)
 	}
 
 	usernameCache := shared.NewUsernameCache(service.usernameResolver)
-	responseServices := shared.MapServicesToResponses(services, usernameCache)
+	responseServices, err := shared.MapServicesToResponses(ctx, services, usernameCache)
+	if err != nil {
+		return nil, fmt.Errorf("resolve equipment service usernames: %w", err)
+	}
 
 	return &response.PaginatedEquipmentServicesResponse{
 		Services:   responseServices,
@@ -49,28 +51,31 @@ func (service *ServiceImpl) GetByShop(ctx context.Context, user *bootstrap.User,
 	}, nil
 }
 
-func (service *ServiceImpl) GetByEquipment(ctx context.Context, user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) (*response.PaginatedEquipmentServicesResponse, error) {
+func (service *ServiceImpl) GetByEquipment(ctx context.Context, user *bootstrap.User, equipmentID string, req request.GetEquipmentServicesRequest) (*response.PaginatedEquipmentServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	_, err := service.authorization.GetShopIDForEquipment(user, equipmentID)
+	_, err := service.authorization.GetShopIDForEquipment(ctx, user, equipmentID)
 	if err != nil {
 		return nil, fmt.Errorf("equipment access validation failed: %w", err)
 	}
 
-	services, totalCount, err := service.repo.GetByEquipment(user, equipmentID, limit, offset, startDate, endDate)
+	services, totalCount, err := service.repo.GetByEquipment(ctx, user, equipmentID, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get services by equipment: %w", err)
 	}
 
 	usernameCache := shared.NewUsernameCache(service.usernameResolver)
-	responseServices := shared.MapServicesToResponses(services, usernameCache)
+	responseServices, err := shared.MapServicesToResponses(ctx, services, usernameCache)
+	if err != nil {
+		return nil, fmt.Errorf("resolve equipment service usernames: %w", err)
+	}
 
 	return &response.PaginatedEquipmentServicesResponse{
 		Services:   responseServices,
 		TotalCount: totalCount,
-		HasMore:    int64(offset+limit) < totalCount,
+		HasMore:    int64(req.Offset+req.Limit) < totalCount,
 	}, nil
 }
 

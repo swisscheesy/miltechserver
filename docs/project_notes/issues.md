@@ -31,3 +31,30 @@ Each entry should include:
 - **Description**: Set up project memory infrastructure in docs/project_notes/
 - **Notes**: Created bugs.md, decisions.md, key_facts.md, and issues.md
 
+
+### 2026-10-04 - Shops server remediation Task 27
+
+- **Status**: Local runner/runbooks implemented; release BLOCKED on owner gates.
+- **Description**: One-action guarded 019–023 runner, pinned source/refusal tests,
+  actual-role privilege intersections and real legacy insert proof; corrected
+  017 test-first/tagged-generation instructions and explicit generation checkpoints.
+- **Boundaries**: Neither named target contacted; no rotations, config changes,
+  commits, push, deployment or activation. F09 and unrelated Task 18 incident
+  credential-owner confirmations remain separate. C06 budgets, actual Docker
+  runtime, live TMDE, date mapping, fleet/external writers and released device
+  evidence remain unknown/unexecuted. Task 22 late commit and numeric restore
+  ABA limitations remain OPEN. Historical entries above retain their dates;
+  the current gate sheet supersedes them for release decisions.
+
+### 2026-10-04 - Shops integrated acceptance (Task 28)
+- **Status**: Local verification and acceptance record; independent task/branch
+  review and owner release gates remain separate. No commits, merge, push, named
+  target migration, credential rotation, deployment or activation performed.
+- **Description**: Added percentile/query/pool/lock/payload/allocation measurements
+  at the approved overview and full PMCS workloads, plus concurrent message
+  writes. Fixed the confirmed F22 username-cancellation propagation gap and
+  verified retained post-commit state. Exact results, provenance, inherited skips
+  and remaining gates: `docs/testing/shops-server-remediation-acceptance.md`.
+
+
+- 2026-10-04: Consolidated final review fix wave I1–I6/M1–M5 implemented in the isolated server worktree; no commit/integration/deployment. Final source `843b5f28f2b970d4254a8c4a30f83cbf5b53f93932722be37ff42fef50511f49`; full protected matrix 303/1002 PASS, host 619/1308 PASS (3 inherited skips), physical race 39/169 PASS. Only 020 reverse/pin changed among reviewed migrations; 32 PMCS files remain HEAD-identical. [Independent scoped local re-review completed](../../.superpowers/sdd/2026-10-03-shops-server-release-remediation/final-fix-scoped-review.md): all I1–I6/M1–M5 addressed, no new Critical/Important breakage confirmed; all owner/live/Docker/parser/device/credential gates remain. Current record: `docs/testing/shops-server-remediation-acceptance.md`.

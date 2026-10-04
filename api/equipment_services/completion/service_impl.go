@@ -30,7 +30,7 @@ func (service *ServiceImpl) Complete(ctx context.Context, user *bootstrap.User, 
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	canModify, err := service.authorization.CanUserModifyService(user, shopID, serviceID)
+	canModify, err := service.authorization.CanUserModifyService(ctx, user, shopID, serviceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify modify permissions: %w", err)
 	}
@@ -38,16 +38,15 @@ func (service *ServiceImpl) Complete(ctx context.Context, user *bootstrap.User, 
 		return nil, shared.ErrModifyDenied
 	}
 
-	completedService, err := service.repo.Complete(user, serviceID, req.CompletionDate)
+	completedService, err := service.repo.Complete(ctx, user, shopID, serviceID, req.CompletionDate)
 	if err != nil {
 		slog.Error("Failed to complete equipment service", "error", err, "service_id", serviceID, "user_id", user.UserID)
 		return nil, fmt.Errorf("failed to complete equipment service: %w", err)
 	}
 
-	username, err := service.usernameResolver.GetUsernameByUserID(completedService.CreatedBy)
+	username, err := service.usernameResolver.GetUsernameByUserID(ctx, completedService.CreatedBy)
 	if err != nil {
-		slog.Warn("Failed to get username, using fallback", "user_id", completedService.CreatedBy, "error", err)
-		username = "Unknown User"
+		return nil, fmt.Errorf("resolve equipment service username: %w", err)
 	}
 
 	result := shared.MapServiceToResponse(*completedService, username)

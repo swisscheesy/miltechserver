@@ -303,7 +303,7 @@ func TestMessageSyncRoutesCatchUpBurstOver100HoldsBound(t *testing.T) {
 
 	// A bound beyond the committed counter is rejected, never fabricated.
 	future := "252"
-	requireFailure(t, doContractRequest(t, router, http.MethodGet, messageSyncPath(shopID, "catch-up", url.Values{"after": {"251"}, "through": {future}}), nil, "user-1"), http.StatusBadRequest, "invalid")
+	requireFailure(t, doContractRequest(t, router, http.MethodGet, messageSyncPath(shopID, "catch-up", url.Values{"after": {"251"}, "through": {future}}), nil, "user-1"), http.StatusConflict, "message_sync_reset_required")
 }
 
 func TestMessageSyncRoutesCatchUpSkipsDeletedGaps(t *testing.T) {

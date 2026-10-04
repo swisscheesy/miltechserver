@@ -36,6 +36,8 @@ type JoinShopRequest struct {
 	InviteCode string `json:"invite_code" binding:"required"`
 }
 
+// GenerateInviteCodeRequest accepts unrestricted invites only. Non-null controls
+// are rejected, including zero max_uses and empty expires_at.
 type GenerateInviteCodeRequest struct {
 	ShopID    string  `json:"shop_id" binding:"required"`
 	MaxUses   *int32  `json:"max_uses"`
@@ -76,17 +78,17 @@ type CreateShopVehicleRequest struct {
 }
 
 type UpdateShopVehicleRequest struct {
-	VehicleID      string `json:"vehicle_id" binding:"required"`
-	Admin          string `json:"admin" binding:"required"`
-	Niin           string `json:"niin"`
-	Model          string `json:"model"`
-	Serial         string `json:"serial"`
-	Uoc            string `json:"uoc"`
-	Mileage        int32  `json:"mileage"`
-	Hours          int32  `json:"hours"`
-	Comment        string `json:"comment"`
-	TrackedMileage *int32 `json:"tracked_mileage"`
-	TrackedHours   *int32 `json:"tracked_hours"`
+	VehicleID      string  `json:"vehicle_id" binding:"required"`
+	Admin          *string `json:"admin"`
+	Niin           *string `json:"niin"`
+	Model          *string `json:"model"`
+	Serial         *string `json:"serial"`
+	Uoc            *string `json:"uoc"`
+	Mileage        *int32  `json:"mileage"`
+	Hours          *int32  `json:"hours"`
+	Comment        *string `json:"comment"`
+	TrackedMileage *int32  `json:"tracked_mileage"`
+	TrackedHours   *int32  `json:"tracked_hours"`
 }
 
 type AdjustShopVehicleUsageRequest struct {
@@ -123,9 +125,18 @@ type AddNotificationItemRequest struct {
 	UnitOfMeasure  *string `json:"unit_of_measure"`
 }
 
+type BulkNotificationItemInput struct {
+	NotificationID *string `json:"notification_id"`
+	Niin           string  `json:"niin"`
+	Nomenclature   string  `json:"nomenclature"`
+	Quantity       int32   `json:"quantity"`
+	Nickname       *string `json:"nickname"`
+	UnitOfMeasure  *string `json:"unit_of_measure"`
+}
+
 type AddNotificationItemListRequest struct {
-	NotificationID string                       `json:"notification_id" binding:"required"`
-	Items          []AddNotificationItemRequest `json:"items" binding:"required"`
+	NotificationID string                      `json:"notification_id" binding:"required"`
+	Items          []BulkNotificationItemInput `json:"items" binding:"required"`
 }
 
 type RemoveNotificationItemListRequest struct {
@@ -194,7 +205,7 @@ type GetShopMessagesPaginatedRequest struct {
 }
 
 type UpdateAdminOnlyListsRequest struct {
-	AdminOnlyLists bool `json:"admin_only_lists" binding:"required"`
+	AdminOnlyLists *bool `json:"admin_only_lists" binding:"required"`
 }
 
 // Unified Shop Settings

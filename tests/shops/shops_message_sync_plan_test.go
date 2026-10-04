@@ -1,9 +1,18 @@
 package shops_test
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
+	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/shops/messages"
+	"miltechserver/bootstrap"
+	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -122,5 +131,80 @@ func TestMessageSyncPlan(t *testing.T) {
 			usesExpectedIndex = usesExpectedIndex || strings.Contains(plan, index)
 		}
 		require.True(t, usesExpectedIndex, "%s must use one of %v", tc.name, tc.anyOfIndexes)
+	}
+}
+
+// Eight concurrent current-writer streams exercise the actual persisted Shop
+// authority/allocator path. All errors and committed row counts are asserted.
+func TestMessageWritePerformance(t *testing.T) {
+	if os.Getenv("SHOP_MESSAGE_WRITE_PERF") != "1" {
+		t.Skip("set SHOP_MESSAGE_WRITE_PERF=1 for write capacity measurements")
+	}
+	for _, shopCount := range []int{1, 8} {
+		t.Run(fmt.Sprintf("shops_%d", shopCount), func(t *testing.T) {
+			clearShopTables(t, testDB)
+			t.Cleanup(func() { clearShopTables(t, testDB) })
+			ensureUser(t, testDB, "write-perf-user")
+			router, database, counter := newPerformanceRouter(t)
+			shopIDs := make([]string, shopCount)
+			for i := range shopIDs {
+				shopIDs[i] = createShop(t, router, "write-perf-user", fmt.Sprintf("Write performance %d", i))
+			}
+			repository := messages.NewRepository(database, nil, &bootstrap.Env{BlobAccountName: "test-account"})
+			user := &bootstrap.User{UserID: "write-perf-user"}
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			body := strings.Repeat("x", 256)
+			for _, shopID := range shopIDs {
+				now := time.Now().UTC()
+				edited := false
+				_, err := repository.CreateShopMessage(ctx, user, model.ShopMessages{ID: uuid.NewString(), ShopID: shopID, UserID: user.UserID, Message: body, CreatedAt: &now, UpdatedAt: &now, IsEdited: &edited})
+				require.NoError(t, err)
+			}
+			type outcome struct {
+				duration time.Duration
+				bytes    int
+				err      error
+			}
+			const workers, writesPerWorker = 8, 25
+			outcomes := make(chan outcome, workers*writesPerWorker)
+			start := make(chan struct{})
+			var workersDone sync.WaitGroup
+			finish := measurePerformanceResources(t, database, counter)
+			for worker := 0; worker < workers; worker++ {
+				workersDone.Add(1)
+				go func(worker int) {
+					defer workersDone.Done()
+					<-start
+					for i := 0; i < writesPerWorker; i++ {
+						now := time.Now().UTC()
+						edited := false
+						began := time.Now()
+						message, err := repository.CreateShopMessage(ctx, user, model.ShopMessages{ID: uuid.NewString(), ShopID: shopIDs[worker%shopCount], UserID: user.UserID, Message: body, CreatedAt: &now, UpdatedAt: &now, IsEdited: &edited})
+						duration := time.Since(began)
+						var payload []byte
+						if err == nil {
+							payload, err = json.Marshal(message)
+						}
+						outcomes <- outcome{duration: duration, bytes: len(payload), err: err}
+					}
+				}(worker)
+			}
+			close(start)
+			workersDone.Wait()
+			close(outcomes)
+			finish(fmt.Sprintf("current_message_writes_shops_%d_workers_8", shopCount))
+			durations := make([]time.Duration, 0, workers*writesPerWorker)
+			payloadBytes := 0
+			for result := range outcomes {
+				require.NoError(t, result.err)
+				durations = append(durations, result.duration)
+				payloadBytes += result.bytes
+			}
+			var count int
+			require.NoError(t, testDB.QueryRow(`SELECT count(*) FROM shop_messages WHERE user_id=$1`, user.UserID).Scan(&count))
+			require.Equal(t, workers*writesPerWorker+shopCount, count)
+			t.Logf("current_message_writes shops=%d workers=%d writes=%d p50=%s p95=%s p99=%s request_message_bytes=%d response_bytes_total=%d", shopCount, workers, len(durations), percentileDuration(durations, .5), percentileDuration(durations, .95), percentileDuration(durations, .99), len(body), payloadBytes)
+		})
 	}
 }

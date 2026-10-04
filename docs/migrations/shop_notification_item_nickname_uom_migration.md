@@ -25,12 +25,27 @@ way shop list items already work.
 
 ## Migration Instructions
 
-1. Apply to the local `miltech_ng` database, then regenerate jet models:
-   `jet -dsn="postgresql://postgres:<password>@localhost:5432/miltech_ng?sslmode=disable" -schema=public -path=./.gen`
-2. Apply to `miltech_ng_test`.
-3. Apply to production **before** deploying the server build that reads the
-   new columns.
-4. Run the verification query after each apply.
+1. Obtain separate owner authorization for the existing `miltech_ng_test`
+   target and pin its current database/address/port/migration role/version/schema
+   and application `DB_USERNAME`. Check identity and the approved SQL in the same
+   application session. Prior 016 hashes do not identify a pre-017 schema.
+2. Apply the reviewed 017 forward file to **`miltech_ng_test` first**. Immediately
+   regenerate with the tagged `go run ./tools/jetregen` workflow using the
+   separately verified intended source; never use the plain `jet` CLI. Compare
+   all 32 tracked `user_pmcs_*` hashes, compile generated packages, and prove a
+   real legacy application-role write and enrichment preservation.
+3. Only after the test evidence is accepted, obtain a **separate** authorization
+   and same-session identity/SQL checks for `miltech_ng`, then apply once and
+   repeat tagged generation and verification. This document authorizes neither
+   target contact nor application; current target identity/stage is UNPINNED.
+4. Deploying, enabling flags, or reversing is a separate owner gate. A migration
+   already present must be inspected, not blindly reapplied. `IF NOT EXISTS`
+   alone does not prove compatible types, grants or historical data.
+
+See [the remediation release gate sheet](../testing/shops-server-remediation-release.md).
+The new runner covers 019–023 only; 017 requires an explicitly reviewed,
+identity-checked target-specific procedure. SQL examples below preserve the
+historical migration explanation and are not an executable target selection.
 
 ---
 
@@ -48,8 +63,9 @@ ALTER TABLE public.shop_notification_items
 COMMIT;
 ```
 
-`IF NOT EXISTS` makes the script safe to re-run. If it fails with a lock
-timeout, retry it during a quieter period.
+`IF NOT EXISTS` avoids duplicate-column errors but does not validate an existing
+column definition. After a failure, establish the committed state with the owner
+before an explicitly approved retry during a quieter period.
 
 ---
 
@@ -71,6 +87,9 @@ Expected new rows:
 
 ## Rollback
 
+Reverse requires a separate explicit owner resolution authorization and a
+retention/export manifest; it is never the default recovery action. Regenerate
+through the tagged workflow immediately after any approved reverse or repair.
 Roll back only **after** rolling back to a server build that doesn't
 reference these columns. Dropping the columns deletes any nicknames and units
 users have saved.

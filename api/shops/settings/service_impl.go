@@ -36,7 +36,7 @@ func (service *ServiceImpl) GetShopAdminOnlyListsSetting(ctx context.Context, us
 		return false, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -45,7 +45,7 @@ func (service *ServiceImpl) GetShopAdminOnlyListsSetting(ctx context.Context, us
 		return false, errors.New("access denied: user is not a member of this shop")
 	}
 
-	adminOnlyLists, err := service.repo.GetShopAdminOnlyListsSetting(shopID)
+	adminOnlyLists, err := service.repo.GetShopAdminOnlyListsSetting(ctx, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
 	}
@@ -61,7 +61,7 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context,
 		return errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -70,7 +70,7 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context,
 		return errors.New("access denied: only shop administrators can modify this setting")
 	}
 
-	err = service.repo.UpdateShopAdminOnlyListsSetting(user, shopID, adminOnlyLists)
+	err = service.repo.UpdateShopAdminOnlyListsSetting(ctx, user, shopID, adminOnlyLists)
 	if err != nil {
 		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
 	}
@@ -85,7 +85,7 @@ func (service *ServiceImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap
 		return false, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -94,7 +94,7 @@ func (service *ServiceImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap
 		return false, nil
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -109,7 +109,7 @@ func (service *ServiceImpl) GetShopSettings(ctx context.Context, user *bootstrap
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -118,7 +118,7 @@ func (service *ServiceImpl) GetShopSettings(ctx context.Context, user *bootstrap
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	settings, err := service.repo.GetShopSettings(shopID)
+	settings, err := service.repo.GetShopSettings(ctx, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop settings: %w", err)
 	}
@@ -134,7 +134,7 @@ func (service *ServiceImpl) UpdateShopSettings(ctx context.Context, user *bootst
 		return nil, errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -143,12 +143,12 @@ func (service *ServiceImpl) UpdateShopSettings(ctx context.Context, user *bootst
 		return nil, errors.New("access denied: only shop administrators can modify settings")
 	}
 
-	err = service.repo.UpdateShopSettings(user, shopID, updates)
+	err = service.repo.UpdateShopSettings(ctx, user, shopID, updates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update shop settings: %w", err)
 	}
 
-	updatedSettings, err := service.repo.GetShopSettings(shopID)
+	updatedSettings, err := service.repo.GetShopSettings(ctx, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated settings: %w", err)
 	}

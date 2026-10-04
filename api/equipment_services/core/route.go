@@ -47,7 +47,7 @@ func (handler *Handler) create(c *gin.Context) {
 		return
 	}
 
-	createdService, err := handler.service.Create(c.Request.Context(), user, req)
+	createdService, err := handler.service.Create(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return

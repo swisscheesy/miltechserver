@@ -1,17 +1,20 @@
 package notifications
 
 import (
+	"context"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	service Service
+	service     Service
+	atomicReady func(context.Context) bool
 }
 
 // Shop Vehicle Notification Operations
@@ -30,7 +33,7 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	var req request.CreateVehicleNotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -47,6 +50,10 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	service := handler.service
 	createdNotification, err := service.CreateVehicleNotification(c.Request.Context(), user, notification)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -182,7 +189,7 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	var req request.UpdateVehicleNotificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -201,6 +208,10 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	service := handler.service
 	err := service.UpdateVehicleNotification(c.Request.Context(), user, update)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}

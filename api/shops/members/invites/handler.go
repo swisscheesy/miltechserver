@@ -33,6 +33,11 @@ func (handler *Handler) GenerateInviteCode(c *gin.Context) {
 		return
 	}
 
+	if req.MaxUses != nil || req.ExpiresAt != nil {
+		response.Error(c, 400, "invite expiry and max-use controls are not supported")
+		return
+	}
+
 	service := handler.service
 	code, err := service.GenerateInviteCode(c.Request.Context(), user, req.ShopID)
 	if err != nil {

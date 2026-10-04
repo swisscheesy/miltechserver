@@ -2,6 +2,7 @@ package shops_test
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,6 +14,31 @@ import (
 )
 
 func itemFieldsPtr(value string) *string { return &value }
+
+func assertAtomicItemUpdateAudit(t *testing.T, notificationID string, expected []request.NotificationSaveItem) {
+	t.Helper()
+	rows, err := testDB.Query(`SELECT change_type,field_changes FROM shop_vehicle_notification_changes WHERE notification_id=$1 AND field_changes::jsonb ? 'items_updated' ORDER BY changed_at ASC,id ASC`, notificationID)
+	require.NoError(t, err)
+	defer rows.Close()
+	actual := []request.NotificationSaveItem{}
+	for rows.Next() {
+		var kind, raw string
+		require.NoError(t, rows.Scan(&kind, &raw))
+		require.Equal(t, "update", kind)
+		var p struct {
+			FieldsChanged []string                       `json:"fields_changed"`
+			ItemCount     int                            `json:"item_count"`
+			ItemsUpdated  []request.NotificationSaveItem `json:"items_updated"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(raw), &p))
+		require.Equal(t, []string{"items"}, p.FieldsChanged)
+		require.Equal(t, 1, p.ItemCount)
+		require.Len(t, p.ItemsUpdated, 1)
+		actual = append(actual, p.ItemsUpdated[0])
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, expected, actual)
+}
 
 func storedItemFields(t *testing.T, itemID string) (quantity int32, nickname, unitOfMeasure sql.NullString) {
 	t.Helper()
@@ -49,6 +75,10 @@ func TestAtomicNotificationItemFieldsSurviveReleasedClientSaves(t *testing.T) {
 		{ID: create.Items[1].ID, Niin: create.Items[1].Niin, Nomenclature: create.Items[1].Nomenclature, Quantity: create.Items[1].Quantity},
 	}
 	atomicReceipt(t, doContract2JSONRequest(t, router, releasedEdit, "atomic-owner"))
+	expectedQuantityChange := releasedEdit.Items[0]
+	expectedQuantityChange.Nickname = itemFieldsPtr("Front hub")
+	expectedQuantityChange.UnitOfMeasure = itemFieldsPtr("KT")
+	assertAtomicItemUpdateAudit(t, receipt.NotificationID, []request.NotificationSaveItem{expectedQuantityChange})
 
 	quantity, nickname, unit = storedItemFields(t, create.Items[0].ID)
 	require.Equal(t, int32(7), quantity)
@@ -71,10 +101,16 @@ func TestAtomicNotificationItemFieldsSurviveReleasedClientSaves(t *testing.T) {
 	_, legacyNickname, legacyUnit = storedItemFields(t, create.Items[1].ID)
 	require.False(t, legacyNickname.Valid)
 	require.False(t, legacyUnit.Valid)
-	require.Equal(t, 1, atomicRowCount(t, "shop_vehicle_notification_changes",
-		"notification_id=$1 AND change_type='items_updated' AND field_changes::text LIKE '%'||$2||'%'", receipt.NotificationID, create.Items[0].ID))
-	require.Equal(t, 0, atomicRowCount(t, "shop_vehicle_notification_changes",
-		"notification_id=$1 AND change_type='items_updated' AND field_changes::text LIKE '%'||$2||'%'", receipt.NotificationID, create.Items[1].ID))
+	assertAtomicItemUpdateAudit(t, receipt.NotificationID, []request.NotificationSaveItem{expectedQuantityChange, newClientEdit.Items[0]})
+	// A separate default-only save may record the mandatory notification update,
+	// but it cannot claim an item mutation or rewrite the physical NULL row.
+	defaultOnly := newClientEdit
+	defaultOnly.OperationID = uuid.NewString()
+	atomicReceipt(t, doContract2JSONRequest(t, router, defaultOnly, "atomic-owner"))
+	assertAtomicItemUpdateAudit(t, receipt.NotificationID, []request.NotificationSaveItem{expectedQuantityChange, newClientEdit.Items[0]})
+	_, legacyNickname, legacyUnit = storedItemFields(t, create.Items[1].ID)
+	require.False(t, legacyNickname.Valid)
+	require.False(t, legacyUnit.Valid)
 }
 
 func TestAtomicNotificationRejectsOversizedItemNickname(t *testing.T) {

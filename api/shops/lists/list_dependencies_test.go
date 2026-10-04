@@ -67,13 +67,19 @@ func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver
 
 	var values []driver.Value
 	switch {
+	case strings.Contains(q, "FROM public.shops") && strings.Contains(q, "FOR UPDATE") && len(args) == 1 && args[0].Value == "shop":
+		return &dependencyRows{values: []driver.Value{"shop"}, columns: []string{"shops.id"}}, nil
+	case strings.Contains(q, "FROM public.shop_message_uploads") && strings.Contains(q, "shop_message_uploads.shop_id") && strings.Contains(q, "FOR UPDATE") && len(args) == 1 && args[0].Value == "shop":
+		return &dependencyRows{read: true, columns: []string{"shop_message_uploads.id"}}, nil
 	case strings.Contains(q, "EXISTS") && strings.Contains(q, "equipment_services"):
 		c.checked = true
 		values = []driver.Value{c.dependency}
 	case strings.HasPrefix(q, "SELECT admin_only_lists"):
 		values = []driver.Value{false}
-	case strings.HasPrefix(q, "SELECT count(*) FROM shop_members"):
-		values = []driver.Value{int64(c.memberCount)}
+	case strings.Contains(strings.ToLower(q), "count(") && strings.Contains(q, "shop_members.role"):
+		return &dependencyRows{values: []driver.Value{int64(1)}, columns: []string{"count"}}, nil
+	case strings.Contains(strings.ToLower(q), "count(") && strings.Contains(q, "shop_members"):
+		return &dependencyRows{values: []driver.Value{int64(c.memberCount)}, columns: []string{"count"}}, nil
 	case strings.HasPrefix(q, "SELECT role"):
 		values = []driver.Value{"member"}
 		if c.admin {
@@ -116,11 +122,15 @@ func (c *dependencyConn) ExecContext(_ context.Context, q string, _ []driver.Nam
 }
 
 type dependencyRows struct {
-	values []driver.Value
-	read   bool
+	columns []string
+	values  []driver.Value
+	read    bool
 }
 
 func (r *dependencyRows) Columns() []string {
+	if r.columns != nil {
+		return r.columns
+	}
 	v := make([]string, len(r.values))
 	for i := range v {
 		v[i] = fmt.Sprint(i)
@@ -141,7 +151,7 @@ func TestListDependenciesBlockBeforeAnyWrite(t *testing.T) {
 	c := &dependencyConn{dependency: true}
 	db := sql.OpenDB(dependencyConnector{c})
 	defer db.Close()
-	err := NewRepository(db).DeleteShopList(&bootstrap.User{UserID: "user"}, "list")
+	err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list")
 	if err == nil || err.Error() != "list is in use" {
 		t.Fatalf("want list conflict, got %v", err)
 	}
@@ -153,7 +163,7 @@ func TestListDependenciesDetachBeforeSuccessfulDelete(t *testing.T) {
 	c := &dependencyConn{}
 	db := sql.OpenDB(dependencyConnector{c})
 	defer db.Close()
-	if err := NewRepository(db).DeleteShopList(&bootstrap.User{UserID: "user"}, "list"); err != nil {
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err != nil {
 		t.Fatal(err)
 	}
 	if !c.checked || !c.detached || !c.deleted || !c.committed {
@@ -164,7 +174,7 @@ func TestListDependenciesDeleteFailureDoesNotCommit(t *testing.T) {
 	c := &dependencyConn{failDelete: true}
 	db := sql.OpenDB(dependencyConnector{c})
 	defer db.Close()
-	if err := NewRepository(db).DeleteShopList(&bootstrap.User{UserID: "user"}, "list"); err == nil {
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err == nil {
 		t.Fatal("want failure")
 	}
 	if c.committed {
@@ -176,7 +186,7 @@ func TestListDependenciesDetachFailureDoesNotDelete(t *testing.T) {
 	c := &dependencyConn{failDetach: true}
 	db := sql.OpenDB(dependencyConnector{c})
 	defer db.Close()
-	if err := NewRepository(db).DeleteShopList(&bootstrap.User{UserID: "user"}, "list"); err == nil {
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err == nil {
 		t.Fatal("want detach failure")
 	}
 	if c.deleted || c.committed {
@@ -195,13 +205,13 @@ func TestListDependenciesWritersRejectDeletedAttachment(t *testing.T) {
 			var err error
 			switch name {
 			case "create-service":
-				_, err = core.NewRepository(db).Create(user, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: list})
+				_, err = core.NewRepository(db).Create(context.Background(), user, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: list})
 			case "update-service":
-				_, err = core.NewRepository(db).Update(user, model.EquipmentServices{ID: "service", ListID: list})
+				_, err = core.NewRepository(db).Update(context.Background(), user, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: list})
 			case "create-notification":
-				_, err = notifications.NewRepository(db).CreateVehicleNotification(user, model.ShopVehicleNotifications{ShopID: "shop", VehicleID: "vehicle", AttachedShopList: &list})
+				_, err = notifications.NewRepository(db).CreateVehicleNotification(context.Background(), user, model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ShopID: "shop", VehicleID: "vehicle", AttachedShopList: &list})
 			case "update-notification":
-				err = notifications.NewRepository(db).UpdateVehicleNotification(user, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}, AttachedShopListSet: true, AttachedShopList: &list})
+				err = notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), user, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}, AttachedShopListSet: true, AttachedShopList: &list})
 			}
 			if err == nil {
 				t.Fatal("missing referenced list was accepted")
@@ -260,9 +270,9 @@ func TestListDependenciesAggregateDeletionRequiresMembershipLock(t *testing.T) {
 			user := &bootstrap.User{UserID: "user"}
 			var err error
 			if name == "shop" {
-				err = shopcore.NewRepository(db, nil, &bootstrap.Env{}).DeleteShop(user, "shop")
+				err = shopcore.NewRepository(db, nil, &bootstrap.Env{}).DeleteShop(context.Background(), user, "shop")
 			} else {
-				err = members.NewRepository(db, nil, &bootstrap.Env{}).DeleteShop(user, "shop")
+				err = members.NewRepository(db, nil, &bootstrap.Env{}).LeaveShop(context.Background(), user, "shop")
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -277,10 +287,10 @@ func TestListDependenciesAggregateDeletionRequiresMembershipLock(t *testing.T) {
 	}
 }
 func TestListDependenciesLastMemberRechecksCount(t *testing.T) {
-	c := &dependencyConn{memberCount: 2}
+	c := &dependencyConn{admin: true, memberCount: 2}
 	db := sql.OpenDB(dependencyConnector{c})
 	defer db.Close()
-	if err := members.NewRepository(db, nil, &bootstrap.Env{}).DeleteShop(&bootstrap.User{UserID: "user"}, "shop"); err == nil {
+	if err := members.NewRepository(db, nil, &bootstrap.Env{}).LeaveShop(context.Background(), &bootstrap.User{UserID: "user"}, "shop"); err == nil {
 		t.Fatal("stale last-member count accepted")
 	}
 	if c.deleted || c.committed {
@@ -294,27 +304,27 @@ func TestListDependenciesLookupErrors(t *testing.T) {
 		name, query, missingCode string
 		run                      func(*sql.DB) error
 	}{
-		{"create-service-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1", "vehicle_not_found", func(db *sql.DB) error {
-			_, err := core.NewRepository(db).Create(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: "list"})
+		{"create-service-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1 FOR UPDATE", "vehicle_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Create(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: "list"})
 			return err
 		}},
 		{"update-service-shop", "SELECT shop_id FROM equipment_services WHERE id=$1", "service_not_found", func(db *sql.DB) error {
-			_, err := core.NewRepository(db).Update(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ListID: "list"})
+			_, err := core.NewRepository(db).Update(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: "list"})
 			return err
 		}},
 		{"update-service-owner", "SELECT list_id,created_by FROM equipment_services WHERE id=$1 AND shop_id=$2", "service_not_found", func(db *sql.DB) error {
-			_, err := core.NewRepository(db).Update(&bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ListID: "list"})
+			_, err := core.NewRepository(db).Update(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: "list"})
 			return err
 		}},
 		{"create-notification-vehicle", "SELECT shop_id,admin FROM shop_vehicle WHERE id=$1 FOR UPDATE", "vehicle_not_found", func(db *sql.DB) error {
-			_, err := notifications.NewRepository(db).CreateVehicleNotification(&bootstrap.User{UserID: "user"}, model.ShopVehicleNotifications{ShopID: "shop", VehicleID: "vehicle"})
+			_, err := notifications.NewRepository(db).CreateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ShopID: "shop", VehicleID: "vehicle"})
 			return err
 		}},
 		{"update-notification-shop", "SELECT shop_id,vehicle_id FROM shop_vehicle_notifications WHERE id=$1", "notification_not_found", func(db *sql.DB) error {
-			return notifications.NewRepository(db).UpdateVehicleNotification(&bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}})
+			return notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}})
 		}},
 		{"update-notification-attachment", "SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2", "notification_not_found", func(db *sql.DB) error {
-			return notifications.NewRepository(db).UpdateVehicleNotification(&bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: "notification"}})
+			return notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}})
 		}},
 	} {
 		for _, cause := range []error{sql.ErrNoRows, driverCause} {

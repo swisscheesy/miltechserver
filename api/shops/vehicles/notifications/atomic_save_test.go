@@ -245,6 +245,8 @@ func (c *atomicConn) ExecContext(_ context.Context, q string, args []driver.Name
 		s.committedAt = args[4].Value.(time.Time)
 	case strings.HasPrefix(q, "INSERT INTO shop_vehicle_notifications"), strings.HasPrefix(q, "UPDATE shop_vehicle_notifications"), strings.HasPrefix(q, "DELETE FROM shop_vehicle_notifications"):
 		phase = "details"
+	case strings.Contains(q, "shop_notification_item_metadata"):
+		phase = "retention"
 	case strings.Contains(q, "shop_notification_items"):
 		phase = "items"
 	case strings.Contains(q, "shop_vehicle_notification_changes"):
@@ -291,6 +293,23 @@ func (c *atomicConn) QueryContext(_ context.Context, q string, args []driver.Nam
 		}
 		values = []driver.Value{s.committedAt}
 
+	case strings.Contains(q, "FROM public.shop_notification_item_metadata"):
+		return &atomicRows{cols: []string{"shop_notification_item_metadata.notification_id", "shop_notification_item_metadata.niin", "shop_notification_item_metadata.nickname", "shop_notification_item_metadata.unit_of_measure", "shop_notification_item_metadata.state", "shop_notification_item_metadata.candidates", "shop_notification_item_metadata.version", "shop_notification_item_metadata.resolution_version"}}, nil
+	case strings.Contains(q, "FROM public.shop_notification_items"):
+		cols := []string{"shop_notification_items.id", "shop_notification_items.shop_id", "shop_notification_items.notification_id", "shop_notification_items.niin", "shop_notification_items.nomenclature", "shop_notification_items.quantity", "shop_notification_items.save_time", "shop_notification_items.nickname", "shop_notification_items.unit_of_measure"}
+		var queue [][]driver.Value
+		for _, item := range s.existingItems {
+			match := false
+			if strings.Contains(q, "shop_notification_items.id =") {
+				match = item[0] == args[0].Value
+			} else {
+				match = item[1] == args[1].Value
+			}
+			if match {
+				queue = append(queue, []driver.Value{item[0], atomicRequest().ShopID, atomicRequest().ShopID, item[1], item[2], item[3], time.Now(), item[4], item[5]})
+			}
+		}
+		return &atomicRows{cols: cols, queue: queue}, nil
 	case strings.HasPrefix(q, "INSERT INTO shop_notification_items"):
 		s.businessWrites++
 		values = make([]driver.Value, len(args))
@@ -389,7 +408,7 @@ func TestLegacyDeleteRequiresLockedMembership(t *testing.T) {
 	state := &atomicDriverState{denied: true}
 	conn := sql.OpenDB(atomicConnector{state})
 	defer conn.Close()
-	err := NewRepository(conn).DeleteVehicleNotification(&bootstrap.User{UserID: "user"}, "target")
+	err := NewRepository(conn).DeleteVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, "target")
 	if err == nil || shared.ClassifyFailure(err).Status != 403 || state.businessWrites != 0 || state.rollbacks != 1 {
 		t.Fatalf("legacy delete bypassed locked membership: %v %+v", err, state)
 	}
@@ -408,7 +427,7 @@ func TestAtomicRealRouteRejectsInvalidBeforeDatabaseAccess(t *testing.T) {
 			defer db.Close()
 			engine := gin.New()
 			group := engine.Group("/api/v1/auth", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{UserID: "user"}) })
-			RegisterRoutes(group, NewService(NewRepository(db), nil))
+			RegisterRoutes(group, NewService(NewRepository(db), nil), func(context.Context) bool { t.Fatal("invalid request reached readiness"); return false })
 			r := atomicRequest()
 			if tc.invalid {
 				r.Attachment.Intent = "invalid"
@@ -498,7 +517,7 @@ func TestLegacyItemRequiresMembershipAndKeepsAuditBestEffort(t *testing.T) {
 			db := sql.OpenDB(atomicConnector{state})
 			defer db.Close()
 			item := model.ShopNotificationItems{ID: r.ShopID, ShopID: r.ShopID, NotificationID: id, Niin: "123", Nomenclature: "part", Quantity: 1, SaveTime: now}
-			created, err := notificationitems.NewRepository(db).CreateNotificationItem(&bootstrap.User{UserID: "user"}, item)
+			created, err := notificationitems.NewRepository(db).CreateNotificationItem(context.Background(), &bootstrap.User{UserID: "user"}, item)
 			if denied {
 				if err == nil || state.businessWrites != 0 || state.commits != 0 {
 					t.Fatal("denied item wrote")
@@ -570,9 +589,9 @@ func TestLegacyDetailAndDeleteAuditsAfterCommit(t *testing.T) {
 			user := &bootstrap.User{UserID: "user"}
 			var err error
 			if deleting {
-				err = repo.DeleteVehicleNotification(user, id)
+				err = repo.DeleteVehicleNotification(context.Background(), user, id)
 			} else {
-				err = repo.UpdateVehicleNotification(user, VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: id, Title: "after", Type: "M1", LastUpdated: now}})
+				err = repo.UpdateVehicleNotification(context.Background(), user, VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{ID: id, Title: "after", Type: "M1", LastUpdated: now}})
 			}
 			if err != nil || state.commits != 1 || state.auditAttempts != 1 {
 				t.Fatalf("best-effort audit changed legacy success: %v %+v", err, state)
@@ -622,5 +641,33 @@ func TestAtomicValidationRejectsDuplicateIDsIndependently(t *testing.T) {
 	r.Items = append(r.Items, item)
 	if ValidateNotificationSave(r) == nil {
 		t.Fatal("accepted duplicate item ID")
+	}
+}
+
+func TestAtomicEntryReadinessIsIndependentAndFailClosed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, ready := range []bool{false, true} {
+		state := &atomicDriverState{}
+		db := sql.OpenDB(atomicConnector{state})
+		defer db.Close()
+		engine := gin.New()
+		group := engine.Group("", shared.ContractMiddleware, func(c *gin.Context) { c.Set("user", &bootstrap.User{UserID: "user"}) })
+		calls := 0
+		RegisterRoutes(group, NewService(NewRepository(db), nil), func(ctx context.Context) bool { calls++; return ready })
+		body, _ := json.Marshal(atomicRequest())
+		req := httptest.NewRequest(http.MethodPost, "/shops/vehicles/notifications/save", strings.NewReader(string(body)))
+		req.Header.Set(shared.ContractHeader, "2")
+		rec := httptest.NewRecorder()
+		engine.ServeHTTP(rec, req)
+		if calls != 1 {
+			t.Fatalf("readiness calls %d", calls)
+		}
+		if !ready {
+			if rec.Code != 503 || state.connections != 0 {
+				t.Fatalf("unready entry status=%d connections=%d", rec.Code, state.connections)
+			}
+		} else if state.connections == 0 {
+			t.Fatal("ready entry failed to reach catalog-independent service")
+		}
 	}
 }

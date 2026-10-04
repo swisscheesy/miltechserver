@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -73,13 +74,13 @@ func (auth *CachedAuthorization) setString(key string, val string) {
 	auth.stringCache[key] = val
 }
 
-func (auth *CachedAuthorization) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *CachedAuthorization) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	key := auth.cacheKey("member", shopID, user.UserID)
 	if cached, ok := auth.getBool(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.IsUserMemberOfShop(user, shopID)
+	val, err := auth.inner.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return false, err
 	}
@@ -88,13 +89,13 @@ func (auth *CachedAuthorization) IsUserMemberOfShop(user *bootstrap.User, shopID
 	return val, nil
 }
 
-func (auth *CachedAuthorization) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *CachedAuthorization) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	key := auth.cacheKey("admin", shopID, user.UserID)
 	if cached, ok := auth.getBool(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.IsUserShopAdmin(user, shopID)
+	val, err := auth.inner.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return false, err
 	}
@@ -103,13 +104,13 @@ func (auth *CachedAuthorization) IsUserShopAdmin(user *bootstrap.User, shopID st
 	return val, nil
 }
 
-func (auth *CachedAuthorization) GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error) {
+func (auth *CachedAuthorization) GetUserRoleInShop(ctx context.Context, user *bootstrap.User, shopID string) (string, error) {
 	key := auth.cacheKey("role", shopID, user.UserID)
 	if cached, ok := auth.getString(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.GetUserRoleInShop(user, shopID)
+	val, err := auth.inner.GetUserRoleInShop(ctx, user, shopID)
 	if err != nil {
 		return "", err
 	}
@@ -118,13 +119,13 @@ func (auth *CachedAuthorization) GetUserRoleInShop(user *bootstrap.User, shopID 
 	return val, nil
 }
 
-func (auth *CachedAuthorization) CanUserModifyVehicle(user *bootstrap.User, vehicleID string) (bool, error) {
+func (auth *CachedAuthorization) CanUserModifyVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) (bool, error) {
 	key := auth.cacheKey("modify_vehicle", vehicleID, user.UserID)
 	if cached, ok := auth.getBool(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.CanUserModifyVehicle(user, vehicleID)
+	val, err := auth.inner.CanUserModifyVehicle(ctx, user, vehicleID)
 	if err != nil {
 		return false, err
 	}
@@ -133,13 +134,13 @@ func (auth *CachedAuthorization) CanUserModifyVehicle(user *bootstrap.User, vehi
 	return val, nil
 }
 
-func (auth *CachedAuthorization) CanUserModifyList(user *bootstrap.User, listID string) (bool, error) {
+func (auth *CachedAuthorization) CanUserModifyList(ctx context.Context, user *bootstrap.User, listID string) (bool, error) {
 	key := auth.cacheKey("modify_list", listID, user.UserID)
 	if cached, ok := auth.getBool(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.CanUserModifyList(user, listID)
+	val, err := auth.inner.CanUserModifyList(ctx, user, listID)
 	if err != nil {
 		return false, err
 	}
@@ -148,13 +149,13 @@ func (auth *CachedAuthorization) CanUserModifyList(user *bootstrap.User, listID 
 	return val, nil
 }
 
-func (auth *CachedAuthorization) CanUserModifyNotification(user *bootstrap.User, notificationID string) (bool, error) {
+func (auth *CachedAuthorization) CanUserModifyNotification(ctx context.Context, user *bootstrap.User, notificationID string) (bool, error) {
 	key := auth.cacheKey("modify_notification", notificationID, user.UserID)
 	if cached, ok := auth.getBool(key); ok {
 		return cached, nil
 	}
 
-	val, err := auth.inner.CanUserModifyNotification(user, notificationID)
+	val, err := auth.inner.CanUserModifyNotification(ctx, user, notificationID)
 	if err != nil {
 		return false, err
 	}
@@ -163,8 +164,8 @@ func (auth *CachedAuthorization) CanUserModifyNotification(user *bootstrap.User,
 	return val, nil
 }
 
-func (auth *CachedAuthorization) RequireShopMember(user *bootstrap.User, shopID string) error {
-	isMember, err := auth.IsUserMemberOfShop(user, shopID)
+func (auth *CachedAuthorization) RequireShopMember(ctx context.Context, user *bootstrap.User, shopID string) error {
+	isMember, err := auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return err
 	}
@@ -174,8 +175,8 @@ func (auth *CachedAuthorization) RequireShopMember(user *bootstrap.User, shopID 
 	return nil
 }
 
-func (auth *CachedAuthorization) RequireShopAdmin(user *bootstrap.User, shopID string) error {
-	isAdmin, err := auth.IsUserShopAdmin(user, shopID)
+func (auth *CachedAuthorization) RequireShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) error {
+	isAdmin, err := auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return err
 	}

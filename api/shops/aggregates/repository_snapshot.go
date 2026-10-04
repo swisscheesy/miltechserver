@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lib/pq"
 	"time"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -12,7 +13,7 @@ import (
 	"miltechserver/bootstrap"
 )
 
-func (repo *RepositoryImpl) GetListsWithItems(ctx context.Context, user *bootstrap.User, shopID string, limits ListTreeLimits) ([]response.ShopListWithItems, error) {
+func (repo *RepositoryImpl) getListsWithItems(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limits ListTreeLimits) ([]response.ShopListWithItems, error) {
 	const query = `
 WITH ranked_lists AS (
 	SELECT
@@ -44,7 +45,7 @@ LEFT JOIN ranked_items i ON i.list_id = l.id AND ($4 = 0 OR i.item_rank <= $4)
 WHERE $3 = 0 OR l.list_rank <= $3
 ORDER BY l.list_rank ASC, i.item_rank ASC NULLS LAST, i.id ASC`
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limits.ListsLimit, limits.ItemsLimitPerList)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limits.ListsLimit, limits.ItemsLimitPerList)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop lists with items: %w", err)
 	}
@@ -141,8 +142,8 @@ ORDER BY l.list_rank ASC, i.item_rank ASC NULLS LAST, i.id ASC`
 	return lists, nil
 }
 
-func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error) {
-	summary, err := repo.getShopSnapshotSummary(ctx, user, shopID)
+func (repo *RepositoryImpl) getShopSnapshot(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, options ShopSnapshotOptions) (*response.ShopSnapshotResponse, error) {
+	summary, err := repo.getShopSnapshotSummary(ctx, tx, user, shopID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,14 +169,14 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 	}
 
 	if includes["vehicles"] {
-		vehicles, err := repo.getShopSnapshotVehicles(ctx, user, shopID, options.VehiclesLimit)
+		vehicles, err := repo.getShopSnapshotVehicles(ctx, tx, user, shopID, options.VehiclesLimit)
 		if err != nil {
 			return nil, err
 		}
 		result.Vehicles = vehicles
 	}
 	if includes["lists"] {
-		lists, err := repo.GetListsWithItems(ctx, user, shopID, ListTreeLimits{
+		lists, err := repo.getListsWithItems(ctx, tx, user, shopID, ListTreeLimits{
 			ListsLimit:        options.ListsLimit,
 			ItemsLimitPerList: options.ItemsLimitPerList,
 		})
@@ -185,28 +186,28 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 		result.Lists = lists
 	}
 	if includes["notifications"] {
-		notifications, err := repo.getShopNotificationsWithItems(ctx, user, shopID, options.NotificationsLimit, options.NotificationItemsLimit)
+		notifications, err := repo.getShopNotificationsWithItems(ctx, tx, user, shopID, options.NotificationsLimit, options.NotificationItemsLimit)
 		if err != nil {
 			return nil, err
 		}
 		result.Notifications = notifications
 	}
 	if includes["messages"] {
-		messages, err := repo.getShopSnapshotMessages(ctx, user, shopID, options.MessageLimit)
+		messages, err := repo.getShopSnapshotMessages(ctx, tx, user, shopID, options.MessageLimit)
 		if err != nil {
 			return nil, err
 		}
 		result.Messages = messages
 	}
 	if includes["services"] {
-		services, err := repo.getShopSnapshotServices(ctx, user, shopID, options.ServicesLimit)
+		services, err := repo.getShopSnapshotServices(ctx, tx, user, shopID, options.ServicesLimit)
 		if err != nil {
 			return nil, err
 		}
 		result.Services = services
 	}
 	if includes["changes"] {
-		changes, err := repo.getShopSnapshotRecentChanges(ctx, user, shopID, options.ChangesLimit)
+		changes, err := repo.getShopSnapshotRecentChanges(ctx, tx, user, shopID, options.ChangesLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +217,7 @@ func (repo *RepositoryImpl) GetShopSnapshot(ctx context.Context, user *bootstrap
 	return result, nil
 }
 
-func (repo *RepositoryImpl) GetBootstrap(ctx context.Context, user *bootstrap.User, options BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
+func (repo *RepositoryImpl) getBootstrap(ctx context.Context, tx *sql.Tx, user *bootstrap.User, options BootstrapOptions) ([]response.ShopBootstrapSummary, error) {
 	const query = `
 SELECT
 	s.id,
@@ -239,7 +240,7 @@ INNER JOIN shops s ON s.id = sm.shop_id
 WHERE sm.user_id = $1
 ORDER BY s.created_at DESC NULLS LAST, s.id DESC`
 
-	rows, err := repo.db.QueryContext(ctx, query, user.UserID)
+	rows, err := tx.QueryContext(ctx, query, user.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shops bootstrap summaries: %w", err)
 	}
@@ -279,6 +280,9 @@ ORDER BY s.created_at DESC NULLS LAST, s.id DESC`
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate shops bootstrap summaries: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close bootstrap summaries: %w", err)
+	}
 	if len(shops) == 0 {
 		return shops, nil
 	}
@@ -288,7 +292,7 @@ ORDER BY s.created_at DESC NULLS LAST, s.id DESC`
 		shopIDs[i] = shop.ID
 	}
 
-	equipmentByShop, err := repo.getBootstrapEquipment(ctx, shopIDs, options.EquipmentLimitPerShop)
+	equipmentByShop, err := repo.getBootstrapEquipment(ctx, tx, shopIDs, options.EquipmentLimitPerShop)
 	if err != nil {
 		return nil, err
 	}
@@ -302,13 +306,12 @@ ORDER BY s.created_at DESC NULLS LAST, s.id DESC`
 	return shops, nil
 }
 
-func (repo *RepositoryImpl) getBootstrapEquipment(ctx context.Context, shopIDs []string, equipmentLimitPerShop int) (map[string][]response.ShopEquipmentSummary, error) {
+func (repo *RepositoryImpl) getBootstrapEquipment(ctx context.Context, tx *sql.Tx, shopIDs []string, equipmentLimitPerShop int) (map[string][]response.ShopEquipmentSummary, error) {
 	if len(shopIDs) == 0 {
 		return map[string][]response.ShopEquipmentSummary{}, nil
 	}
 
-	limitPlaceholder := len(shopIDs) + 1
-	query := fmt.Sprintf(`
+	query := (`
 WITH ranked_equipment AS (
 	SELECT
 		shop_id,
@@ -322,20 +325,16 @@ WITH ranked_equipment AS (
 			ORDER BY save_time DESC, id DESC
 		) AS equipment_rank
 	FROM shop_vehicle
-	WHERE shop_id IN (%s)
+	WHERE shop_id = ANY($1::text[])
 )
 SELECT shop_id, id, admin, model, serial, niin
 FROM ranked_equipment
-WHERE ($%d = 0 OR equipment_rank <= $%d)
-ORDER BY shop_id ASC, equipment_rank ASC`, shared.Placeholders(len(shopIDs)), limitPlaceholder, limitPlaceholder)
+WHERE ($2 = 0 OR equipment_rank <= $2)
+ORDER BY shop_id ASC, equipment_rank ASC`)
 
-	args := make([]any, 0, len(shopIDs)+1)
-	for _, shopID := range shopIDs {
-		args = append(args, shopID)
-	}
-	args = append(args, equipmentLimitPerShop)
+	args := []any{pq.Array(shopIDs), equipmentLimitPerShop}
 
-	rows, err := repo.db.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shops bootstrap equipment: %w", err)
 	}
@@ -365,7 +364,7 @@ ORDER BY shop_id ASC, equipment_rank ASC`, shared.Placeholders(len(shopIDs)), li
 	return equipmentByShop, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotSummary(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopSnapshotSummary, error) {
+func (repo *RepositoryImpl) getShopSnapshotSummary(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string) (*response.ShopSnapshotSummary, error) {
 	const query = `
 SELECT
 	s.id,
@@ -387,7 +386,7 @@ LIMIT 1`
 
 	var summary response.ShopSnapshotSummary
 	var details sql.NullString
-	err := repo.db.QueryRowContext(ctx, query, shopID, user.UserID).Scan(
+	err := tx.QueryRowContext(ctx, query, shopID, user.UserID).Scan(
 		&summary.ID,
 		&summary.Name,
 		&details,
@@ -411,7 +410,7 @@ LIMIT 1`
 	return &summary, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotVehicles(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicle, error) {
+func (repo *RepositoryImpl) getShopSnapshotVehicles(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicle, error) {
 	const query = `
 SELECT
 	v.id, v.creator_id, v.niin, v.admin, v.model, v.serial, v.uoc,
@@ -423,7 +422,7 @@ WHERE v.shop_id = $1
 ORDER BY v.save_time DESC, v.id ASC
 LIMIT NULLIF($3, 0)`
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot vehicles: %w", err)
 	}
@@ -465,8 +464,8 @@ LIMIT NULLIF($3, 0)`
 	return vehicles, nil
 }
 
-func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, user *bootstrap.User, shopID string, notificationLimit int, itemLimitPerNotification int) ([]response.VehicleNotificationWithItems, error) {
-	notifications, err := repo.getShopSnapshotNotifications(ctx, user, shopID, notificationLimit)
+func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, notificationLimit int, itemLimitPerNotification int) ([]response.VehicleNotificationWithItems, error) {
+	notifications, err := repo.getShopSnapshotNotifications(ctx, tx, user, shopID, notificationLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -479,7 +478,7 @@ func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, u
 		notificationIDs[i] = notification.ID
 	}
 
-	items, err := repo.getItemsByNotificationIDs(ctx, notificationIDs, itemLimitPerNotification)
+	items, err := repo.getItemsByNotificationIDs(ctx, tx, notificationIDs, itemLimitPerNotification)
 	if err != nil {
 		return nil, err
 	}
@@ -504,14 +503,14 @@ func (repo *RepositoryImpl) getShopNotificationsWithItems(ctx context.Context, u
 	return result, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicleNotifications, error) {
+func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limit int) ([]model.ShopVehicleNotifications, error) {
 	query := buildNotificationsQuery(
 		"n.shop_id = $1",
 		"INNER JOIN shop_members sm ON sm.shop_id = n.shop_id AND sm.user_id = $2",
 		3,
 	)
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot notifications: %w", err)
 	}
@@ -532,7 +531,7 @@ func (repo *RepositoryImpl) getShopSnapshotNotifications(ctx context.Context, us
 	return notifications, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotMessages(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.ShopMessageResponse, error) {
+func (repo *RepositoryImpl) getShopSnapshotMessages(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limit int) ([]response.ShopMessageResponse, error) {
 	const query = `
 SELECT msg.id, msg.shop_id, msg.user_id, msg.message, msg.created_at, msg.updated_at, msg.is_edited, msg.parent_id,
        NULLIF(BTRIM(u.username), '') AS author_username
@@ -543,7 +542,7 @@ WHERE msg.shop_id = $1
 ORDER BY msg.created_at DESC, msg.id ASC
 LIMIT NULLIF($3, 0)`
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot messages: %w", err)
 	}
@@ -585,14 +584,14 @@ LIMIT NULLIF($3, 0)`
 	return messages, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotServices(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.EquipmentServiceResponse, error) {
+func (repo *RepositoryImpl) getShopSnapshotServices(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limit int) ([]response.EquipmentServiceResponse, error) {
 	query := buildServiceQuery(
 		"es.shop_id = $1",
 		"INNER JOIN shop_members sm ON sm.shop_id = es.shop_id AND sm.user_id = $2",
 		3,
 	)
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot services: %w", err)
 	}
@@ -613,14 +612,14 @@ func (repo *RepositoryImpl) getShopSnapshotServices(ctx context.Context, user *b
 	return services, nil
 }
 
-func (repo *RepositoryImpl) getShopSnapshotRecentChanges(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
+func (repo *RepositoryImpl) getShopSnapshotRecentChanges(ctx context.Context, tx *sql.Tx, user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
 	query := buildRecentChangesQuery(
 		"c.shop_id = $1",
 		"INNER JOIN shop_members sm ON sm.shop_id = c.shop_id AND sm.user_id = $2",
 		3,
 	)
 
-	rows, err := repo.db.QueryContext(ctx, query, shopID, user.UserID, limit)
+	rows, err := tx.QueryContext(ctx, query, shopID, user.UserID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query shop snapshot changes: %w", err)
 	}

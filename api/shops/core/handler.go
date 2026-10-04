@@ -230,6 +230,7 @@ func (handler *Handler) UpdateShop(c *gin.Context) {
 		return
 	}
 
+	// Nil details preserve stored metadata; only a supplied string changes it.
 	shop := model.Shops{
 		ID:      shopID,
 		Name:    req.Name,

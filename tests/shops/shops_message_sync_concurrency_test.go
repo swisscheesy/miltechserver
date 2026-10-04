@@ -12,23 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// waitForLockWait polls until some backend is blocked on a heavyweight/row lock,
-// so ordering assertions never depend on wall-clock sleeps.
-func waitForLockWait(t *testing.T) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		var waiting int
-		require.NoError(t, testDB.QueryRow(
-			`SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting))
-		if waiting > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("no backend ever waited on a lock")
-}
-
 // insertMessageInTx returns an error instead of failing the test so it is safe
 // to call from goroutines (FailNow must only run on the test goroutine).
 func insertMessageInTx(tx *sql.Tx, shopID string) (int64, error) {
@@ -80,20 +63,23 @@ type insertOutcome struct {
 
 func TestMessageSyncConcurrencySecondWriterWaitsForFirstCommit(t *testing.T) {
 	shopID := seedShop(t, "Barrier")
-	ctx := context.Background()
 
-	txA, err := testDB.BeginTx(ctx, nil)
-	require.NoError(t, err)
-	defer func() { _ = txA.Rollback() }() // no-op after Commit; unblocks writer B if an assertion fails
+	txA, currentPID := allocatorSession(t)
+	txB, waitingPID := allocatorSession(t)
 	require.Equal(t, int64(1), txInsert(t, txA, shopID))
 
 	result := make(chan insertOutcome, 1)
 	go func() {
-		n, err := insertAndCommitInNewTx(ctx, shopID)
+		n, err := insertMessageInTx(txB, shopID)
+		if err == nil {
+			err = txB.Commit()
+		} else {
+			_ = txB.Rollback()
+		}
 		result <- insertOutcome{number: n, err: err}
 	}()
 
-	waitForLockWait(t)
+	waitForSessionBlock(t, waitingPID, currentPID)
 	select {
 	case outcome := <-result:
 		t.Fatalf("second writer finished (%d, err=%v) before the first committed", outcome.number, outcome.err)

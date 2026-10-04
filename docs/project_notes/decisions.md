@@ -628,8 +628,9 @@ Based on the current project setup:
 - Released clients and older server binaries insert messages and must keep
   working against the expanded schema; the `/shops/capabilities` answer must not
   promise sync before the schema exists
-- `response.ShopMessageResponse` embeds the jet model and is marshalled
-  directly, so the legacy JSON key set is a compatibility contract
+- Historical context at ADR-022 adoption: `response.ShopMessageResponse` embedded
+  the Jet model. The explicit DTO decision below supersedes that implementation;
+  the legacy JSON key set remains a compatibility contract
 
 **Decision:**
 - Migration 018 adds `shop_messages.insertion_number`, a `shop_message_counters`
@@ -640,9 +641,23 @@ Based on the current project setup:
   catalog probe finds the counter table and an enabled trigger (capability =
   flag AND probe); the probe is not backfill or fleet proof, so rollout gates
   stay operator-verified
-- The jet model for `shop_messages` is intentionally not regenerated; the sync
-  reader uses raw SQL and the legacy insert lists explicit columns. If it is
-  regenerated, the field needs `json:"-"`
+- Superseded on 2026-10-03: `response.ShopMessageResponse` now explicitly owns
+  the nine legacy fields, and legacy reads/readback select explicit columns.
+  Regenerate after every authorized migration/data repair through
+  `tools/jetregen`; `insertion_number` keeps its normal generated JSON tag but
+  cannot leak through the message DTO. Sync and aggregates use the same DTO.
+- Startup still requires tagged Jet generation before route registration, using
+  the application's actual database pool/port. The shared generator validates
+  legacy message column types/nullability, allowing pre/post-018 and compatible
+  extra columns, and publishes staged canonical `miltech_ng/<schema>` output
+  under a cross-process lock with backup/rollback. Publication uses two renames,
+  not an atomic exchange for readers outside that lock.
+- The generation manifest records the real source identity and schema catalog
+  digest separately from the canonical namespace. Runtime generation does not
+  rebuild or certify the running binary; release builds must use intended schema
+  inputs and pass the later migration/function/grant readiness gates. The
+  disposable fixture lacks `LookupLinNiinMat`, so its focused message probe is
+  not evidence of a complete freshly generated application build.
 - The migration takes `shops` then `shop_messages` locks (the cascading-delete
   order) and adds the counter foreign key after seeding; it is applied to live
   databases only through a checksum-pinned runner, `miltech_ng_test` first
@@ -675,3 +690,16 @@ Based on the current project setup:
 - Details: `docs/testing/shops-database.md`,
   `docs/testing/shops-message-sync-measurements.md`,
   `docs/testing/shops-release-contracts.md`
+
+### Shops remediation operational checkpoint (2026-10-04)
+
+The 019–023 runner takes one explicitly authorized forward action and stops for
+mandatory tagged generation. Named targets stay UNPINNED pending separate owner
+identity/source/schema/data and actual DB_USERNAME proof, test first then production.
+Every later action requires hash-pinned preceding target/schema/source generation
+evidence with all 32 PMCS hashes unchanged. No automatic reverse or repair. See
+[the release gate sheet](../testing/shops-server-remediation-release.md). This
+adds operational constraints without rewriting historical ADR evidence.
+
+Task 22 late-commit legacy cursor and numeric restore ABA limitations remain OPEN.
+C06 owner population/fleet/edge budget remains unknown; no numeric limit is assumed.

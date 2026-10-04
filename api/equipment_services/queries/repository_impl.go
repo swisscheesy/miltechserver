@@ -1,138 +1,66 @@
 package queries
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
 
-	"miltechserver/.gen/miltech_ng/public/model"
-	. "miltechserver/.gen/miltech_ng/public/table"
-	"miltechserver/api/request"
-	"miltechserver/bootstrap"
-
 	"github.com/go-jet/jet/v2/postgres"
 	. "github.com/go-jet/jet/v2/postgres"
+	"miltechserver/.gen/miltech_ng/public/model"
+	. "miltechserver/.gen/miltech_ng/public/table"
+	"miltechserver/api/equipment_services/shared"
+	"miltechserver/api/request"
+	shareddb "miltechserver/api/shared/db"
+	"miltechserver/bootstrap"
 )
 
-type RepositoryImpl struct {
-	db *sql.DB
+type RepositoryImpl struct{ db *sql.DB }
+
+func NewRepository(db *sql.DB) *RepositoryImpl { return &RepositoryImpl{db: db} }
+
+func (repo *RepositoryImpl) GetByShop(ctx context.Context, user *bootstrap.User, shopID string, req request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error) {
+	return repo.getPage(ctx, user, EquipmentServices.ShopID.EQ(String(shopID)), req, EquipmentServices.CreatedAt.DESC().NULLS_FIRST())
+}
+func (repo *RepositoryImpl) GetByEquipment(ctx context.Context, user *bootstrap.User, equipmentID string, req request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error) {
+	return repo.getPage(ctx, user, EquipmentServices.EquipmentID.EQ(String(equipmentID)), req, EquipmentServices.ServiceDate.DESC().NULLS_FIRST())
 }
 
-func NewRepository(db *sql.DB) *RepositoryImpl {
-	return &RepositoryImpl{db: db}
-}
-
-func (repo *RepositoryImpl) GetByShop(user *bootstrap.User, shopID string, filters request.GetEquipmentServicesRequest) ([]model.EquipmentServices, int64, error) {
-	conditions := []postgres.BoolExpression{
-		EquipmentServices.ShopID.EQ(String(shopID)),
+func (repo *RepositoryImpl) getPage(ctx context.Context, user *bootstrap.User, scope postgres.BoolExpression, req request.GetEquipmentServicesRequest, order postgres.OrderByClause) ([]model.EquipmentServices, int64, error) {
+	if user == nil {
+		return nil, 0, shared.ErrUnauthorizedUser
 	}
-
-	if filters.EquipmentID != nil {
-		conditions = append(conditions, EquipmentServices.EquipmentID.EQ(String(*filters.EquipmentID)))
-	}
-
-	if filters.ServiceType != nil {
-		conditions = append(conditions, EquipmentServices.ServiceType.LIKE(String("%"+*filters.ServiceType+"%")))
-	}
-
-	if filters.IsCompleted != nil {
-		conditions = append(conditions, EquipmentServices.IsCompleted.EQ(Bool(*filters.IsCompleted)))
-	}
-
-	if filters.StartDate != nil {
-		startTime, err := time.Parse(time.RFC3339, *filters.StartDate)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid start_date format: %w", err)
-		}
-		conditions = append(conditions, EquipmentServices.ServiceDate.GT_EQ(TimestampzT(startTime)))
-	}
-
-	if filters.EndDate != nil {
-		endTime, err := time.Parse(time.RFC3339, *filters.EndDate)
-		if err != nil {
-			return nil, 0, fmt.Errorf("invalid end_date format: %w", err)
-		}
-		conditions = append(conditions, EquipmentServices.ServiceDate.LT_EQ(TimestampzT(endTime)))
-	}
-
-	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(
-		EquipmentServices.
-			INNER_JOIN(ShopMembers,
-				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
-					AND(ShopMembers.UserID.EQ(String(user.UserID))),
-			),
-	).WHERE(postgres.AND(conditions...))
-
-	countQuery, countArgs := countStmt.Sql()
-	var totalCount int64
-	err := repo.db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
+	filters, err := shared.ServiceFiltersFromRequest(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count services: %w", err)
+		return nil, 0, err
 	}
-
-	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
-		EquipmentServices.
-			INNER_JOIN(ShopMembers,
-				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
-					AND(ShopMembers.UserID.EQ(String(user.UserID))),
-			),
-	).WHERE(postgres.AND(conditions...)).
-		ORDER_BY(EquipmentServices.CreatedAt.DESC()).
-		LIMIT(int64(filters.Limit)).
-		OFFSET(int64(filters.Offset))
-
 	var services []model.EquipmentServices
-	err = dataStmt.Query(repo.db, &services)
+	var total int64
+	// Both statements observe one committed version, including membership. Offset
+	// pages from later requests can still shift after inserts or deletions.
+	err = shareddb.WithTxOptions(ctx, repo.db, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true}, func(tx *sql.Tx) error {
+		predicate, err := shared.ServiceFilterPredicate(filters, time.Now())
+		if err != nil {
+			return err
+		}
+		predicate = scope.AND(predicate)
+		source := EquipmentServices.INNER_JOIN(ShopMembers, ShopMembers.ShopID.EQ(EquipmentServices.ShopID).AND(ShopMembers.UserID.EQ(String(user.UserID))))
+		countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(source).WHERE(predicate)
+		countQuery, countArgs := countStmt.Sql()
+		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
+			return fmt.Errorf("failed to count services: %w", err)
+		}
+		dataStmt := SELECT(EquipmentServices.AllColumns).FROM(source).WHERE(predicate).ORDER_BY(order, EquipmentServices.ID.ASC()).LIMIT(int64(req.Limit)).OFFSET(int64(req.Offset))
+		if err := dataStmt.QueryContext(ctx, tx, &services); err != nil {
+			return fmt.Errorf("failed to get services: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get services: %w", err)
+		return nil, 0, err
 	}
-
-	return services, totalCount, nil
+	return services, total, nil
 }
 
-func (repo *RepositoryImpl) GetByEquipment(user *bootstrap.User, equipmentID string, limit, offset int, startDate, endDate *time.Time) ([]model.EquipmentServices, int64, error) {
-	conditions := []postgres.BoolExpression{
-		EquipmentServices.EquipmentID.EQ(String(equipmentID)),
-	}
-
-	if startDate != nil {
-		conditions = append(conditions, EquipmentServices.ServiceDate.GT_EQ(TimestampzT(*startDate)))
-	}
-	if endDate != nil {
-		conditions = append(conditions, EquipmentServices.ServiceDate.LT_EQ(TimestampzT(*endDate)))
-	}
-
-	countStmt := SELECT(COUNT(Raw("*")).AS("count")).FROM(
-		EquipmentServices.
-			INNER_JOIN(ShopMembers,
-				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
-					AND(ShopMembers.UserID.EQ(String(user.UserID))),
-			),
-	).WHERE(postgres.AND(conditions...))
-
-	countQuery, countArgs := countStmt.Sql()
-	var totalCount int64
-	err := repo.db.QueryRow(countQuery, countArgs...).Scan(&totalCount)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to count services: %w", err)
-	}
-
-	dataStmt := SELECT(EquipmentServices.AllColumns).FROM(
-		EquipmentServices.
-			INNER_JOIN(ShopMembers,
-				ShopMembers.ShopID.EQ(EquipmentServices.ShopID).
-					AND(ShopMembers.UserID.EQ(String(user.UserID))),
-			),
-	).WHERE(postgres.AND(conditions...)).
-		ORDER_BY(EquipmentServices.ServiceDate.DESC()).
-		LIMIT(int64(limit)).
-		OFFSET(int64(offset))
-
-	var services []model.EquipmentServices
-	err = dataStmt.Query(repo.db, &services)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get services: %w", err)
-	}
-
-	return services, totalCount, nil
-}
+var _ Repository = (*RepositoryImpl)(nil)

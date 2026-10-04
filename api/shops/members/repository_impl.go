@@ -9,38 +9,37 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	dbutil "miltechserver/api/shared/db"
+	"miltechserver/api/shops/messages"
 	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	. "github.com/go-jet/jet/v2/postgres"
-	"golang.org/x/sync/errgroup"
-)
-
-const (
-	shopMessageImagesContainer = "shop-message-images"
-	blobOperationTimeout       = 30 * time.Second
-	maxConcurrentBlobDeletes   = 10
 )
 
 type RepositoryImpl struct {
 	db         *sql.DB
 	blobClient *azblob.Client
 	env        *bootstrap.Env
+	assets     messages.AssetRepository
 }
 
 func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *RepositoryImpl {
+	storage := messages.AssetStorage{Container: "shop-message-images"}
+	if env != nil {
+		storage.Account = env.BlobAccountName
+	}
 	return &RepositoryImpl{
 		db:         db,
 		blobClient: blobClient,
 		env:        env,
+		assets:     messages.NewAssetRepository(db, storage),
 	}
 }
 
-func (repo *RepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (repo *RepositoryImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
@@ -53,7 +52,7 @@ func (repo *RepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID string)
 	var result []struct {
 		Exists int `sql:"exists"`
 	}
-	err := stmt.Query(repo.db, &result)
+	err := stmt.QueryContext(ctx, repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check admin status: %w", err)
 	}
@@ -61,7 +60,7 @@ func (repo *RepositoryImpl) IsUserShopAdmin(user *bootstrap.User, shopID string)
 	return len(result) > 0, nil
 }
 
-func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (repo *RepositoryImpl) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(Int(1).AS("exists")).
 		FROM(ShopMembers).
 		WHERE(
@@ -73,7 +72,7 @@ func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID stri
 	var result []struct {
 		Exists int `sql:"exists"`
 	}
-	err := stmt.Query(repo.db, &result)
+	err := stmt.QueryContext(ctx, repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}
@@ -82,90 +81,192 @@ func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID stri
 }
 
 // Shop Member Operations
-func (repo *RepositoryImpl) AddMemberToShop(user *bootstrap.User, shopID string, role string) error {
-	curTime := time.Now().UTC()
-	member := model.ShopMembers{
-		ID:       fmt.Sprintf("%s_%s", shopID, user.UserID),
-		ShopID:   shopID,
-		UserID:   user.UserID,
-		Role:     role,
-		JoinedAt: &curTime,
+func (repo *RepositoryImpl) JoinViaInvite(ctx context.Context, user *bootstrap.User, code string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
 	}
-
-	stmt := ShopMembers.INSERT(
-		ShopMembers.ID,
-		ShopMembers.ShopID,
-		ShopMembers.UserID,
-		ShopMembers.Role,
-		ShopMembers.JoinedAt,
-	).MODEL(member).
-		ON_CONFLICT(ShopMembers.ShopID, ShopMembers.UserID).
-		DO_UPDATE(SET(ShopMembers.Role.SET(String(role))))
-
-	_, err := stmt.Exec(repo.db)
+	var admittedShopID string
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		var invite model.ShopInviteCodes
+		resolve := SELECT(ShopInviteCodes.AllColumns).FROM(ShopInviteCodes).
+			WHERE(ShopInviteCodes.Code.EQ(String(code)))
+		if err := resolve.QueryContext(ctx, tx, &invite); err != nil {
+			return fmt.Errorf("invalid invite code: %w", err)
+		}
+		// Admission has no member yet. Lock the persisted Shop before checking
+		// the invite again so revocation and membership changes share one order.
+		var shop model.Shops
+		lockShop := SELECT(Shops.ID).FROM(Shops).WHERE(Shops.ID.EQ(String(invite.ShopID))).FOR(UPDATE())
+		if err := lockShop.QueryContext(ctx, tx, &shop); err != nil {
+			return fmt.Errorf("invalid invite code: %w", err)
+		}
+		recheck := SELECT(ShopInviteCodes.AllColumns).FROM(ShopInviteCodes).
+			WHERE(ShopInviteCodes.ID.EQ(String(invite.ID)).AND(ShopInviteCodes.ShopID.EQ(String(shop.ID))).AND(ShopInviteCodes.Code.EQ(String(code))))
+		if err := recheck.QueryContext(ctx, tx, &invite); err != nil {
+			return fmt.Errorf("invalid invite code: %w", err)
+		}
+		if invite.IsActive != nil && !*invite.IsActive {
+			return errors.New("invite code is inactive")
+		}
+		var existing []model.ShopMembers
+		memberQuery := SELECT(ShopMembers.ID).FROM(ShopMembers).
+			WHERE(ShopMembers.ShopID.EQ(String(shop.ID)).AND(ShopMembers.UserID.EQ(String(user.UserID))))
+		if err := memberQuery.QueryContext(ctx, tx, &existing); err != nil {
+			return fmt.Errorf("failed to check membership: %w", err)
+		}
+		if len(existing) != 0 {
+			return errors.New("user is already a member of this shop")
+		}
+		now := time.Now().UTC()
+		member := model.ShopMembers{ID: fmt.Sprintf("%s_%s", shop.ID, user.UserID), ShopID: shop.ID, UserID: user.UserID, Role: "member", JoinedAt: &now}
+		stmt := ShopMembers.INSERT(ShopMembers.ID, ShopMembers.ShopID, ShopMembers.UserID, ShopMembers.Role, ShopMembers.JoinedAt).
+			MODEL(member).ON_CONFLICT(ShopMembers.ShopID, ShopMembers.UserID).DO_NOTHING()
+		result, err := stmt.ExecContext(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("failed to add member to shop: %w", err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if rows == 0 {
+			return errors.New("user is already a member of this shop")
+		}
+		admittedShopID = shop.ID
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("failed to add member to shop: %w", err)
+		return err
 	}
-
-	slog.Info("Member added to shop", "shop_id", shopID, "user_id", user.UserID, "role", role)
+	slog.Info("shop_joined", "shop_id", admittedShopID, "outcome", "success")
 	return nil
 }
 
-func (repo *RepositoryImpl) RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
+func (repo *RepositoryImpl) LeaveShop(ctx context.Context, user *bootstrap.User, shopID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+	return repo.departMember(ctx, user, shopID, user.UserID, false)
+}
+
+func (repo *RepositoryImpl) RemoveMemberFromShop(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+	if user.UserID == targetUserID {
+		return errors.New("use leave shop endpoint to remove yourself")
+	}
+	return repo.departMember(ctx, user, shopID, targetUserID, true)
+}
+
+func (repo *RepositoryImpl) departMember(ctx context.Context, user *bootstrap.User, shopID, targetUserID string, requiresAdmin bool) error {
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		admin, _, err := shared.LockShopMutation(ctx, tx, shopID, user.UserID)
+		if err != nil {
+			return err
+		}
+		if requiresAdmin && !admin {
+			return shared.ErrShopAdminRequired
+		}
+		targetAdmin, err := shared.RequireShopMember(ctx, tx, shopID, targetUserID)
+		if err != nil {
+			return err
+		}
+		count, err := shopMemberCount(ctx, tx, shopID, false)
+		if err != nil {
+			return err
+		}
+		if count == 1 {
+			return repo.deleteFinalMemberShop(ctx, tx, shopID, targetUserID)
+		}
+		if targetAdmin {
+			admins, err := shopMemberCount(ctx, tx, shopID, true)
+			if err != nil {
+				return err
+			}
+			if admins == 1 {
+				return &shared.Failure{Code: "conflict", Status: 409, PublicMessage: "promote another member to admin before leaving the shop"}
+			}
+		}
+		stmt := ShopMembers.DELETE().WHERE(ShopMembers.ShopID.EQ(String(shopID)).AND(ShopMembers.UserID.EQ(String(targetUserID))))
+		result, err := stmt.ExecContext(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("failed to remove member from shop: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if affected != 1 {
+			return shared.ErrMemberNotFound
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	slog.Info("Member departed shop", "shop_id", shopID, "removed_user_id", targetUserID, "removed_by", user.UserID)
+	return nil
+}
+
+// The Shop lock serializes admission, role changes and departure before these counts.
+func shopMemberCount(ctx context.Context, tx *sql.Tx, shopID string, adminsOnly bool) (int64, error) {
+	condition := ShopMembers.ShopID.EQ(String(shopID))
+	if adminsOnly {
+		condition = condition.AND(ShopMembers.Role.EQ(String("admin")))
+	}
+	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).FROM(ShopMembers).WHERE(condition)
+	var result struct{ Count int64 }
+	if err := stmt.QueryContext(ctx, tx, &result); err != nil {
+		return 0, fmt.Errorf("failed to get member count: %w", err)
+	}
+	return result.Count, nil
+}
+
+// Final-member cleanup is independent of original ownership. Recheck the exact
+// current member under the caller's Shop lock before deleting the aggregate.
+func (repo *RepositoryImpl) deleteFinalMemberShop(ctx context.Context, tx *sql.Tx, shopID, userID string) error {
+	if _, err := shared.RequireShopMember(ctx, tx, shopID, userID); err != nil {
+		return err
+	}
+	count, err := shopMemberCount(ctx, tx, shopID, false)
 	if err != nil {
 		return err
 	}
-	if user.UserID != targetUserID && !admin {
-		return shared.ErrShopAdminRequired
+	if count != 1 {
+		return &shared.Failure{Code: "conflict", Status: 409, PublicMessage: "shop membership changed; retry leaving the shop"}
 	}
-	if _, err := shared.RequireShopMember(context.Background(), tx, shopID, targetUserID); err != nil {
+	if err := repo.assets.EnqueueShopCleanup(ctx, tx, shopID); err != nil {
 		return err
 	}
-
-	stmt := ShopMembers.DELETE().
-		WHERE(
-			ShopMembers.ShopID.EQ(String(shopID)).
-				AND(ShopMembers.UserID.EQ(String(targetUserID))),
-		)
-
-	result, err := stmt.Exec(tx)
+	result, err := Shops.DELETE().WHERE(Shops.ID.EQ(String(shopID))).ExecContext(ctx, tx)
 	if err != nil {
-		return fmt.Errorf("failed to remove member from shop: %w", err)
+		return fmt.Errorf("failed to delete shop: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
+	affected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-
-	if rowsAffected == 0 {
-		return errors.New("member not found in shop")
+	if affected != 1 {
+		return shared.ErrShopNotFound
 	}
-
-	slog.Info("Member removed from shop", "shop_id", shopID, "removed_user_id", targetUserID, "removed_by", user.UserID)
-	return tx.Commit()
+	return nil
 }
 
-func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string, targetUserID string, newRole string) error {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
+func (repo *RepositoryImpl) UpdateMemberRole(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string, newRole string) error {
+	tx, err := repo.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	admin, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID)
+	admin, _, err := shared.LockShopMutation(ctx, tx, shopID, user.UserID)
 	if err != nil {
 		return err
 	}
 	if !admin {
 		return shared.ErrShopAdminRequired
 	}
-	if _, err := shared.RequireShopMember(context.Background(), tx, shopID, targetUserID); err != nil {
+	if _, err := shared.RequireShopMember(ctx, tx, shopID, targetUserID); err != nil {
 		return err
 	}
 
@@ -178,7 +279,7 @@ func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string
 			AND(ShopMembers.UserID.EQ(String(targetUserID))),
 	)
 
-	result, err := stmt.Exec(tx)
+	result, err := stmt.ExecContext(ctx, tx)
 	if err != nil {
 		return fmt.Errorf("failed to update member role: %w", err)
 	}
@@ -196,7 +297,7 @@ func (repo *RepositoryImpl) UpdateMemberRole(user *bootstrap.User, shopID string
 	return tx.Commit()
 }
 
-func (repo *RepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
+func (repo *RepositoryImpl) GetShopMembers(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error) {
 	rawSQL := `
 		SELECT 
 			sm.id,
@@ -211,7 +312,7 @@ func (repo *RepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) 
 		ORDER BY sm.joined_at ASC
 	`
 
-	rows, err := repo.db.Query(rawSQL, shopID)
+	rows, err := repo.db.QueryContext(ctx, rawSQL, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop members: %w", err)
 	}
@@ -232,123 +333,4 @@ func (repo *RepositoryImpl) GetShopMembers(user *bootstrap.User, shopID string) 
 	}
 
 	return members, nil
-}
-
-func (repo *RepositoryImpl) GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error) {
-	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
-		FROM(ShopMembers).
-		WHERE(ShopMembers.ShopID.EQ(String(shopID)))
-
-	var result struct {
-		Count int64 `sql:"primary_key"`
-	}
-	err := stmt.Query(repo.db, &result)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get member count: %w", err)
-	}
-
-	return result.Count, nil
-}
-
-func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) error {
-	tx, err := repo.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	if _, _, err := shared.LockShopMutation(context.Background(), tx, shopID, user.UserID); err != nil {
-		return err
-	}
-	var memberCount int
-	if err := tx.QueryRow(`SELECT count(*) FROM shop_members WHERE shop_id=$1`, shopID).Scan(&memberCount); err != nil {
-		return fmt.Errorf("failed to recheck shop member count: %w", err)
-	}
-	if memberCount != 1 {
-		return errors.New("shop membership changed; retry leaving the shop")
-	}
-
-	stmt := Shops.DELETE().WHERE(
-		Shops.ID.EQ(String(shopID)).
-			AND(Shops.CreatedBy.EQ(String(user.UserID))),
-	)
-
-	result, err := stmt.Exec(tx)
-	if err != nil {
-		return fmt.Errorf("failed to delete shop: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("shop not found or user not authorized to delete")
-	}
-
-	slog.Info("Shop deleted from database", "shop_id", shopID, "deleted_by", user.UserID)
-	return tx.Commit()
-}
-
-func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
-	if repo.blobClient == nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), blobOperationTimeout)
-	defer cancel()
-
-	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)
-
-	prefix := fmt.Sprintf("%s/", shopID)
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix: &prefix,
-	})
-
-	var deletedCount int64
-	var errorCount int64
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(maxConcurrentBlobDeletes)
-
-	for pager.More() {
-		page, err := pager.NextPage(groupCtx)
-		if err != nil {
-			slog.Warn("Failed to list blobs for shop deletion", "shop_id", shopID, "error", err)
-			break
-		}
-
-		for _, blob := range page.Segment.BlobItems {
-			if blob.Name == nil {
-				continue
-			}
-
-			blobName := *blob.Name
-			group.Go(func() error {
-				_, err := repo.blobClient.DeleteBlob(groupCtx, shopMessageImagesContainer, blobName, nil)
-				if err != nil {
-					slog.Warn("Failed to delete shop message blob",
-						"shop_id", shopID,
-						"blob_name", blobName,
-						"error", err)
-					atomic.AddInt64(&errorCount, 1)
-					return nil
-				}
-
-				atomic.AddInt64(&deletedCount, 1)
-				return nil
-			})
-		}
-	}
-
-	if err := group.Wait(); err != nil {
-		slog.Warn("Blob deletion group exited with error", "shop_id", shopID, "error", err)
-	}
-
-	slog.Info("Shop message blobs cleanup completed",
-		"shop_id", shopID,
-		"deleted_count", deletedCount,
-		"error_count", errorCount)
-
-	return nil
 }

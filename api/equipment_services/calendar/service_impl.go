@@ -30,27 +30,30 @@ func (service *ServiceImpl) GetCalendarServices(ctx context.Context, user *boots
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	if err := service.authorization.RequireShopMember(user, shopID); err != nil {
+	if err := service.authorization.RequireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 
 	startDate, err := time.Parse(time.RFC3339, req.StartDate)
 	if err != nil {
-		return nil, fmt.Errorf("invalid start_date format: %w", err)
+		return nil, shared.ErrInvalidStartDate
 	}
 
 	endDate, err := time.Parse(time.RFC3339, req.EndDate)
 	if err != nil {
-		return nil, fmt.Errorf("invalid end_date format: %w", err)
+		return nil, shared.ErrInvalidEndDate
 	}
 
-	services, err := service.repo.GetInDateRange(user, shopID, startDate, endDate, req.EquipmentID)
+	services, err := service.repo.GetInDateRange(ctx, user, shopID, startDate, endDate, req.EquipmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get services in date range: %w", err)
 	}
 
 	usernameCache := shared.NewUsernameCache(service.usernameResolver)
-	responseServices := shared.MapServicesToResponses(services, usernameCache)
+	responseServices, err := shared.MapServicesToResponses(ctx, services, usernameCache)
+	if err != nil {
+		return nil, fmt.Errorf("resolve equipment service usernames: %w", err)
+	}
 
 	return &response.CalendarServicesResponse{
 		DateRange: struct {

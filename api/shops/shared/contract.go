@@ -35,6 +35,9 @@ func ContractMiddleware(c *gin.Context) {
 		WriteFailure(c, &Failure{Code: code, PublicMessage: message, Status: status}, status, message)
 	})
 	c.Next()
+	if !c.Writer.Written() && len(c.Errors) > 0 {
+		HandleContractError(c, c.Errors[0].Err)
+	}
 }
 func RequireContract2(c *gin.Context) bool {
 	if UsesContract2(c) {
@@ -90,6 +93,8 @@ var publicResponseMessages = map[string]bool{
 	"shop_id is required":                            true,
 	"unauthorized":                                   true,
 	"vehicle_id is required":                         true,
+
+	"invite expiry and max-use controls are not supported": true,
 
 	// The usage handler emits these fixed public messages for legacy requests.
 	"shop access denied":     true,

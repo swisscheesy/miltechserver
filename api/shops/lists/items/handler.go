@@ -5,6 +5,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,7 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	var req request.AddListItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -46,6 +47,10 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	service := handler.service
 	createdItem, err := service.AddListItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -100,7 +105,7 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	var req request.UpdateListItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -116,6 +121,10 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	service := handler.service
 	err := service.UpdateListItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -165,7 +174,7 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	var req request.AddListItemBatchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -185,6 +194,10 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	service := handler.service
 	createdItems, err := service.AddListItemBatch(c.Request.Context(), user, items)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -217,7 +230,7 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveListItemBatch(c.Request.Context(), user, req.ItemIDs)
+	count, err := service.RemoveListItemBatch(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return
@@ -226,5 +239,5 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 	// "count") that response.OK()'s single data field cannot represent
 	// without nesting it under "data", changing this response's shape.
-	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
+	c.JSON(200, gin.H{"message": "Items removed successfully", "count": count})
 }

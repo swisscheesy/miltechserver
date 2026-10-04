@@ -125,6 +125,10 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	service := handler.service
 	createdVehicle, err := service.CreateShopVehicle(c.Request.Context(), user, vehicle)
 	if err != nil {
+		if errors.Is(err, ErrInvalidUsageAdjustment) {
+			writeVehicleError(c, err)
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -210,22 +214,11 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 		return
 	}
 
-	vehicle := model.ShopVehicle{
-		ID:             req.VehicleID,
-		Admin:          req.Admin,
-		Niin:           req.Niin,
-		Model:          req.Model,
-		Serial:         req.Serial,
-		Uoc:            req.Uoc,
-		Mileage:        req.Mileage,
-		Hours:          req.Hours,
-		Comment:        req.Comment,
-		TrackedMileage: req.TrackedMileage,
-		TrackedHours:   req.TrackedHours,
+	input := VehicleUpdateInput{
+		Metadata:       VehicleMetadataUpdate{VehicleID: req.VehicleID, Admin: req.Admin, Niin: req.Niin, Model: req.Model, Serial: req.Serial, Uoc: req.Uoc, Mileage: req.Mileage, Hours: req.Hours, Comment: req.Comment},
+		TrackedMileage: req.TrackedMileage, TrackedHours: req.TrackedHours,
 	}
-
-	service := handler.service
-	err := service.UpdateShopVehicle(c.Request.Context(), user, vehicle)
+	err := handler.service.UpdateShopVehicle(c.Request.Context(), user, input)
 	if err != nil {
 		if errors.Is(err, ErrInvalidUsageAdjustment) {
 			writeVehicleError(c, err)

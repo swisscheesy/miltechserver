@@ -31,11 +31,11 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	var req request.AddNotificationItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 	if !shared.ValidNotificationItemFields(req.Nickname, req.UnitOfMeasure) {
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -51,6 +51,10 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	service := handler.service
 	createdItem, err := service.AddNotificationItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -132,18 +136,22 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	var req request.AddNotificationItemListRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		response.Error(c, 400, "invalid request")
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
 	var items []model.ShopNotificationItems
 	for _, reqItem := range req.Items {
+		if reqItem.NotificationID != nil && *reqItem.NotificationID != req.NotificationID {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		if !shared.ValidNotificationItemFields(reqItem.Nickname, reqItem.UnitOfMeasure) {
-			response.Error(c, 400, "invalid request")
+			shared.WriteValidationError(c, "invalid request")
 			return
 		}
 		item := model.ShopNotificationItems{
-			NotificationID: reqItem.NotificationID,
+			NotificationID: req.NotificationID,
 			Niin:           reqItem.Niin,
 			Nomenclature:   reqItem.Nomenclature,
 			Quantity:       reqItem.Quantity,
@@ -156,6 +164,10 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	service := handler.service
 	createdItems, err := service.AddNotificationItemList(c.Request.Context(), user, items)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
@@ -215,7 +227,7 @@ func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.RemoveNotificationItemList(c.Request.Context(), user, req.ItemIDs)
+	count, err := service.RemoveNotificationItemList(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return
@@ -224,5 +236,5 @@ func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	// Kept as a raw gin.H{} response: flat multi-field body ("message" +
 	// "count") that response.OK()'s single data field cannot represent
 	// without nesting it under "data", changing this response's shape.
-	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
+	c.JSON(200, gin.H{"message": "Items removed successfully", "count": count})
 }

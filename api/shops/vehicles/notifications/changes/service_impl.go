@@ -22,12 +22,12 @@ func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, us
 		return nil, errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -36,7 +36,7 @@ func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, us
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChanges(user, notificationID)
+	changes, err := service.repo.GetNotificationChanges(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification changes: %w", err)
 	}
@@ -51,7 +51,7 @@ func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -60,7 +60,7 @@ func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChangesByShop(user, shopID, limit)
+	changes, err := service.repo.GetNotificationChangesByShop(ctx, user, shopID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notification changes: %w", err)
 	}
@@ -74,12 +74,12 @@ func (service *ServiceImpl) GetVehicleNotificationChanges(ctx context.Context, u
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -88,7 +88,7 @@ func (service *ServiceImpl) GetVehicleNotificationChanges(ctx context.Context, u
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChangesByVehicle(user, vehicleID)
+	changes, err := service.repo.GetNotificationChangesByVehicle(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notification changes: %w", err)
 	}

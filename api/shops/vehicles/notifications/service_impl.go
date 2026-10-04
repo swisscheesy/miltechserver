@@ -9,6 +9,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/api/shops/shared"
+	notificationitems "miltechserver/api/shops/vehicles/notifications/items"
 	"miltechserver/bootstrap"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 	}
 }
 
-func (service *ServiceImpl) validateAttachedShopList(user *bootstrap.User, shopID string, attachedShopList *string) error {
+func (service *ServiceImpl) validateAttachedShopList(ctx context.Context, user *bootstrap.User, shopID string, attachedShopList *string) error {
 	if attachedShopList == nil {
 		return nil
 	}
@@ -43,7 +44,7 @@ func (service *ServiceImpl) validateAttachedShopList(user *bootstrap.User, shopI
 		return errors.New("invalid attached_shop_list")
 	}
 
-	list, err := service.repo.GetShopListByID(user, *attachedShopList)
+	list, err := service.repo.GetShopListByID(ctx, user, *attachedShopList)
 	if err != nil {
 		if errors.Is(err, errShopListNotFound) {
 			return errors.New("invalid attached_shop_list")
@@ -57,16 +58,21 @@ func (service *ServiceImpl) validateAttachedShopList(user *bootstrap.User, shopI
 }
 
 func (service *ServiceImpl) CreateVehicleNotification(ctx context.Context, user *bootstrap.User, notification model.ShopVehicleNotifications) (*model.ShopVehicleNotifications, error) {
+	ctx = notificationitems.WithAuditCorrelation(ctx)
+	if err := shared.ValidateNotificationFields(notification.Title, notification.Type); err != nil {
+		return nil, err
+	}
+
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, notification.VehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -77,7 +83,7 @@ func (service *ServiceImpl) CreateVehicleNotification(ctx context.Context, user 
 
 	notification.ID = uuid.New().String()
 	notification.ShopID = vehicle.ShopID
-	if err := service.validateAttachedShopList(user, notification.ShopID, notification.AttachedShopList); err != nil {
+	if err := service.validateAttachedShopList(ctx, user, notification.ShopID, notification.AttachedShopList); err != nil {
 		return nil, err
 	}
 
@@ -97,12 +103,13 @@ func (service *ServiceImpl) CreateVehicleNotification(ctx context.Context, user 
 		return nil, errors.New("invalid notification type: must be M1, PM, or MW")
 	}
 
-	createdNotification, err := service.repo.CreateVehicleNotification(user, notification)
+	createdNotification, err := service.repo.CreateVehicleNotification(ctx, user, notification)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create vehicle notification: %w", err)
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		notification.ID,
 		notification.ShopID,
@@ -123,12 +130,12 @@ func (service *ServiceImpl) GetVehicleNotifications(ctx context.Context, user *b
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -137,7 +144,7 @@ func (service *ServiceImpl) GetVehicleNotifications(ctx context.Context, user *b
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	notifications, err := service.repo.GetVehicleNotifications(user, vehicleID)
+	notifications, err := service.repo.GetVehicleNotifications(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notifications: %w", err)
 	}
@@ -154,21 +161,8 @@ func (service *ServiceImpl) GetVehicleNotificationsWithItems(ctx context.Context
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get vehicle: %w", err)
-	}
-
-	isMember, err := service.repo.IsUserMemberOfShop(user, vehicle.ShopID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify membership: %w", err)
-	}
-
-	if !isMember {
-		return nil, errors.New("access denied: user is not a member of this shop")
-	}
-
-	notificationsWithItems, err := service.repo.GetVehicleNotificationsWithItems(user, vehicleID)
+	// The repository authorizes and assembles this combined read in one snapshot.
+	notificationsWithItems, err := service.repo.GetVehicleNotificationsWithItems(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notifications with items: %w", err)
 	}
@@ -185,7 +179,7 @@ func (service *ServiceImpl) GetShopNotifications(ctx context.Context, user *boot
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -194,7 +188,7 @@ func (service *ServiceImpl) GetShopNotifications(ctx context.Context, user *boot
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	notifications, err := service.repo.GetShopNotifications(user, shopID)
+	notifications, err := service.repo.GetShopNotifications(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notifications: %w", err)
 	}
@@ -211,12 +205,12 @@ func (service *ServiceImpl) GetVehicleNotificationByID(ctx context.Context, user
 		return nil, errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notification: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -229,23 +223,28 @@ func (service *ServiceImpl) GetVehicleNotificationByID(ctx context.Context, user
 }
 
 func (service *ServiceImpl) UpdateVehicleNotification(ctx context.Context, user *bootstrap.User, update VehicleNotificationUpdate) error {
+	ctx = notificationitems.WithAuditCorrelation(ctx)
+	if err := shared.ValidateNotificationFields(update.Notification.Title, update.Notification.Type); err != nil {
+		return err
+	}
+
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
 
 	notification := update.Notification
 
-	currentNotification, err := service.repo.GetVehicleNotificationByID(user, notification.ID)
+	currentNotification, err := service.repo.GetVehicleNotificationByID(ctx, user, notification.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get current notification: %w", err)
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, currentNotification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, currentNotification.VehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, currentNotification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, currentNotification.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -255,7 +254,7 @@ func (service *ServiceImpl) UpdateVehicleNotification(ctx context.Context, user 
 	}
 
 	if update.AttachedShopListSet {
-		if err := service.validateAttachedShopList(user, currentNotification.ShopID, update.AttachedShopList); err != nil {
+		if err := service.validateAttachedShopList(ctx, user, currentNotification.ShopID, update.AttachedShopList); err != nil {
 			return err
 		}
 		update.Notification.AttachedShopList = update.AttachedShopList
@@ -275,12 +274,13 @@ func (service *ServiceImpl) UpdateVehicleNotification(ctx context.Context, user 
 	changeType := determineChangeType(currentNotification, &notification)
 
 	update.Notification = notification
-	err = service.repo.UpdateVehicleNotification(user, update)
+	err = service.repo.UpdateVehicleNotification(ctx, user, update)
 	if err != nil {
 		return fmt.Errorf("failed to update vehicle notification: %w", err)
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		notification.ID,
 		currentNotification.ShopID,
@@ -297,21 +297,22 @@ func (service *ServiceImpl) UpdateVehicleNotification(ctx context.Context, user 
 }
 
 func (service *ServiceImpl) DeleteVehicleNotification(ctx context.Context, user *bootstrap.User, notificationID string) error {
+	ctx = notificationitems.WithAuditCorrelation(ctx)
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, notificationID)
 	if err != nil {
 		return fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, notification.VehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, notification.VehicleID)
 	if err != nil {
 		return fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -321,6 +322,7 @@ func (service *ServiceImpl) DeleteVehicleNotification(ctx context.Context, user 
 	}
 
 	service.recordNotificationChange(
+		ctx,
 		user,
 		notificationID,
 		notification.ShopID,
@@ -332,7 +334,7 @@ func (service *ServiceImpl) DeleteVehicleNotification(ctx context.Context, user 
 		vehicle.Admin,
 	)
 
-	err = service.repo.DeleteVehicleNotification(user, notificationID)
+	err = service.repo.DeleteVehicleNotification(ctx, user, notificationID)
 	if err != nil {
 		return fmt.Errorf("failed to delete vehicle notification: %w", err)
 	}
@@ -343,6 +345,7 @@ func (service *ServiceImpl) DeleteVehicleNotification(ctx context.Context, user 
 
 // recordNotificationChange is a helper to record audit trail changes (best-effort)
 func (service *ServiceImpl) recordNotificationChange(
+	ctx context.Context,
 	user *bootstrap.User,
 	notificationID string,
 	shopID string,
@@ -368,9 +371,9 @@ func (service *ServiceImpl) recordNotificationChange(
 		VehicleAdmin:      &vehicleAdmin,
 	}
 
-	err := service.repo.CreateNotificationChange(user, change)
+	err := service.repo.CreateNotificationChange(ctx, user, change)
 	if err != nil {
-		slog.Warn("Failed to record notification change", "error", err, "notification_id", notificationID, "change_type", changeType)
+		notificationitems.WarnLegacyAuditFailure(ctx, changeType, shopID, vehicleID, notificationID, user.UserID, err)
 	}
 }
 

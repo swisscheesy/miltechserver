@@ -76,7 +76,7 @@ func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopAdminOnlyListsSetting(c.Request.Context(), user, shopID, req.AdminOnlyLists)
+	err := service.UpdateShopAdminOnlyListsSetting(c.Request.Context(), user, shopID, *req.AdminOnlyLists)
 	if err != nil {
 		c.Error(err)
 		return
@@ -89,7 +89,7 @@ func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 		Message: "Shop admin_only_lists setting updated successfully",
 		Data: gin.H{
 			"shop_id":          shopID,
-			"admin_only_lists": req.AdminOnlyLists,
+			"admin_only_lists": *req.AdminOnlyLists,
 		},
 	})
 }

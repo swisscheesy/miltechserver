@@ -411,7 +411,7 @@ the application role also inserts into and updates `shop_message_counters`, so
 that role must own the new table or hold privileges on it. The runner connects
 as `postgres` and the application role name is not on record, so the runner does
 not check this (it cannot know the role); it is a documented operator step.
-`<app_role>` below is the role in the server's `DB_USER`/DSN, to be confirmed by
+`<app_role>` below is the role in the server's `DB_USERNAME`/DSN, to be confirmed by
 the operator.
 
 Before applying, as the runner role, check that the app role writes the sibling
@@ -419,16 +419,28 @@ table 016 created the same way. If the application writes it today, default
 privileges or a shared role are already in place:
 
 ```sql
-SELECT has_table_privilege('<app_role>', 'public.shop_notification_operations', 'INSERT,UPDATE');
+SELECT has_table_privilege('<app_role>', 'public.shop_notification_operations', 'INSERT')
+   AND has_table_privilege('<app_role>', 'public.shop_notification_operations', 'UPDATE')
+   AND has_table_privilege('<app_role>', 'public.shop_notification_operations', 'SELECT');
 ```
 
 After applying (still before deploying the binary or enabling the flag):
 
 ```sql
-SELECT has_table_privilege('<app_role>', 'public.shop_message_counters', 'INSERT,UPDATE,SELECT');
+SELECT has_table_privilege('<app_role>', 'public.shop_message_counters', 'INSERT')
+   AND has_table_privilege('<app_role>', 'public.shop_message_counters', 'UPDATE')
+   AND has_table_privilege('<app_role>', 'public.shop_message_counters', 'SELECT');
 ```
 
-Both must return `t`. Consequence if the post-migration check is `f`: **every
+Every individual privilege must hold: PostgreSQL comma-separated privilege strings
+mean **any**, not all. Substitute only the owner-confirmed `DB_USERNAME`, then
+verify `current_user` under that effective application role and perform an actual
+legacy-shaped INSERT that is numbered (use an approved fixture and roll back the
+proof). Migration-owner privileges cannot substitute for application-role proof.
+After 019, the invoker also needs Shop SELECT and a lock-capable UPDATE privilege.
+The guarded remediation runner checks these separately in its migration session.
+
+Both AND expressions must return `t`. Consequence if the post-migration check is `f`: **every
 message insert fails after the migration commits, including released clients on
 the legacy path**, because the trigger's counter write is denied. Remedy: a
 `GRANT INSERT, UPDATE, SELECT ON public.shop_message_counters TO <app_role>` or
@@ -594,27 +606,30 @@ messages or receive 400 (bound < start) from catch-up. Require every client to
 restart or reopen the shop after a rollback and re-apply cycle. Rehearse only on
 disposable databases.
 
-### Known failures unrelated to 018
+### Historical failures unrelated to 018 (superseded)
 
-Both pre-date this work on the base branch and are not fixed here:
+Both failures below predated the remediation and are now repaired; retain these original diagnostics as historical evidence, not current release instructions:
 
 - `tests/shops` `TestAtomicNotificationItemFieldsSurviveReleasedClientSaves`
-  fails (expected 1, actual 0).
-- `scripts/test-shops-isolated_test.py` fails at import since the wrapper
-  refactor `f459eb4` moved the anchors it slices.
+  formerly failed (F32: expected 1, actual 0). The regression now asserts the actual
+  stored audit kind/payload and two-change/default-only behavior;
+  see `shops-server-remediation-acceptance.md` for current verification.
+- The obsolete import-anchor slicing in `scripts/test-shops-isolated_test.py`
+  was replaced by behavioral wrapper/cleanup tests during the server remediation.
 
 ## Invocation
 
-Unset `TEST_DATABASE_URL` and `TEST_DATABASE_MARKER` first, then run:
+Unset `TEST_DATABASE_URL`, `TEST_DATABASE_MARKER` and `TEST_DB_URL` first, then run:
 
 ```sh
 scripts/test-shops-isolated.sh ./tests/shops ./tests/equipment_services -count=1
 ```
 
 The wrapper requires local `initdb`, `pg_ctl`, `psql`, `createdb`, Python 3, Go,
-`shasum`, `awk`, and `sed`. It creates an ephemeral local cluster, restores the
-approved baseline, applies its explicit later migrations, writes and verifies a
-random 256-bit marker, passes the exact DSN to tests, and removes the cluster
+`shasum`, `awk`, `sed`, `rg`, and Git. It creates an ephemeral local cluster, restores the
+approved baseline, writes and verifies a random 256-bit marker, applies its explicit later
+migrations, freshly generates and builds the isolated candidate, passes the exact
+validated DSN to serialized tests (`go test -p 1`), and removes the cluster
 on exit or signals. The provisioning path is confined to the approved fixture
 and disposable PostgreSQL.
 Local trust authentication is confined to this disposable cluster on loopback and
@@ -654,3 +669,95 @@ and `-shuffle`; flags taking a value accept either Go spelling.
 
 References: [Go database/sql](https://pkg.go.dev/database/sql),
 [PostgreSQL advisory locks](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS).
+
+## Fresh candidate generation and remediation rehearsal
+
+```sh
+env -u TEST_DATABASE_URL -u TEST_DATABASE_MARKER -u TEST_DB_URL \
+  bash scripts/test-shops-isolated.sh \
+  --verify-notification-migration --verify-message-sync-migration \
+  --verify-remediation-migrations -v -count=1 \
+  ./tests/shops ./tests/equipment_services
+python3 scripts/test-shops-isolated_test.py
+```
+
+The default wrapper applies 016–018 and the available ordered prefix of the
+five approved remediation pairs (019 allocator, 020 assets, 021 parent ownership,
+022 base usage, 023 notification metadata). Both exact forward/reverse filenames
+must exist for a pair. Incomplete, redirected or out-of-order pairs are refused
+before starting a cluster. Only forward files run on the main test fixture.
+The remediation flag reports the available-pair count; it does not certify
+unavailable future migrations or invent populated-data/reverse semantics. Each
+migration task owns those semantic probes; Task 28 owns final all-pairs acceptance.
+The existing notification/message-sync flags retain their populated, refusal,
+reverse and reapply probes on separate disposable databases.
+
+`scripts/verify-shops-remediation-migrations.sh` is a sourced implementation
+helper. Direct execution, including any supplied DSN, is refused. It consumes
+only the wrapper's private socket, selected random port and marker. Both socket
+and loopback TCP identity/marker checks precede generation; the generated
+manifest must match database, role, loopback address, port and public schema.
+The marker is never printed. PostgreSQL connection diagnostics remain private
+and are deleted with the cluster.
+
+Current candidate inputs come from Git's tracked and nonignored untracked file
+list, including uncommitted changes. The explicit copy includes root Go files,
+`go.mod`/`go.sum`, Go and SQL files in `api`, `bootstrap`, `helper`, `internal`,
+`tools`, `tests`, `migrations`, and the Unicode test-data JSON fixture. Selected
+symlinks are refused. No old `.gen` contents, environment files, credential
+files, Git/worktree metadata, or scratch caches enter the source workspace.
+A SHA-256 manifest identifies the exact candidate inputs. Hashes of tracked
+`user_pmcs_*` generated files are comparison evidence only; their contents are
+never copied into the build workspace. The generation compatibility integration
+test consumes that wrapper-owned hash manifest without Git metadata, requires all
+32 expected model/table references and well-formed SHA-256 values, and retains
+its Git fallback when run from a real checkout.
+
+The approved baseline remains checksum pinned and unchanged. The separate
+`tests/testutil/shops_generation_fixture.sql` restores the documented
+`lookup_lin_niin_mat` materialized-view definition for disposable generation.
+This fixture supplement is not production DDL or proof of an existing target's
+schema. Its SQL provenance is recorded in the fixture.
+
+Each baseline, supplement, successful forward/reverse/reapply step receives
+fresh tagged generation through the current `tools/jetregen` binary. Previous
+isolated output is removed before every generation. Tracked `user_pmcs_*`
+contracts must remain byte identical. Generated model/table/view packages
+compile at each intermediate prefix; current candidate source may require
+later schema and is fully built only after all available forward steps. Builds
+use local dependencies/toolchain (`GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local`)
+and clear inherited test targets. Tests execute from that final fresh workspace,
+with only the two supported packages serialized, after the full build succeeds.
+All workspace, generated output and database files are removed on exit/signals.
+
+A successful available-candidate build is distinct from final all-migrations,
+live-target, signed-artifact, deployment, capability and device acceptance.
+The original physical snapshot also omits `tmde_interval_mat`, and the repository
+contains no authoritative production definition. The supplement therefore uses
+an explicitly approved **synthetic empty compile dependency**: the baseline
+`tmde_requirements` columns plus `NULL::text AS item_name`, `WITH NO DATA`, matching
+the observed five-field nullable generated ABI. The source manifest records this
+provenance. This proves compilation against that ABI only: it supplies no runtime
+TMDE behavior and makes no claim about a production join or target catalog.
+Exact intended-target generation/build and TMDE semantics remain operator gates.
+Existing ignored generated files are never carried into this proof.
+
+
+## Remediation 019–023 release procedure — 2026-10-04
+
+Use [the target-specific gate sheet](shops-server-remediation-release.md) for the
+current candidate. Historical 016 application records above remain historical;
+they are not current identity, stage, grant, or 019–023 authorization evidence.
+Both new target records remain **UNPINNED**, and no named target was contacted
+for this remediation. The one-action forward runner performs same-session
+identity/catalog/data gates, effective `DB_USERNAME` privilege intersections,
+and rolled-back legacy message writes before committing. Its successful exit
+means SQL applied **with tagged generation pending**; never automatically retry.
+A hash-pinned preceding generation checkpoint is required before another action.
+
+Migration 017 follows the same explicit test-first sequence: `miltech_ng_test`,
+its tagged regeneration and application-role write proof, then separately
+approved `miltech_ng`. Never use plain Jet. Neither existing 016/018 runner is an
+019–023 runner; their historical pins cannot establish a new release baseline.
+The actual named TMDE view definition is unknown. The disposable supplement is
+an empty synthetic compile ABI, not a reconstruction of a deployed view.
