@@ -4,6 +4,26 @@ Date: 2026-10-04. Scope: the server remediation merged into `cleanup`, relative 
 
 All paths below have prefix **`/api/v1/auth`**. No existing route was removed or renamed by this remediation. The usage PATCH, atomic save, capabilities and messages-v2 routes already existed at the base; their inclusion describes compatibility and hardened behavior, not newly introduced endpoints. Generated Jet models were not edited manually. Automatic tagged Jet generation at application startup remains mandatory.
 
+This is the final client handoff for the merged server changes. See the separate [final server change report](shops-server-refactor-final-report.md). No new server tests/builds/database checks were run in the final documentation pass, as requested by the user; references to verification below describe previously recorded evidence.
+
+## Client action summary
+
+**Existing endpoint URLs and methods stay the same.** Check the following client behavior against the detailed endpoint sections. A compliant client needs no change for a server-only transaction/query repair; no client source was inspected to assume otherwise.
+
+| Affected calls | Client requirement if current behavior differs | Detailed contract/examples |
+| --- | --- | --- |
+| All authenticated Shops/equipment calls | Send a Bearer Firebase token; handle authentication, dependency and permission failures without converting them to success/empty data; preserve uncertain drafts | Sections 1–2 |
+| Shop rename/settings/delete and member departure | Preserve omission/null intent; send explicit false; apply creator-only delete and successor-promotion rules | Sections 3–4 |
+| Invite creation | Omit/null unsupported expiry/max-use controls; avoid sending default zero/empty values | Section 4 |
+| List/notification item mutations and bulk removal | Validate every nested item, use correct persisted parents, parse flat bulk responses and actual unique count, tolerate successful zero-count removal | Sections 5 and 7 |
+| Vehicle PUT/usage PATCH | Use a minimal tracked-usage payload; omit preserved metadata; avoid automatically replaying uncertain relative adjustments | Section 6 |
+| Notification PUT/direct item replacement | Distinguish omitted attachment from explicit null; preserve or explicitly supply enrichment; handle conflicting retained metadata | Section 7 |
+| Image upload/discard | Use the bounded multipart structure and returned upload UUID/URL; discard only unattached registered uploads | Section 9 |
+| Legacy message polling | Advance with returned `next_cursor`; reload on a missing-anchor signal; accept the unchanged nine-field message DTO | Section 9 |
+| Equipment service edit/complete/read | Include legacy required body IDs, retain explicit completion state/date, and handle validated conjunctive filters and filtered totals | Section 12 |
+| Optional atomic save/numeric sync adoption | Follow capability discovery, required contract header, operation identity/receipt retry or string watermark/reset rules; no automatic rollout is implied | Sections 8 and 10 |
+| Aggregate/audit reads | Keep existing schemas; accept nullable deleted references and item enrichment; do not infer production capacity from unlimited fixture reads | Section 11 |
+
 ## Reading the examples
 
 UUIDs, user IDs, timestamps, image URLs and values are synthetic. JSON blocks labeled request body are actual JSON bodies. A GET or bodyless DELETE has **no body**; its query example is shown separately as JSON for readability and must be encoded as URL query parameters, not sent as a JSON body. Multipart upload is described explicitly and is not a JSON request. Omitted fields, explicit `null`, empty strings and `false` have different meanings where specified.
