@@ -427,7 +427,7 @@ POST `/shops/messages/image/upload?shop_id=...` is multipart/form-data: exactly 
 HTTP 200 response:
 
 ```json
-{"status":200,"message":"Image uploaded successfully","data":{"message_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","shop_id":"11111111-1111-4111-8111-111111111111","image_url":"https://exampleaccount.blob.core.windows.net/shop-message-images/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg","file_extension":".jpg"}}
+{"status":200,"message":"Image uploaded successfully","data":{"message_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","shop_id":"11111111-1111-4111-8111-111111111111","image_url":"https://exampleaccount.blob.core.windows.net/shop-message-images/11111111-1111-4111-8111-111111111111/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.jpg","file_extension":".jpg"}}
 ```
 
 `message_id` here is the **upload/asset UUID**, not a posted message's ID. Keep returned URL and ID; use the URL in the existing `[IMAGE:URL]` marker, then send the message. Do not construct a deletion target from URL text.
@@ -539,7 +539,7 @@ GET `/shops/equipment/overview` likewise retains its `data:{shops:[...]}` overvi
 All three notification changes routes retain nullable deleted-resource IDs and denormalized title/type/admin. Event-time item snapshots now retain identity, nickname/unit including null values. **Client requirement:** accept extra enrichment in `field_changes`, render history even when notification/vehicle/actor references are null, and do not require a deleted parent to fetch/render an otherwise authorized Shop history. Representative array element in a standard HTTP 200 response:
 
 ```json
-{"status":200,"message":"","data":[{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","notification_id":null,"shop_id":"11111111-1111-4111-8111-111111111111","vehicle_id":null,"changed_by":null,"changed_by_username":"Unknown User","changed_at":"2026-10-04T12:00:00Z","change_type":"deleted","field_changes":{},"notification_title":"Replace filter","notification_type":"M1","vehicle_admin":"A-10","is_deleted":true}]}
+{"status":200,"message":"","data":[{"id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","notification_id":null,"shop_id":"11111111-1111-4111-8111-111111111111","vehicle_id":null,"changed_by":null,"changed_by_username":"Unknown User","changed_at":"2026-10-04T12:00:00Z","change_type":"delete","field_changes":{"fields_changed":["deleted"]},"notification_title":"Replace filter","notification_type":"M1","vehicle_admin":"A-10","is_deleted":true}]}
 ```
 
 Legacy audit remains best effort; a committed primary mutation is not rolled back for its audit gap. Common sanitized server warnings require operator alerting. Atomic save requires its transactional audit/receipt. No new mandatory legacy outbox or client retry protocol was added.
@@ -621,3 +621,5 @@ Overdue uses `data:{overdue_services,total_count}` and per-row `days_overdue`; d
 **Operator/release work rather than missing local server fixes:** separately authorized target inventory/data resolution, migrations 019–023 on `miltech_ng_test` first and then separately on `miltech_ng`, tagged Jet regeneration after every database action, actual application-role write/privilege checks, preservation of all 32 tracked PMCS outputs, actual TMDE view/build provenance, fleet/external-writer fencing, actual Docker context/layers/nonroot runtime/Firebase mount/writable startup generation checks, separate confirmations for both credential incidents, observability/alerts, signed/released artifacts and physical device acceptance, and push/deploy/flag activation. Production capacity/concurrency budgets remain unapproved. Named targets are UNPINNED; no named migration, push, deployment or activation occurred in this local integration.
 
 Nonblocking negative-test depth follow-ups are retained in [acceptance](shops-server-remediation-acceptance.md); they are not claimed as implemented. The precise target/operator gates remain in [release gates](shops-server-remediation-release.md). The design/audit remain the historical justification; this handoff describes the resulting server contract.
+
+Integration also identified an intermittent cleanup-test activity assertion (not reproduced with diagnostics) and a container-verification scanner that expands embedded sparse TAR fixtures. Final unmodified server/migration and physical race reruns passed; the scanner repair remains uncommitted in the isolated worktree after the user's tooling-scope correction. See [integration verification](shops-server-cleanup-integration.md). These are verification follow-ups, not additional endpoint changes or a claim that runtime acceptance passed.

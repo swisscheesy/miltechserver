@@ -1,0 +1,322 @@
+{
+  "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+  "branch": "cleanup",
+  "reviewed_input_count": 753,
+  "source_sha256": "843b5f28f2b970d4254a8c4a30f83cbf5b53f93932722be37ff42fef50511f49",
+  "tracked_pmcs_unchanged": 32,
+  "records": {
+    "build": {
+      "command": [
+        "go",
+        "build",
+        "./..."
+      ],
+      "exit": 0,
+      "seconds": 6.882,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "cleanup-observation": {
+      "command": [
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "-v",
+        "-count=200",
+        "-timeout=5m",
+        "-run",
+        "^TestCleanupCascadeAndFinalMember$",
+        "./tests/shops"
+      ],
+      "exit": 0,
+      "seconds": 45.761,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "6de81991a6f67a528c90c7dd19bf759a52c5fb056b1ad4d28758986baced6ace",
+      "source_note": "temporary test diagnostic instrumentation; restored exactly; not final-source proof",
+      "pass_top": 200,
+      "pass_including_subtests": 800,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "cleanup-repeat": {
+      "command": [
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "-v",
+        "-count=20",
+        "-timeout=5m",
+        "-run",
+        "^TestCleanupCascadeAndFinalMember$",
+        "./tests/shops"
+      ],
+      "exit": 0,
+      "seconds": 31.248,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e3ab2fca4e4a1b62004db5b6a165e4e747661252490bc4cf190fafec7fb66048",
+      "pass_top": 20,
+      "pass_including_subtests": 80,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "docker": {
+      "command": [
+        "bash",
+        "scripts/test-server-container-inputs.sh",
+        "/private/tmp/shops-cleanup-verification-20261004-lbprhj4h/container",
+        "miltechserver-container-inputs-test:cleanup-20261004-lbprhj4h"
+      ],
+      "exit": 143,
+      "seconds": 1111.451,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "17fb919a85a87a420df9bef43bcf576193c39e024af9f1d44fe8efd8240dccfa",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "host": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-count=1",
+        "./api/...",
+        "./bootstrap/...",
+        "./tools/...",
+        "./internal/...",
+        "."
+      ],
+      "exit": 0,
+      "seconds": 29.411,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "c66929d7f7c45033e6974a62d9606a470b3a35f28c80efe15cb13581c080a8f9",
+      "pass_top": 619,
+      "pass_including_subtests": 1308,
+      "skip_tests": [
+        "TestRepositorySearchSummaries_ReturnsResults",
+        "TestRepositorySearchSummaries_NoMatch",
+        "TestRepositorySearchSummaries_PageTwo"
+      ],
+      "fail_tests": []
+    },
+    "physical-final": {
+      "command": [
+        "env",
+        "SHOP_AGGREGATE_PERF=1",
+        "SHOP_OVERVIEW_PERF=1",
+        "SHOP_MESSAGE_WRITE_PERF=1",
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "--verify-notification-migration",
+        "--verify-message-sync-migration",
+        "--verify-remediation-migrations",
+        "-v",
+        "-count=1",
+        "-timeout=10m",
+        "./tests/shops",
+        "./tests/equipment_services"
+      ],
+      "exit": 0,
+      "seconds": 154.187,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "193e6564a52817d0465e23f777263c187ca88a04b3a8b29b5e6372fad58f7142",
+      "pass_top": 303,
+      "pass_including_subtests": 1002,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "physical-observation": {
+      "command": [
+        "env",
+        "SHOP_AGGREGATE_PERF=1",
+        "SHOP_OVERVIEW_PERF=1",
+        "SHOP_MESSAGE_WRITE_PERF=1",
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "-v",
+        "-count=1",
+        "-timeout=10m",
+        "./tests/shops",
+        "./tests/equipment_services"
+      ],
+      "exit": 0,
+      "seconds": 369.979,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e70d95b5f200ec1a899b14b5c8eb9fe0a988a0acf71a51b1766f9b77b1f72c71",
+      "source_note": "temporary test diagnostic instrumentation; restored exactly; not final-source proof",
+      "pass_top": 303,
+      "pass_including_subtests": 1002,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "physical-race": {
+      "command": [
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "-race",
+        "-v",
+        "-count=1",
+        "-timeout=5m",
+        "-run",
+        "Test(CurrentAuthority|AggregateSingleSnapshot|AggregateListSnapshotMembership|MessageAllocator|Cleanup|BatchRemovalRace|InviteAdmission|InviteRevocation|Departure|ServicePageSnapshot|CompletionHistoryCurrentAuthority|MessageMutationCancellation|ServiceUsernameLookupCancellation)",
+        "./tests/shops",
+        "./tests/equipment_services"
+      ],
+      "exit": 0,
+      "seconds": 28.903,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e0725c44b056e8044646ac8625300db9e5091ea013ed7395e4b9623f5eb96b08",
+      "pass_top": 34,
+      "pass_including_subtests": 132,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "physical": {
+      "command": [
+        "env",
+        "SHOP_AGGREGATE_PERF=1",
+        "SHOP_OVERVIEW_PERF=1",
+        "SHOP_MESSAGE_WRITE_PERF=1",
+        "bash",
+        "scripts/test-shops-isolated.sh",
+        "--verify-notification-migration",
+        "--verify-message-sync-migration",
+        "--verify-remediation-migrations",
+        "-v",
+        "-count=1",
+        "-timeout=10m",
+        "./tests/shops",
+        "./tests/equipment_services"
+      ],
+      "exit": 1,
+      "seconds": 167.308,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "20728d94e05c19e78bee64c8f05ab2e42be2ffc7cdfca589e8d39eb6ec892666",
+      "pass_top": 302,
+      "pass_including_subtests": 1000,
+      "skip_tests": [],
+      "fail_tests": [
+        "TestCleanupCascadeAndFinalMember",
+        "TestCleanupCascadeAndFinalMember/reply"
+      ]
+    },
+    "python-isolation": {
+      "command": [
+        "python3",
+        "scripts/test-shops-isolated_test.py"
+      ],
+      "exit": 0,
+      "seconds": 6.985,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "68a86f4654326ece3bcfbc9651b2afa7e9442184dab00f0d1e9aae67d8ce37e8",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "python-publication": {
+      "command": [
+        "python3",
+        "/Users/swisscheese/projects/miltechserver/.worktrees/shops-server-release-remediation-20261003/scripts/test-publish-shops-candidate-generated.py"
+      ],
+      "exit": 0,
+      "seconds": 1.48,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "c838ed513005dba0780c81017d16af923f39a16859a6fa8c46af8263d66a171a",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "python-runner": {
+      "command": [
+        "python3",
+        "scripts/apply-shops-remediation-migrations_test.py"
+      ],
+      "exit": 0,
+      "seconds": 2.107,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e45b33faee7b440b9806c32a1db8325f18ee3ae80518f1e8e59d7c5e22b6fab1",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "python-static": {
+      "command": [
+        "python3",
+        "scripts/test-server-container-inputs-static.py"
+      ],
+      "exit": 0,
+      "seconds": 0.043,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "2c37d50a88147ca2ebd5197d74ee37d462dab650d793512e849814c28d5a38f0",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "unit-race": {
+      "command": [
+        "go",
+        "test",
+        "-json",
+        "-race",
+        "-count=1",
+        "-timeout=3m",
+        "./api/shops/...",
+        "./api/equipment_services/...",
+        "./api/shared/db",
+        "./api/middleware",
+        "./internal/testsql"
+      ],
+      "exit": 0,
+      "seconds": 23.135,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "d201f2be39878695d1627a94395d9e163ff95085053abf182ff91abdad225d5f",
+      "pass_top": 147,
+      "pass_including_subtests": 437,
+      "skip_tests": [],
+      "fail_tests": []
+    },
+    "vet": {
+      "command": [
+        "go",
+        "vet",
+        "./api/...",
+        "./bootstrap/...",
+        "./tools/...",
+        "./internal/...",
+        "."
+      ],
+      "exit": 0,
+      "seconds": 4.243,
+      "cwd": "/Users/swisscheese/projects/miltechserver",
+      "source_commit": "2e58cd8522f424a88193814530dbf190d0fad794",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pass_top": 0,
+      "pass_including_subtests": 0,
+      "skip_tests": [],
+      "fail_tests": []
+    }
+  },
+  "additional_scanner_fix": "uncommitted in isolated worktree; excluded from cleanup after user scope correction",
+  "codegraph": "preexisting dirty files left uncommitted; no overwrite/reset"
+}
