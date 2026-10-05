@@ -75,14 +75,14 @@ func TestUploadBodyBoundBeforeParse(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
 		files, size, field int
-	}{{"total", 1, 7 * 1024 * 1024, 0}, {"file", 1, 5*1024*1024 + 1, 0}, {"fields", 1, 16, 2 * 1024 * 1024}, {"parts", 2, 16, 0}} {
+	}{{"total", 1, maxUploadRequestBytes + 1024*1024, 0}, {"file", 1, maxImageSize + 1, 0}, {"fields", 1, 16, 2 * 1024 * 1024}, {"parts", 2, 16, 0}} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("TMPDIR", dir)
 			s := &uploadHandlerService{}
 			req, body := uploadRequest(t, tc.files, tc.size, tc.field)
 			out := runUploadHandler(s, req)
-			require.LessOrEqual(t, body.consumed, int64(6*1024*1024+1))
+			require.LessOrEqual(t, body.consumed, int64(maxUploadRequestBytes+1))
 			require.GreaterOrEqual(t, out.Code, 400)
 			require.Zero(t, s.calls)
 			files, e := os.ReadDir(dir)
@@ -168,13 +168,13 @@ func TestUploadRejectsInvalidShopBeforeService(t *testing.T) {
 func TestUploadFileLimitAndTemporaryCleanup(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
-	req, body := uploadRequest(t, 1, 5*1024*1024, 0)
+	req, body := uploadRequest(t, 1, maxImageSize, 0)
 	s := &uploadHandlerService{}
 	out := runUploadHandler(s, req)
 	require.Equal(t, 200, out.Code)
-	require.Equal(t, 5*1024*1024, s.size)
+	require.Equal(t, maxImageSize, s.size)
 	require.Equal(t, 1, s.calls)
-	require.LessOrEqual(t, body.consumed, int64(6*1024*1024+1))
+	require.LessOrEqual(t, body.consumed, int64(maxUploadRequestBytes+1))
 	files, e := os.ReadDir(dir)
 	require.NoError(t, e)
 	require.Empty(t, files)

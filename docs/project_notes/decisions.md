@@ -703,3 +703,16 @@ adds operational constraints without rewriting historical ADR evidence.
 
 Task 22 late-commit legacy cursor and numeric restore ABA limitations remain OPEN.
 C06 owner population/fleet/edge budget remains unknown; no numeric limit is assumed.
+
+### Shop message image upload limit raised to 15 MiB (2026-10-04)
+
+`maxImageSize` (`api/shops/messages/service_impl.go`) is 15 MiB, up from 5 MiB.
+The whole-body `MaxBytesReader` bound is now derived as `maxUploadRequestBytes =
+maxImageSize + 1 MiB` (was a separate literal 6 MiB) so the two cannot drift.
+The 5 MiB / 6 MiB figures in the 2026-10-02 audit (F25), the 2026-10-03
+remediation spec/plan and `shops-server-refactor-final-report.md` are historical.
+Cost: each in-flight upload holds up to 15 MiB of file bytes in heap (plus a
+multipart temp file on disk above 1 MiB), 3× the previous ceiling. The 30 s
+`UploadOperationTimeout` covers only the Azure PUT, which starts after the client
+body has been read. Other image endpoints (`user_saves`, `material_images`) have
+no size limit and were not changed.

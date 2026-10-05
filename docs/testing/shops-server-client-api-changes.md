@@ -438,7 +438,7 @@ Without header 2 it preserves HTTP 500:
 
 Client requirement: reset/refetch the message view on that failure, deduplicate by ID while draining, and do not assume legacy timestamp polling is lossless. **Open limitation:** a transaction committing late with an older timestamp can land behind a cursor already observed. This remediation preserves timestamp semantics; a monotonic-write policy or a different synchronization contract requires a separate owner decision.
 
-POST `/shops/messages/image/upload?shop_id=...` is multipart/form-data: exactly one file part named `file`, optional single `shop_id` form value, no extra fields. File is at most 5 MiB; total request at most 6 MiB. Query and form Shop IDs must agree if both supplied and be valid nonzero UUIDs. Failed validation performs no Azure upload. JSON representation of multipart values (documentation only):
+POST `/shops/messages/image/upload?shop_id=...` is multipart/form-data: exactly one file part named `file`, optional single `shop_id` form value, no extra fields. File is at most 15 MiB; total request at most 16 MiB (raised from 5 MiB / 6 MiB on 2026-10-04). An oversized file returns 400 `invalid image data`; an oversized total body returns 400 `invalid or oversized multipart body`. Query and form Shop IDs must agree if both supplied and be valid nonzero UUIDs. Failed validation performs no Azure upload. JSON representation of multipart values (documentation only):
 
 ```json
 {"shop_id":"11111111-1111-4111-8111-111111111111","file":{"filename":"photo.jpg","content_type":"image/jpeg","bytes":"binary multipart content"}}

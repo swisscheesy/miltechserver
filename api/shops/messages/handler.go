@@ -204,7 +204,7 @@ func (handler *Handler) UploadMessageImage(c *gin.Context) {
 	}
 	// Install the whole-body bound before any multipart/form access. Keep multipart file
 	// buffering bounded; cleanup covers every return.
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 6*1024*1024)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadRequestBytes)
 	defer func() {
 		if c.Request.MultipartForm != nil {
 			if err := c.Request.MultipartForm.RemoveAll(); err != nil {

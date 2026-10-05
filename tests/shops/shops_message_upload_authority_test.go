@@ -202,7 +202,7 @@ func TestUploadRejectedWithoutCloud(t *testing.T) {
 	for _, tc := range []struct {
 		name, shop, actor string
 		size              int
-	}{{"zero", uuid.Nil.String(), user.UserID, 16}, {"invalid", "bad", user.UserID, 16}, {"nonmember", shop, "outside", 16}, {"missing_shop", uuid.NewString(), user.UserID, 16}, {"empty", shop, user.UserID, 0}, {"large", shop, user.UserID, 5*1024*1024 + 1}} {
+	}{{"zero", uuid.Nil.String(), user.UserID, 16}, {"invalid", "bad", user.UserID, 16}, {"nonmember", shop, "outside", 16}, {"missing_shop", uuid.NewString(), user.UserID, 16}, {"empty", shop, user.UserID, 0}, {"large", shop, user.UserID, 15*1024*1024 + 1}} {
 		t.Run(tc.name, func(t *testing.T) {
 			blob := &uploadBlobStore{put: func(context.Context, messages.Asset) error { return nil }}
 			result, e := messages.NewService(repo, nil).WithBlobStore(blob).UploadMessageImage(context.Background(), &bootstrap.User{UserID: tc.actor}, tc.shop, make([]byte, tc.size), "image/jpeg")

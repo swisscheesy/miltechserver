@@ -18,7 +18,10 @@ import (
 )
 
 const (
-	maxImageSize = 5 * 1024 * 1024
+	maxImageSize = 15 * 1024 * 1024
+	// The whole-body bound must exceed maxImageSize: the extra 1 MiB covers
+	// multipart boundaries, part headers and the optional shop_id field.
+	maxUploadRequestBytes = maxImageSize + 1024*1024
 	// LegacyCursorReloadMessage is the safe legacy error text when an ID anchor
 	// can no longer supply its stored timestamp. Clients must reload their page.
 	LegacyCursorReloadMessage = "Message cursor is unavailable; reload messages"

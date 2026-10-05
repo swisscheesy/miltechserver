@@ -82,7 +82,7 @@ var publicResponseMessages = map[string]bool{
 	"equipment_id is required":                       true,
 	"failed to get uploaded file":                    true,
 	"failed to read file data":                       true,
-	"file size exceeds maximum allowed size of 5MB":  true,
+	"file size exceeds maximum allowed size of 15MB": true,
 	"invalid query parameters":                       true,
 	"invalid request":                                true,
 	"item_id is required":                            true,
