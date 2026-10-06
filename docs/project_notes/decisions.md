@@ -716,3 +716,39 @@ multipart temp file on disk above 1 MiB), 3× the previous ceiling. The 30 s
 `UploadOperationTimeout` covers only the Azure PUT, which starts after the client
 body has been read. Other image endpoints (`user_saves`, `material_images`) have
 no size limit and were not changed.
+
+### ADR-023: Register Pre-020 Message Images with an Unattributed Uploader (2026-10-05)
+
+**Context:**
+- Migration 020 left images uploaded before it unregistered ("unknown historical
+  targets remain protected"), so deleting or editing an old message never cleaned up
+  its blob, and the discard endpoint refused old images
+- The 020 design allowed historical registration only through an explicit
+  owner-approved mapping and forbade inferring the uploader from the message author
+
+**Decision:**
+- Owner-approved mapping is migration 024 (data only). It registers every canonical
+  `[IMAGE:…/shop-message-images/{shop}/{uuid}{ext}]` marker: upload ID is the key's
+  UUID (the pre-020 key shape already equals the worker's `{shop}/{id}{ext}` rule),
+  `state='ready'`, and one reference per (message, image)
+- `uploader_id='legacy:unattributed'`: it gates only discard of an unreferenced
+  image, and every backfilled image starts referenced, so no capability is lost
+  and no ownership is guessed
+- Refuse, never repair: any non-canonical mention, cross-Shop path, conflicting
+  identity, or UUID appearing outside a canonical marker aborts the whole migration
+  so no message can keep showing a blob the worker deletes
+- Reverse removes only `legacy:unattributed` rows and refuses once any of their
+  cleanup has started
+
+**Alternatives considered:**
+- Uploader = message author: rejected by the 020 design rule; no practical gain
+- Skip unsafe images instead of refusing: silent partial adoption hides the problem
+  from the owner; refusal matches 020–023
+- Leave historical images unregistered: blobs accumulate until Shop deletion
+
+**Consequences:**
+- After 024, deleting an old message really deletes its blob; environments sharing a
+  storage account with production must not test deletions with the worker running
+- Images copied across Shops, or orphan blobs no message references, stay
+  unregistered and are cleaned up only by Shop deletion
+- Details: `docs/migrations/shop_message_legacy_image_registration.md`

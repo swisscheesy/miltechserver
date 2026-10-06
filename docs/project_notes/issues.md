@@ -15,6 +15,15 @@ Each entry should include:
 
 <!-- Add new entries below this line, most recent first -->
 
+### 2026-10-05 - Register legacy shop message images (migration 024)
+- **Status**: Local implementation and tests pass; not applied to any named database.
+- **Description**: Data-only migration 024 (+ reverse) registers pre-020 message images
+  so deleting or editing old messages queues blob cleanup. Runner stage `forward-024`
+  pinned; ADR-023; `docs/migrations/shop_message_legacy_image_registration.md`.
+- **Notes**: Found while diagnosing "required startup schema unavailable": the
+  192.168.20.70 `miltech_ng` dev database is at 019, so the new binary's 020/023
+  startup gate refuses. Dev inventory: 5 canonical legacy images, no refusals expected.
+
 ### 2026-09-29 - Shops message sync activation (server)
 - **Status**: Code complete on branch, not merged or deployed; live application and flag activation not authorised
 - **Ticket**: none; branch `feature/shops-message-sync` (no URL)

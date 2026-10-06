@@ -62,6 +62,8 @@ No historical uploader is inferred from authors or URLs. Historical registration
 requires an explicit owner-approved mapping (Task27). Whole-Shop registry enqueue
 is an internal transaction API; Task14 wires it into both authorized Shop deletion
 paths. Unknown historical individual targets remain protected.
+Migration 024 is that owner-approved mapping for canonical same-Shop markers; see
+`shop_message_legacy_image_registration.md` and ADR-023.
 
 ## Reversal and verification
 

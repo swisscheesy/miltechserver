@@ -13,7 +13,8 @@ collect_remediation_migrations() {
     '020_create_shop_message_asset_lifecycle.sql|020_rollback_shop_message_asset_lifecycle.sql' \
     '021_enforce_shop_message_parent_ownership.sql|021_rollback_enforce_shop_message_parent_ownership.sql' \
     '022_add_shop_vehicle_base_usage_constraints.sql|022_rollback_shop_vehicle_base_usage_constraints.sql' \
-    '023_create_shop_notification_item_metadata.sql|023_rollback_shop_notification_item_metadata.sql'; do
+    '023_create_shop_notification_item_metadata.sql|023_rollback_shop_notification_item_metadata.sql' \
+    '024_register_legacy_shop_message_images.sql|024_rollback_register_legacy_shop_message_images.sql'; do
     forward=${pair%%|*}; reverse=${pair#*|}
     if [[ ! -e "$root/migrations/$forward" && ! -L "$root/migrations/$forward" && ! -e "$root/migrations/$reverse" && ! -L "$root/migrations/$reverse" ]]; then
       missing=true
@@ -692,11 +693,11 @@ INSERT INTO shops(id,name,created_by) VALUES('release-shop','Release fixture','r
 INSERT INTO shop_members(id,shop_id,user_id,role) VALUES('release-member','release-shop','release-user','admin');
 SQL
   regenerate_stage "$database" release-owner-approved-fixture
-  for stage in 019 020 021 022 023; do
+  for stage in 019 020 021 022 023 024; do
     verify_disposable_identity "$database"
     SHOPS_RELEASE_TEST_MARKER="$marker" python3 "$root/scripts/apply-shops-remediation-migrations_test.py" \
       --rehearse-disposable "$root" "$instance" "$database" "$port" "$stage" || fail "Disposable release runner failed at $stage."
     regenerate_stage "$database" "release-runner-$stage"
   done
-  printf '%s\n' 'Release runner complete disposable checkpoint PASS: all five actions regenerated; 32 PMCS hashes unchanged; no named target contact.'
+  printf '%s\n' 'Release runner complete disposable checkpoint PASS: all six actions regenerated; 32 PMCS hashes unchanged; no named target contact.'
 }

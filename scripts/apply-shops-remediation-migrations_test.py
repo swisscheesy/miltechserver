@@ -89,7 +89,7 @@ class RunnerTests(unittest.TestCase):
         self.assertIn(hashlib.sha256(path.read_bytes()).hexdigest(), RUNNER.read_text())
 
     def test_all_forward_envelopes_are_supported(self):
-        for stage in ('019','020','021','022','023'):
+        for stage in ('019','020','021','022','023','024'):
             with self.subTest(stage=stage):
                 self.pin(stage)
                 self.args[1]='forward-'+stage

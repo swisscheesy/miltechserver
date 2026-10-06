@@ -32,7 +32,8 @@ complete test-target evidence through `test_target_evidence`.
 TARGET forward-NNN AUTHORIZATION ADDRESS PORT MIGRATION_ROLE CATALOG_SHA256 PRECEDING_GENERATION_JSON
 ```
 
-Only the two named targets and forward 019–023 are allowed. The checked-in
+Only the two named targets and forward 019–024 are allowed (024 is the data-only
+legacy image registration; see `docs/migrations/shop_message_legacy_image_registration.md`). The checked-in
 `TARGET_PINS` entries deliberately contain `UNPINNED`. No command in this guide
 fills a live value. A reviewed source change must add **one target/stage record**
 with these fields before the runner can connect:
@@ -120,7 +121,7 @@ requires 32 equal before/after entries and compares that digest to the reviewed
 baseline pin. Source digest, intended target/schema/role/port/address and catalog
 must match the next record. This mechanically checks the reviewed evidence; it
 does not manufacture or independently attest owner build execution. Fabricated
-records are invalid. Final 023 has the same mandatory proof and a separate
+records are invalid. Final 024 has the same mandatory proof and a separate
 release-owner acceptance checkpoint even though no next migration consumes it.
 The manual gap after SQL commit remains an operational risk; fence deployment
 and subsequent actions until the proof is reviewed.
@@ -148,7 +149,7 @@ inventory/identity/source checks before considering the next action. Do not rest
 quantity or active item rows to recover metadata. Migration reverses are not
 runner actions: each needs a separate explicit owner resolution/retention export,
 compatible binary, target identity/checksum plan, rehearsal and immediate tagged
-regeneration. Preserve all five 019–023 pairs and pinned 015–018 SQL unchanged.
+regeneration. Preserve all six 019–024 pairs and pinned 015–018 SQL unchanged.
 
 ## Remaining release gates
 
