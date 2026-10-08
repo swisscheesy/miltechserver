@@ -38,7 +38,7 @@ func registerHandlers(publicGroup, authGroup *gin.RouterGroup, svc Service) {
 
 func (handler *Handler) getCommentsByNiin(c *gin.Context) {
 	niin := c.Param("niin")
-	comments, err := handler.service.GetCommentsByNiin(niin)
+	comments, err := handler.service.GetCommentsByNiin(c.Request.Context(), niin)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -49,6 +49,8 @@ func (handler *Handler) getCommentsByNiin(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Comments retrieved",
@@ -66,11 +68,11 @@ func (handler *Handler) createComment(c *gin.Context) {
 
 	var req CreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		response.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	comment, err := handler.service.CreateComment(currentUser, niin, req.Text, req.ParentID)
+	comment, err := handler.service.CreateComment(c.Request.Context(), currentUser, niin, req.Text, req.ParentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -84,6 +86,8 @@ func (handler *Handler) createComment(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusCreated, response.StandardResponse{
 		Status:  http.StatusCreated,
 		Message: "Comment created",
@@ -102,11 +106,11 @@ func (handler *Handler) updateComment(c *gin.Context) {
 
 	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		response.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	comment, err := handler.service.UpdateComment(currentUser, niin, commentID, req.Text)
+	comment, err := handler.service.UpdateComment(c.Request.Context(), currentUser, niin, commentID, req.Text)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -121,6 +125,8 @@ func (handler *Handler) updateComment(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Comment updated",
@@ -137,7 +143,7 @@ func (handler *Handler) deleteComment(c *gin.Context) {
 	niin := c.Param("niin")
 	commentID := c.Param("comment_id")
 
-	comment, err := handler.service.DeleteComment(currentUser, niin, commentID)
+	comment, err := handler.service.DeleteComment(c.Request.Context(), currentUser, niin, commentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -151,6 +157,8 @@ func (handler *Handler) deleteComment(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Comment deleted",
@@ -167,7 +175,7 @@ func (handler *Handler) flagComment(c *gin.Context) {
 	niin := c.Param("niin")
 	commentID := c.Param("comment_id")
 
-	err := handler.service.FlagComment(currentUser, niin, commentID)
+	err := handler.service.FlagComment(c.Request.Context(), currentUser, niin, commentID)
 	if err != nil {
 		if respondError(c, err, []errorCase{
 			{target: ErrInvalidNiin, status: http.StatusBadRequest, message: "invalid NIIN"},
@@ -180,6 +188,8 @@ func (handler *Handler) flagComment(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Comment flagged",
@@ -190,13 +200,13 @@ func (handler *Handler) flagComment(c *gin.Context) {
 func getUser(c *gin.Context) (*bootstrap.User, bool) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
 	currentUser, ok := user.(*bootstrap.User)
 	if !ok || currentUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
@@ -212,7 +222,7 @@ type errorCase struct {
 func respondError(c *gin.Context, err error, cases []errorCase) bool {
 	for _, entry := range cases {
 		if errors.Is(err, entry.target) {
-			c.JSON(entry.status, gin.H{"message": entry.message})
+			response.Error(c, entry.status, entry.message)
 			return true
 		}
 	}

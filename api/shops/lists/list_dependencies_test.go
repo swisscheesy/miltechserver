@@ -1,0 +1,361 @@
+package lists
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"errors"
+	"fmt"
+	"io"
+	"miltechserver/.gen/miltech_ng/public/model"
+	"miltechserver/api/equipment_services/core"
+	shopcore "miltechserver/api/shops/core"
+	"miltechserver/api/shops/members"
+	"miltechserver/api/shops/shared"
+	"miltechserver/api/shops/vehicles/notifications"
+	"miltechserver/bootstrap"
+	"strings"
+	"testing"
+)
+
+type dependencyConnector struct{ state *dependencyConn }
+
+func (c dependencyConnector) Connect(context.Context) (driver.Conn, error) { return c.state, nil }
+func (c dependencyConnector) Driver() driver.Driver                        { return dependencyDriver{} }
+
+type dependencyDriver struct{}
+
+func (dependencyDriver) Open(string) (driver.Conn, error) { return nil, errors.New("use connector") }
+
+type dependencyConn struct {
+	failQuery                             string
+	queryCause                            error
+	writes                                int
+	admin                                 bool
+	memberCount                           int
+	dependency                            bool
+	checked, detached, deleted, committed bool
+	failDelete                            bool
+	failDetach                            bool
+	missingList                           bool
+	queries                               []string
+	lockedLists                           []string
+}
+
+func (*dependencyConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("unexpected prepare")
+}
+func (*dependencyConn) Close() error                                                   { return nil }
+func (c *dependencyConn) BeginTx(context.Context, driver.TxOptions) (driver.Tx, error) { return c, nil }
+func (c *dependencyConn) Begin() (driver.Tx, error)                                    { return c, nil }
+func (c *dependencyConn) Commit() error                                                { c.committed = true; return nil }
+func (*dependencyConn) Rollback() error                                                { return nil }
+func (c *dependencyConn) QueryContext(_ context.Context, q string, args []driver.NamedValue) (driver.Rows, error) {
+	c.queries = append(c.queries, q)
+	if q == c.failQuery {
+		return nil, c.queryCause
+	}
+	if strings.HasPrefix(strings.TrimSpace(q), "INSERT") || strings.HasPrefix(strings.TrimSpace(q), "UPDATE") {
+		c.writes++
+	}
+	if strings.Contains(q, "FROM shop_lists") && strings.Contains(q, "FOR UPDATE") {
+		c.lockedLists = append(c.lockedLists, args[0].Value.(string))
+		if c.missingList {
+			return &dependencyRows{read: true}, nil
+		}
+	}
+
+	var values []driver.Value
+	switch {
+	case strings.Contains(q, "FROM public.shops") && strings.Contains(q, "FOR UPDATE") && len(args) == 1 && args[0].Value == "shop":
+		return &dependencyRows{values: []driver.Value{"shop"}, columns: []string{"shops.id"}}, nil
+	case strings.Contains(q, "FROM public.shop_message_uploads") && strings.Contains(q, "shop_message_uploads.shop_id") && strings.Contains(q, "FOR UPDATE") && len(args) == 1 && args[0].Value == "shop":
+		return &dependencyRows{read: true, columns: []string{"shop_message_uploads.id"}}, nil
+	case strings.Contains(q, "EXISTS") && strings.Contains(q, "equipment_services"):
+		c.checked = true
+		values = []driver.Value{c.dependency}
+	case strings.HasPrefix(q, "SELECT admin_only_lists"):
+		values = []driver.Value{false}
+	case strings.Contains(strings.ToLower(q), "count(") && strings.Contains(q, "shop_members.role"):
+		return &dependencyRows{values: []driver.Value{int64(1)}, columns: []string{"count"}}, nil
+	case strings.Contains(strings.ToLower(q), "count(") && strings.Contains(q, "shop_members"):
+		return &dependencyRows{values: []driver.Value{int64(c.memberCount)}, columns: []string{"count"}}, nil
+	case strings.HasPrefix(q, "SELECT role"):
+		values = []driver.Value{"member"}
+		if c.admin {
+			values = []driver.Value{"admin"}
+		}
+	case strings.HasPrefix(q, "SELECT list_id,created_by"):
+		values = []driver.Value{"old-list", "user"}
+	case strings.HasPrefix(q, "SELECT attached_shop_list"):
+		values = []driver.Value{"old-list"}
+	case strings.HasPrefix(q, "SELECT shop_id,vehicle_id"):
+		values = []driver.Value{"shop", "vehicle"}
+	case strings.HasPrefix(q, "SELECT shop_id,admin"):
+		values = []driver.Value{"shop", "admin"}
+	case strings.HasPrefix(q, "SELECT shop_id,created_by"):
+		values = []driver.Value{"shop", "user"}
+	case strings.HasPrefix(q, "SELECT shop_id"):
+		values = []driver.Value{"shop"}
+	default:
+		return nil, fmt.Errorf("unexpected query %s", q)
+	}
+	return &dependencyRows{values: values}, nil
+}
+func (c *dependencyConn) ExecContext(_ context.Context, q string, _ []driver.NamedValue) (driver.Result, error) {
+	c.writes++
+	if strings.Contains(q, "UPDATE") && strings.Contains(q, "shop_vehicle_notifications") {
+		c.detached = true
+		if c.failDetach {
+			return nil, errors.New("injected detach failure")
+		}
+		return driver.RowsAffected(1), nil
+	}
+	if strings.Contains(q, "DELETE") {
+		c.deleted = true
+		if c.failDelete {
+			return nil, errors.New("injected failure")
+		}
+		return driver.RowsAffected(1), nil
+	}
+	return nil, fmt.Errorf("unexpected exec %s", q)
+}
+
+type dependencyRows struct {
+	columns []string
+	values  []driver.Value
+	read    bool
+}
+
+func (r *dependencyRows) Columns() []string {
+	if r.columns != nil {
+		return r.columns
+	}
+	v := make([]string, len(r.values))
+	for i := range v {
+		v[i] = fmt.Sprint(i)
+	}
+	return v
+}
+func (*dependencyRows) Close() error { return nil }
+func (r *dependencyRows) Next(dest []driver.Value) error {
+	if r.read {
+		return io.EOF
+	}
+	copy(dest, r.values)
+	r.read = true
+	return nil
+}
+
+func TestListDependenciesBlockBeforeAnyWrite(t *testing.T) {
+	c := &dependencyConn{dependency: true}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list")
+	if err == nil || err.Error() != "list is in use" {
+		t.Fatalf("want list conflict, got %v", err)
+	}
+	if !c.checked || c.deleted || c.detached || c.committed {
+		t.Fatalf("dependency mutated state: %+v", c)
+	}
+}
+func TestListDependenciesDetachBeforeSuccessfulDelete(t *testing.T) {
+	c := &dependencyConn{}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err != nil {
+		t.Fatal(err)
+	}
+	if !c.checked || !c.detached || !c.deleted || !c.committed {
+		t.Fatalf("missing preservation operation: %+v", c)
+	}
+}
+func TestListDependenciesDeleteFailureDoesNotCommit(t *testing.T) {
+	c := &dependencyConn{failDelete: true}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err == nil {
+		t.Fatal("want failure")
+	}
+	if c.committed {
+		t.Fatal("committed failure")
+	}
+}
+
+func TestListDependenciesDetachFailureDoesNotDelete(t *testing.T) {
+	c := &dependencyConn{failDetach: true}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	if err := NewRepository(db).DeleteShopList(context.Background(), &bootstrap.User{UserID: "user"}, "list"); err == nil {
+		t.Fatal("want detach failure")
+	}
+	if c.deleted || c.committed {
+		t.Fatal("delete or commit after detach failure")
+	}
+}
+
+func TestListDependenciesWritersRejectDeletedAttachment(t *testing.T) {
+	for _, name := range []string{"create-service", "update-service", "create-notification", "update-notification"} {
+		t.Run(name, func(t *testing.T) {
+			c := &dependencyConn{missingList: true}
+			db := sql.OpenDB(dependencyConnector{c})
+			defer db.Close()
+			user := &bootstrap.User{UserID: "user"}
+			list := "list"
+			var err error
+			switch name {
+			case "create-service":
+				_, err = core.NewRepository(db).Create(context.Background(), user, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: list})
+			case "update-service":
+				_, err = core.NewRepository(db).Update(context.Background(), user, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: list})
+			case "create-notification":
+				_, err = notifications.NewRepository(db).CreateVehicleNotification(context.Background(), user, model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ShopID: "shop", VehicleID: "vehicle", AttachedShopList: &list})
+			case "update-notification":
+				err = notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), user, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}, AttachedShopListSet: true, AttachedShopList: &list})
+			}
+			if err == nil {
+				t.Fatal("missing referenced list was accepted")
+			}
+			if len(c.lockedLists) == 0 {
+				t.Fatalf("writer bypassed list lock: %v", err)
+			}
+			shop, member, listLock := -1, -1, -1
+			for i, q := range c.queries {
+				if strings.HasPrefix(q, "SELECT admin_only_lists") {
+					shop = i
+				}
+				if strings.HasPrefix(q, "SELECT role") {
+					member = i
+				}
+				if strings.Contains(q, "FROM shop_lists") && strings.Contains(q, "FOR UPDATE") {
+					listLock = i
+				}
+			}
+			if !(shop >= 0 && member > shop && listLock > member) {
+				t.Fatalf("wrong lock order: %v", c.queries)
+			}
+			if c.committed {
+				t.Fatal("committed failed attachment")
+			}
+		})
+	}
+}
+
+func TestListDependenciesLocksSortedUniqueLists(t *testing.T) {
+	c := &dependencyConn{}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, _, err := shared.LockShopMutation(context.Background(), tx, "shop", "user"); err != nil {
+		t.Fatal(err)
+	}
+	if err := shared.LockReferencedLists(context.Background(), tx, "shop", "z", "a", "z", ""); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(c.lockedLists, ",") != "a,z" {
+		t.Fatalf("wrong list ordering: %v", c.lockedLists)
+	}
+}
+
+func TestListDependenciesAggregateDeletionRequiresMembershipLock(t *testing.T) {
+	for _, name := range []string{"shop", "last-member"} {
+		t.Run(name, func(t *testing.T) {
+			c := &dependencyConn{admin: true, memberCount: 1}
+			db := sql.OpenDB(dependencyConnector{c})
+			defer db.Close()
+			user := &bootstrap.User{UserID: "user"}
+			var err error
+			if name == "shop" {
+				err = shopcore.NewRepository(db, nil, &bootstrap.Env{}).DeleteShop(context.Background(), user, "shop")
+			} else {
+				err = members.NewRepository(db, nil, &bootstrap.Env{}).LeaveShop(context.Background(), user, "shop")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(c.queries) < 2 || !strings.HasPrefix(c.queries[0], "SELECT admin_only_lists") || !strings.HasPrefix(c.queries[1], "SELECT role") {
+				t.Fatalf("aggregate bypassed membership locks: %v", c.queries)
+			}
+			if !c.deleted || !c.committed || c.checked {
+				t.Fatalf("aggregate must bypass single-list dependency check: %+v", c)
+			}
+		})
+	}
+}
+func TestListDependenciesLastMemberRechecksCount(t *testing.T) {
+	c := &dependencyConn{admin: true, memberCount: 2}
+	db := sql.OpenDB(dependencyConnector{c})
+	defer db.Close()
+	if err := members.NewRepository(db, nil, &bootstrap.Env{}).LeaveShop(context.Background(), &bootstrap.User{UserID: "user"}, "shop"); err == nil {
+		t.Fatal("stale last-member count accepted")
+	}
+	if c.deleted || c.committed {
+		t.Fatal("deleted shop after another member joined")
+	}
+}
+
+func TestListDependenciesLookupErrors(t *testing.T) {
+	driverCause := errors.New("driver password=private-marker connection lost")
+	for _, tc := range []struct {
+		name, query, missingCode string
+		run                      func(*sql.DB) error
+	}{
+		{"create-service-vehicle", "SELECT shop_id FROM shop_vehicle WHERE id=$1 FOR UPDATE", "vehicle_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Create(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ShopID: "shop", EquipmentID: "vehicle", ListID: "list"})
+			return err
+		}},
+		{"update-service-shop", "SELECT shop_id FROM equipment_services WHERE id=$1", "service_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Update(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: "list"})
+			return err
+		}},
+		{"update-service-owner", "SELECT list_id,created_by FROM equipment_services WHERE id=$1 AND shop_id=$2", "service_not_found", func(db *sql.DB) error {
+			_, err := core.NewRepository(db).Update(context.Background(), &bootstrap.User{UserID: "user"}, model.EquipmentServices{ID: "service", ShopID: "shop", ListID: "list"})
+			return err
+		}},
+		{"create-notification-vehicle", "SELECT shop_id,admin FROM shop_vehicle WHERE id=$1 FOR UPDATE", "vehicle_not_found", func(db *sql.DB) error {
+			_, err := notifications.NewRepository(db).CreateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ShopID: "shop", VehicleID: "vehicle"})
+			return err
+		}},
+		{"update-notification-shop", "SELECT shop_id,vehicle_id FROM shop_vehicle_notifications WHERE id=$1", "notification_not_found", func(db *sql.DB) error {
+			return notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}})
+		}},
+		{"update-notification-attachment", "SELECT attached_shop_list FROM shop_vehicle_notifications WHERE id=$1 AND shop_id=$2", "notification_not_found", func(db *sql.DB) error {
+			return notifications.NewRepository(db).UpdateVehicleNotification(context.Background(), &bootstrap.User{UserID: "user"}, notifications.VehicleNotificationUpdate{Notification: model.ShopVehicleNotifications{Title: "Valid", Type: "PM", ID: "notification"}})
+		}},
+	} {
+		for _, cause := range []error{sql.ErrNoRows, driverCause} {
+			t.Run(tc.name+"/"+fmt.Sprint(errors.Is(cause, sql.ErrNoRows)), func(t *testing.T) {
+				c := &dependencyConn{failQuery: tc.query, queryCause: cause}
+				db := sql.OpenDB(dependencyConnector{c})
+				defer db.Close()
+				err := tc.run(db)
+				if err == nil {
+					t.Fatal("expected lookup failure")
+				}
+				failure := shared.ClassifyFailure(err)
+				if errors.Is(cause, sql.ErrNoRows) {
+					if failure.Status != 404 || failure.Code != tc.missingCode {
+						t.Errorf("missing classification: %+v", failure)
+					}
+				} else {
+					if !errors.Is(err, driverCause) {
+						t.Error("driver cause discarded")
+					}
+					if failure.Status != 500 || failure.Code != "internal_error" {
+						t.Errorf("driver classification: %+v", failure)
+					}
+					if strings.Contains(err.Error(), "private-marker") || strings.Contains(failure.PublicMessage, "private-marker") {
+						t.Error("driver details leaked")
+					}
+				}
+				if c.writes != 0 || c.committed {
+					t.Fatal("lookup failure wrote or committed")
+				}
+			})
+		}
+	}
+}

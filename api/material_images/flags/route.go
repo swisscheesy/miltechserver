@@ -27,7 +27,7 @@ func RegisterRoutes(authRouter *gin.RouterGroup, service Service, imagesService 
 func (h *Handler) flag(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -35,21 +35,21 @@ func (h *Handler) flag(c *gin.Context) {
 
 	var req request.FlagImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request: %v", err)})
+		response.Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
 
-	err = h.service.Flag(user, imageID, req.Reason, req.Description)
+	err = h.service.Flag(c.Request.Context(), user, imageID, req.Reason, req.Description)
 	if err != nil {
 		if err.Error() == "you have already flagged this image" {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			response.Error(c, http.StatusConflict, err.Error())
 			return
 		}
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	var flagCount int
 	var isFlagged bool
 	if err == nil {
@@ -68,11 +68,22 @@ func (h *Handler) flag(c *gin.Context) {
 func (h *Handler) getFlags(c *gin.Context) {
 	imageID := c.Param("image_id")
 
-	flags, err := h.service.GetByImage(imageID)
+	flags, err := h.service.GetByImage(c.Request.Context(), imageID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve flags"})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve flags")
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. Wrapping this
+	// payload in the standard envelope would move "flags" from the response
+	// body's top level to a nested "data.flags", which is a response-shape
+	// change: tests/material_images/handlers_test.go:101-104 unmarshals the
+	// raw body into map[string]interface{} and asserts flagsPayload["flags"]
+	// directly at the top level. Confirmed by running the test with the
+	// migration applied (fails at handlers_test.go:104). Left as a raw
+	// c.JSON call, matching the ps_mag precedent from Task 6 (a single call
+	// site deliberately excluded from a mechanical helper substitution to
+	// preserve its existing response body) — flagged for explicit approval
+	// per this task's brief rather than silently updated.
 	c.JSON(http.StatusOK, gin.H{"flags": flags})
 }

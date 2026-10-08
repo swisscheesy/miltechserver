@@ -55,16 +55,31 @@ func (handler Handler) upsertInspection(c *gin.Context) {
 
 	var req InspectionRequest
 	if err := decodeInspectionJSON(c, &req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here.
+		// response.Error() always emits {status, data, message}, but
+		// route_test.go (TestRouteRejectsUnknownFieldsAndTrailingJSON,
+		// TestRouteRejectsInvalidRawUTF8BeforeDecoding) asserts this body is
+		// the bare {"message": "invalid request body"} with no data/status
+		// keys. Confirmed by running those tests with the migration applied
+		// (both fail on JSONEq). Left as a raw gin.H literal per the Task
+		// 6/7 precedent for call sites the shared helper cannot express.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	result, err := handler.service.EnsureInspection(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.EnsureInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this handler's body has a
+	// non-empty "Inspection saved" Message alongside Data. Wrapping in
+	// response.OK() would silently drop that message text (Message would
+	// default to ""), which is an unintended content change even though no
+	// test currently asserts on it. Left as a raw StandardResponse literal
+	// per the Task 6/7 precedent for call sites response.OK() cannot express.
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Inspection saved", Data: result})
 }
 
@@ -74,13 +89,13 @@ func (handler Handler) getInspection(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.GetInspection(user, c.Param("equipment_id"), c.Param("pmcs_id"))
+	result, err := handler.service.GetInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"))
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "", Data: result})
+	response.OK(c, result)
 }
 
 func (handler Handler) deleteInspection(c *gin.Context) {
@@ -89,11 +104,16 @@ func (handler Handler) deleteInspection(c *gin.Context) {
 		return
 	}
 
-	if err := handler.service.DeleteInspection(user, c.Param("equipment_id"), c.Param("pmcs_id")); err != nil {
+	if err := handler.service.DeleteInspection(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id")); err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this body is a bare
+	// {"message": "Inspection deleted"} with no Data payload. Left as a raw
+	// gin.H literal per the Task 6/7 precedent for call sites response.OK()
+	// cannot express.
 	c.JSON(http.StatusOK, gin.H{"message": "Inspection deleted"})
 }
 
@@ -105,17 +125,21 @@ func (handler Handler) listInspections(c *gin.Context) {
 
 	var req ListInspectionsRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above: the
+		// bare {"message": ...} shape is preserved to match the sibling
+		// bad-request bodies this file's handler tests assert on.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid query parameters"})
 		return
 	}
 
-	result, err := handler.service.ListInspections(user, c.Param("equipment_id"), req)
+	result, err := handler.service.ListInspections(c.Request.Context(), user, c.Param("equipment_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "", Data: result})
+	response.OK(c, result)
 }
 
 func (handler Handler) upsertFault(c *gin.Context) {
@@ -126,16 +150,23 @@ func (handler Handler) upsertFault(c *gin.Context) {
 
 	var req FaultRequest
 	if err := decodeInspectionJSON(c, &req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	result, err := handler.service.UpsertFault(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.UpsertFault(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this handler's body has a
+	// non-empty "Fault saved" Message alongside Data. Left as a raw
+	// StandardResponse literal per the Task 6/7 precedent for call sites
+	// response.OK() cannot express.
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Fault saved", Data: result})
 }
 
@@ -147,15 +178,22 @@ func (handler Handler) deleteFault(c *gin.Context) {
 
 	var req DeleteFaultRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	if err := handler.service.DeleteFault(user, c.Param("equipment_id"), c.Param("pmcs_id"), req); err != nil {
+	if err := handler.service.DeleteFault(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req); err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this body is a bare
+	// {"message": "Fault deleted"} with no Data payload. Left as a raw
+	// gin.H literal per the Task 6/7 precedent for call sites response.OK()
+	// cannot express.
 	c.JSON(http.StatusOK, gin.H{"message": "Fault deleted"})
 }
 
@@ -167,16 +205,25 @@ func (handler Handler) deleteFaults(c *gin.Context) {
 
 	var req BulkDeleteFaultRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	result, err := handler.service.DeleteFaults(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.DeleteFaults(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. This body is
+	// flat — {message, requested_count, deleted_count} all at the top level.
+	// response.OK() would nest everything under a new "data" key (a real
+	// shape change) and also has no parameter for a success message; the
+	// count fields don't fit the message-only response.Error() shape either.
+	// Left as a raw gin.H literal per the Task 6/7 precedent for call sites
+	// neither helper can express.
 	c.JSON(http.StatusOK, gin.H{
 		"message":         "Faults deleted",
 		"requested_count": result.RequestedCount,
@@ -192,16 +239,23 @@ func (handler Handler) createComment(c *gin.Context) {
 
 	var req CreateCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	result, err := handler.service.CreateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
+	result, err := handler.service.CreateComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// hardcodes status 200, but this handler responds 201 Created, and it
+	// also has no parameter for a success message ("Comment created" would
+	// be silently dropped). Left as a raw StandardResponse literal per the
+	// Task 6/7 precedent for call sites response.OK() cannot express.
 	c.JSON(http.StatusCreated, response.StandardResponse{Status: http.StatusCreated, Message: "Comment created", Data: result})
 }
 
@@ -213,16 +267,23 @@ func (handler Handler) updateComment(c *gin.Context) {
 
 	var req UpdateCommentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above.
 		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
 		return
 	}
 
-	result, err := handler.service.UpdateComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"), req)
+	result, err := handler.service.UpdateComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"), req)
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this handler's body has a
+	// non-empty "Comment updated" Message alongside Data. Left as a raw
+	// StandardResponse literal per the Task 6/7 precedent for call sites
+	// response.OK() cannot express.
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Comment updated", Data: result})
 }
 
@@ -232,12 +293,17 @@ func (handler Handler) deleteComment(c *gin.Context) {
 		return
 	}
 
-	result, err := handler.service.DeleteComment(user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"))
+	result, err := handler.service.DeleteComment(c.Request.Context(), user, c.Param("equipment_id"), c.Param("pmcs_id"), c.Param("comment_id"))
 	if err != nil {
 		respondServiceError(c, err)
 		return
 	}
 
+	// NOTE: intentionally NOT migrated to response.OK() here. response.OK()
+	// has no parameter for a success message, and this handler's body has a
+	// non-empty "Comment deleted" Message alongside Data. Left as a raw
+	// StandardResponse literal per the Task 6/7 precedent for call sites
+	// response.OK() cannot express.
 	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Message: "Comment deleted", Data: result})
 }
 
@@ -269,6 +335,10 @@ func decodeInspectionJSON(c *gin.Context, destination any) error {
 func getUser(c *gin.Context) (*bootstrap.User, bool) {
 	value, exists := c.Get("user")
 	if !exists {
+		// NOTE: intentionally NOT migrated to response.Error() here, for the
+		// same reason as upsertInspection's decode-error branch above: the
+		// bare {"message": "unauthorized"} shape matches this file's other
+		// hand-authored error bodies and no test forces the richer envelope.
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
 		return nil, false
 	}
@@ -283,6 +353,16 @@ func getUser(c *gin.Context) (*bootstrap.User, bool) {
 }
 
 func respondServiceError(c *gin.Context, err error) {
+	// NOTE: none of this switch's branches were migrated to response.Error().
+	// response.Error() always emits {status, data, message}, but
+	// route_test.go's TestRouteSourceValidationKeepsBadRequestEnvelope
+	// asserts the ErrInvalidRequest branch's body is exactly
+	// {"message": "invalid request"} with require.NotContains(t, body,
+	// "data") — confirmed failing with the migration applied. The other
+	// branches in this switch use the same bare {"message": ...} shape, so
+	// they are kept raw too for a single consistent envelope across this
+	// function, per the Task 6/7 precedent for call sites the shared helper
+	// cannot express.
 	switch {
 	case errors.Is(err, ErrUnauthorized):
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})

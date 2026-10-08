@@ -1,6 +1,7 @@
 package pol_products
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,7 @@ type serviceStub struct {
 	err  error
 }
 
-func (s *serviceStub) GetPolProducts() (PolProductsResponse, error) {
+func (s *serviceStub) GetPolProducts(ctx context.Context) (PolProductsResponse, error) {
 	return s.resp, s.err
 }
 

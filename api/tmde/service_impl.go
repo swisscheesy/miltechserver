@@ -1,6 +1,7 @@
 package tmde
 
 import (
+	"context"
 	"strings"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -14,11 +15,11 @@ func NewService(repo Repository) Service {
 	return &service{repository: repo}
 }
 
-func (s *service) LookupByNIIN(niin string) (model.TmdeIntervalMat, error) {
+func (s *service) LookupByNIIN(ctx context.Context, niin string) (model.TmdeIntervalMat, error) {
 	normalized := strings.TrimSpace(strings.ToUpper(niin))
 	return s.repository.GetByNIIN(normalized)
 }
 
-func (s *service) GetAllPaginated(page int) (TmdePageResponse, error) {
+func (s *service) GetAllPaginated(ctx context.Context, page int) (TmdePageResponse, error) {
 	return s.repository.GetAllPaginated(page)
 }

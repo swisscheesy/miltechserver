@@ -1,6 +1,7 @@
 package item_comments
 
 import (
+	"context"
 	"testing"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -11,11 +12,11 @@ import (
 )
 
 type captureRepository struct {
-	getNiin       string
-	commentByID   *model.ItemComments
+	getNiin        string
+	commentByID    *model.ItemComments
 	commentByIDErr error
-	created       *model.ItemComments
-	updated       *model.ItemComments
+	created        *model.ItemComments
+	updated        *model.ItemComments
 }
 
 func (repo *captureRepository) GetCommentsByNiin(niin string) ([]CommentWithAuthor, error) {
@@ -46,7 +47,7 @@ func TestGetCommentsByNiinNormalizes(t *testing.T) {
 	repo := &captureRepository{}
 	svc := NewService(repo)
 
-	_, err := svc.GetCommentsByNiin(" 123456789 ")
+	_, err := svc.GetCommentsByNiin(context.Background(), " 123456789 ")
 	require.NoError(t, err)
 	require.Equal(t, "123456789", repo.getNiin)
 }
@@ -56,7 +57,7 @@ func TestCreateCommentValidatesText(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.CreateComment(user, "123456789", "", nil)
+	_, err := svc.CreateComment(context.Background(), user, "123456789", "", nil)
 	require.ErrorIs(t, err, ErrInvalidText)
 }
 
@@ -66,7 +67,7 @@ func TestCreateCommentValidatesParent(t *testing.T) {
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
 	parentID := "not-a-uuid"
-	_, err := svc.CreateComment(user, "123456789", "hi", &parentID)
+	_, err := svc.CreateComment(context.Background(), user, "123456789", "hi", &parentID)
 	require.ErrorIs(t, err, ErrInvalidParent)
 }
 
@@ -82,7 +83,7 @@ func TestUpdateCommentForbidden(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateComment(user, "123456789", commentID.String(), "text")
+	_, err := svc.UpdateComment(context.Background(), user, "123456789", commentID.String(), "text")
 	require.ErrorIs(t, err, ErrForbidden)
 }
 
@@ -98,7 +99,7 @@ func TestUpdateCommentInvalidText(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateComment(user, "123456789", commentID.String(), "")
+	_, err := svc.UpdateComment(context.Background(), user, "123456789", commentID.String(), "")
 	require.ErrorIs(t, err, ErrInvalidText)
 }
 
@@ -107,6 +108,6 @@ func TestUpdateCommentInvalidID(t *testing.T) {
 	svc := NewService(repo)
 	user := &bootstrap.User{UserID: "user-1", Username: "test"}
 
-	_, err := svc.UpdateComment(user, "123456789", "not-a-uuid", "text")
+	_, err := svc.UpdateComment(context.Background(), user, "123456789", "not-a-uuid", "text")
 	require.ErrorIs(t, err, ErrCommentNotFound)
 }

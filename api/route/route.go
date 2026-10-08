@@ -19,7 +19,9 @@ import (
 	"miltechserver/api/pmcs_sbs_progress"
 	"miltechserver/api/pol_products"
 	"miltechserver/api/quick_lists"
+	"miltechserver/api/response"
 	"miltechserver/api/sb_700_20"
+	"miltechserver/api/shops"
 	"miltechserver/api/tmde"
 	"miltechserver/api/user_general"
 	"miltechserver/api/user_pmcs"
@@ -107,15 +109,19 @@ func userPmcsAccessFamily(path string) string {
 }
 
 func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
+	setupRoutes(db, router, middleware.AuthenticationMiddleware(authClient), authClient, env, blobClient)
+}
+
+func setupRoutes(db *sql.DB, router *gin.Engine, authenticate gin.HandlerFunc, authClient *auth.Client, env *bootstrap.Env, blobClient *azblob.Client) {
 	v1Route := router.Group("/api/v1")
 	v1Route.Use(middleware.ErrorHandler)
 
 	testRoutes := router.Group("/api/v1/test")
-	testRoutes.Use(middleware.AuthenticationMiddleware(authClient))
+	testRoutes.Use(authenticate)
 	NewTestRouter(db, testRoutes)
 
 	authRoutes := router.Group("/api/v1/auth")
-	authRoutes.Use(middleware.AuthenticationMiddleware(authClient))
+	authRoutes.Use(authenticate)
 	userPmcsConfig := userpmcsshared.DefaultConfig()
 	if env != nil {
 		var err error
@@ -150,7 +156,11 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	}, authRoutes)
 	user_general.RegisterRoutes(user_general.Dependencies{DB: db}, authRoutes)
 	user_vehicles.RegisterRoutes(user_vehicles.Dependencies{DB: db}, authRoutes)
-	NewShopsRouter(db, blobClient, env, authRoutes)
+	shops.RegisterRoutes(shops.Dependencies{
+		DB:         db,
+		BlobClient: blobClient,
+		Env:        env,
+	}, authRoutes)
 	equipment_services.RegisterRoutes(equipment_services.Dependencies{DB: db}, authRoutes)
 	pmcs_sbs_progress.RegisterRoutes(pmcs_sbs_progress.Dependencies{DB: db}, authRoutes)
 	item_comments.RegisterRoutes(item_comments.Dependencies{DB: db}, v1Route, authRoutes)
@@ -190,7 +200,7 @@ func Setup(db *sql.DB, router *gin.Engine, authClient *auth.Client, env *bootstr
 	router.NoRoute(func(c *gin.Context) {
 		// Don't serve the SPA for API routes
 		if strings.HasPrefix(c.Request.URL.Path, "/api") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "API route not found"})
+			response.Error(c, http.StatusNotFound, "API route not found")
 			return
 		}
 		// Serve the SPA for all other routes

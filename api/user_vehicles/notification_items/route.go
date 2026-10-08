@@ -28,82 +28,70 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByNotification(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 
-	result, err := handler.service.GetByNotification(user, notificationID)
+	result, err := handler.service.GetByNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	itemID := c.Param("itemId")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item ID is required"})
+		response.Error(c, 400, "item ID is required")
 		return
 	}
 
-	result, err := handler.service.GetByID(user, itemID)
+	result, err := handler.service.GetByID(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsert(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -111,11 +99,11 @@ func (handler *Handler) upsert(c *gin.Context) {
 	var item model.UserNotificationItems
 	if err := c.BindJSON(&item); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Upsert(user, item)
+	err = handler.service.Upsert(c.Request.Context(), user, item)
 	if err != nil {
 		c.Error(err)
 		return
@@ -127,7 +115,7 @@ func (handler *Handler) upsert(c *gin.Context) {
 func (handler *Handler) upsertBatch(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -135,11 +123,11 @@ func (handler *Handler) upsertBatch(c *gin.Context) {
 	var items []model.UserNotificationItems
 	if err := c.BindJSON(&items); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, items)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, items)
 	if err != nil {
 		c.Error(err)
 		return
@@ -151,18 +139,18 @@ func (handler *Handler) upsertBatch(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	itemID := c.Param("itemId")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item ID is required"})
+		response.Error(c, 400, "item ID is required")
 		return
 	}
 
-	err = handler.service.Delete(user, itemID)
+	err = handler.service.Delete(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -174,18 +162,18 @@ func (handler *Handler) delete(c *gin.Context) {
 func (handler *Handler) deleteAllByNotification(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 
-	err = handler.service.DeleteAllByNotification(user, notificationID)
+	err = handler.service.DeleteAllByNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return

@@ -21,26 +21,26 @@ func (handler *Handler) JoinShopViaInviteCode(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.JoinShopRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.JoinShopViaInviteCode(user, req.InviteCode)
+	err := service.JoinShopViaInviteCode(c.Request.Context(), user, req.InviteCode)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Successfully joined shop"})
+	response.OK(c, gin.H{"message": "Successfully joined shop"})
 }
 
 // LeaveShop allows a user to leave a shop
@@ -49,25 +49,25 @@ func (handler *Handler) LeaveShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	err := service.LeaveShop(user, shopID)
+	err := service.LeaveShop(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Successfully left shop"})
+	response.OK(c, gin.H{"message": "Successfully left shop"})
 }
 
 // RemoveMemberFromShop allows admins to remove members from a shop
@@ -76,26 +76,26 @@ func (handler *Handler) RemoveMemberFromShop(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.RemoveMemberRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.RemoveMemberFromShop(user, req.ShopID, req.TargetUserID)
+	err := service.RemoveMemberFromShop(c.Request.Context(), user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Member removed successfully"})
+	response.OK(c, gin.H{"message": "Member removed successfully"})
 }
 
 // PromoteMemberToAdmin allows admins to promote members to admin role
@@ -104,26 +104,26 @@ func (handler *Handler) PromoteMemberToAdmin(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.PromoteMemberRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.PromoteMemberToAdmin(user, req.ShopID, req.TargetUserID)
+	err := service.PromoteMemberToAdmin(c.Request.Context(), user, req.ShopID, req.TargetUserID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Member promoted to admin successfully"})
+	response.OK(c, gin.H{"message": "Member promoted to admin successfully"})
 }
 
 // GetShopMembers returns all members of a shop
@@ -132,27 +132,23 @@ func (handler *Handler) GetShopMembers(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	members, err := service.GetShopMembers(user, shopID)
+	members, err := service.GetShopMembers(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    members,
-	})
+	response.OK(c, members)
 }

@@ -8,7 +8,7 @@ import (
 )
 
 type Service interface {
-	UpsertUser(user *bootstrap.User, userDto auth.UserDto) error
+	UpsertUser(ctx context.Context, user *bootstrap.User, userDto auth.UserDto) error
 	DeleteUser(ctx context.Context, uid string) error
-	UpdateUserDisplayName(uid string, displayName string) error
+	UpdateUserDisplayName(ctx context.Context, uid string, displayName string) error
 }

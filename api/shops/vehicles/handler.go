@@ -57,13 +57,13 @@ func decodeStrictJSON(body io.Reader, destination interface{}) error {
 func writeVehicleError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidUsageAdjustment):
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, shared.ErrShopAccessDenied):
-		c.JSON(http.StatusForbidden, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, shared.ErrVehicleNotFound):
-		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusNotFound, err.Error())
 	case errors.Is(err, ErrUsageOutOfRange):
-		c.JSON(http.StatusConflict, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusConflict, err.Error())
 	default:
 		slog.Error("Shop vehicle usage adjustment failed", "error", err)
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
@@ -87,11 +87,7 @@ func writeUsageAdjustmentError(c *gin.Context, err error) {
 }
 
 func writeUsageErrorResponse(c *gin.Context, status int, message string) {
-	c.JSON(status, response.StandardResponse{
-		Status:  status,
-		Message: message,
-		Data:    nil,
-	})
+	response.Error(c, status, message)
 }
 
 // Shop Vehicle Operations
@@ -102,15 +98,15 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.CreateShopVehicleRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -127,12 +123,18 @@ func (handler *Handler) CreateShopVehicle(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdVehicle, err := service.CreateShopVehicle(user, vehicle)
+	createdVehicle, err := service.CreateShopVehicle(c.Request.Context(), user, vehicle)
 	if err != nil {
+		if errors.Is(err, ErrInvalidUsageAdjustment) {
+			writeVehicleError(c, err)
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Vehicle created successfully",
@@ -146,29 +148,25 @@ func (handler *Handler) GetShopVehicles(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	vehicles, err := service.GetShopVehicles(user, shopID)
+	vehicles, err := service.GetShopVehicles(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    vehicles,
-	})
+	response.OK(c, vehicles)
 }
 
 // GetShopVehicleByID returns a specific vehicle by ID
@@ -177,29 +175,25 @@ func (handler *Handler) GetShopVehicleByID(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
 	service := handler.service
-	vehicle, err := service.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.GetShopVehicleByID(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *vehicle,
-	})
+	response.OK(c, *vehicle)
 }
 
 // UpdateShopVehicle updates an existing shop vehicle
@@ -208,34 +202,23 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.UpdateShopVehicleRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	vehicle := model.ShopVehicle{
-		ID:             req.VehicleID,
-		Admin:          req.Admin,
-		Niin:           req.Niin,
-		Model:          req.Model,
-		Serial:         req.Serial,
-		Uoc:            req.Uoc,
-		Mileage:        req.Mileage,
-		Hours:          req.Hours,
-		Comment:        req.Comment,
-		TrackedMileage: req.TrackedMileage,
-		TrackedHours:   req.TrackedHours,
+	input := VehicleUpdateInput{
+		Metadata:       VehicleMetadataUpdate{VehicleID: req.VehicleID, Admin: req.Admin, Niin: req.Niin, Model: req.Model, Serial: req.Serial, Uoc: req.Uoc, Mileage: req.Mileage, Hours: req.Hours, Comment: req.Comment},
+		TrackedMileage: req.TrackedMileage, TrackedHours: req.TrackedHours,
 	}
-
-	service := handler.service
-	err := service.UpdateShopVehicle(user, vehicle)
+	err := handler.service.UpdateShopVehicle(c.Request.Context(), user, input)
 	if err != nil {
 		if errors.Is(err, ErrInvalidUsageAdjustment) {
 			writeVehicleError(c, err)
@@ -245,7 +228,7 @@ func (handler *Handler) UpdateShopVehicle(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Vehicle updated successfully"})
+	response.OK(c, gin.H{"message": "Vehicle updated successfully"})
 }
 
 func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
@@ -281,6 +264,8 @@ func (handler *Handler) AdjustShopVehicleUsage(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Equipment usage adjusted successfully",
@@ -294,23 +279,23 @@ func (handler *Handler) DeleteShopVehicle(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
 	service := handler.service
-	err := service.DeleteShopVehicle(user, vehicleID)
+	err := service.DeleteShopVehicle(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Vehicle deleted successfully"})
+	response.OK(c, gin.H{"message": "Vehicle deleted successfully"})
 }

@@ -26,39 +26,35 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getSerializedItemsByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsertSerializedSaveItemByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var serializedItem model.UserItemsSerialized
 	if err := c.BindJSON(&serializedItem); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Upsert(user, serializedItem)
+	err = handler.service.Upsert(c.Request.Context(), user, serializedItem)
 	if err != nil {
 		c.Error(err)
 		return
@@ -70,18 +66,18 @@ func (handler *Handler) upsertSerializedSaveItemByUser(c *gin.Context) {
 func (handler *Handler) deleteSerializedSaveItemByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var serializedItem model.UserItemsSerialized
 	if err := c.BindJSON(&serializedItem); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Delete(user, serializedItem)
+	err = handler.service.Delete(c.Request.Context(), user, serializedItem)
 	if err != nil {
 		c.Error(err)
 		return
@@ -93,12 +89,12 @@ func (handler *Handler) deleteSerializedSaveItemByUser(c *gin.Context) {
 func (handler *Handler) deleteAllSerializedItemsByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -110,18 +106,18 @@ func (handler *Handler) deleteAllSerializedItemsByUser(c *gin.Context) {
 func (handler *Handler) upsertSerializedSaveItemListByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var serializedItems []model.UserItemsSerialized
 	if err := c.BindJSON(&serializedItems); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, serializedItems)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, serializedItems)
 	if err != nil {
 		c.Error(err)
 		return

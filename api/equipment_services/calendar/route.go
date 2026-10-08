@@ -6,6 +6,7 @@ import (
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	shopsContract "miltechserver/api/shops/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,30 +24,34 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getCalendar(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.GetCalendarServicesRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		slog.Info("invalid query parameters", "error", err)
-		c.JSON(400, gin.H{"message": "invalid query parameters", "details": err.Error()})
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
+		shopsContract.WriteValidationError(c, "invalid query parameters")
 		return
 	}
 
-	services, err := handler.service.GetCalendarServices(user, shopID, req)
+	services, err := handler.service.GetCalendarServices(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Calendar services retrieved successfully",

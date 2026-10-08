@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,12 +31,12 @@ func (service *ServiceImpl) WithAuthorization(auth shared.ShopAuthorization) sha
 
 // GetShopAdminOnlyListsSetting returns the admin_only_lists setting for a shop
 // Any shop member can read this setting
-func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, shopID string) (bool, error) {
+func (service *ServiceImpl) GetShopAdminOnlyListsSetting(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	if user == nil {
 		return false, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -44,7 +45,7 @@ func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, s
 		return false, errors.New("access denied: user is not a member of this shop")
 	}
 
-	adminOnlyLists, err := service.repo.GetShopAdminOnlyListsSetting(shopID)
+	adminOnlyLists, err := service.repo.GetShopAdminOnlyListsSetting(ctx, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get admin_only_lists setting: %w", err)
 	}
@@ -55,12 +56,12 @@ func (service *ServiceImpl) GetShopAdminOnlyListsSetting(user *bootstrap.User, s
 
 // UpdateShopAdminOnlyListsSetting updates the admin_only_lists setting for a shop
 // Only shop admins can modify this setting
-func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User, shopID string, adminOnlyLists bool) error {
+func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(ctx context.Context, user *bootstrap.User, shopID string, adminOnlyLists bool) error {
 	if user == nil {
 		return errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -69,7 +70,7 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User
 		return errors.New("access denied: only shop administrators can modify this setting")
 	}
 
-	err = service.repo.UpdateShopAdminOnlyListsSetting(shopID, adminOnlyLists)
+	err = service.repo.UpdateShopAdminOnlyListsSetting(ctx, user, shopID, adminOnlyLists)
 	if err != nil {
 		return fmt.Errorf("failed to update admin_only_lists setting: %w", err)
 	}
@@ -79,12 +80,12 @@ func (service *ServiceImpl) UpdateShopAdminOnlyListsSetting(user *bootstrap.User
 }
 
 // IsUserShopAdmin checks if the authenticated user is an admin for the specified shop
-func (service *ServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (service *ServiceImpl) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	if user == nil {
 		return false, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify shop membership: %w", err)
 	}
@@ -93,7 +94,7 @@ func (service *ServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string)
 		return false, nil
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return false, fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -103,12 +104,12 @@ func (service *ServiceImpl) IsUserShopAdmin(user *bootstrap.User, shopID string)
 
 // GetShopSettings returns all settings for a shop
 // Any shop member can read settings
-func (service *ServiceImpl) GetShopSettings(user *bootstrap.User, shopID string) (*request.ShopSettings, error) {
+func (service *ServiceImpl) GetShopSettings(ctx context.Context, user *bootstrap.User, shopID string) (*request.ShopSettings, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.auth.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.auth.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -117,7 +118,7 @@ func (service *ServiceImpl) GetShopSettings(user *bootstrap.User, shopID string)
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	settings, err := service.repo.GetShopSettings(shopID)
+	settings, err := service.repo.GetShopSettings(ctx, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop settings: %w", err)
 	}
@@ -128,12 +129,12 @@ func (service *ServiceImpl) GetShopSettings(user *bootstrap.User, shopID string)
 
 // UpdateShopSettings updates one or more shop settings (admin only)
 // Supports partial updates - only provided fields are modified
-func (service *ServiceImpl) UpdateShopSettings(user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error) {
+func (service *ServiceImpl) UpdateShopSettings(ctx context.Context, user *bootstrap.User, shopID string, updates request.UpdateShopSettingsRequest) (*request.ShopSettings, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	isAdmin, err := service.auth.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.auth.IsUserShopAdmin(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify admin status: %w", err)
 	}
@@ -142,12 +143,12 @@ func (service *ServiceImpl) UpdateShopSettings(user *bootstrap.User, shopID stri
 		return nil, errors.New("access denied: only shop administrators can modify settings")
 	}
 
-	err = service.repo.UpdateShopSettings(shopID, updates)
+	err = service.repo.UpdateShopSettings(ctx, user, shopID, updates)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update shop settings: %w", err)
 	}
 
-	updatedSettings, err := service.repo.GetShopSettings(shopID)
+	updatedSettings, err := service.repo.GetShopSettings(ctx, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch updated settings: %w", err)
 	}

@@ -1,6 +1,7 @@
 package uoc
 
 import (
+	"context"
 	"miltechserver/api/response"
 	"strings"
 )
@@ -13,11 +14,11 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) LookupByPage(page int) (response.UOCPageResponse, error) {
+func (service *ServiceImpl) LookupByPage(ctx context.Context, page int) (response.UOCPageResponse, error) {
 	return service.repo.SearchByPage(page)
 }
 
-func (service *ServiceImpl) LookupSpecific(uoc string) (response.UOCPageResponse, error) {
+func (service *ServiceImpl) LookupSpecific(ctx context.Context, uoc string) (response.UOCPageResponse, error) {
 	uocData, err := service.repo.SearchSpecific(strings.ToUpper(uoc))
 	if err != nil {
 		return response.UOCPageResponse{}, err
@@ -32,7 +33,7 @@ func (service *ServiceImpl) LookupSpecific(uoc string) (response.UOCPageResponse
 	}, nil
 }
 
-func (service *ServiceImpl) LookupByModel(model string) (response.UOCPageResponse, error) {
+func (service *ServiceImpl) LookupByModel(ctx context.Context, model string) (response.UOCPageResponse, error) {
 	uocData, err := service.repo.SearchByModel(strings.ToUpper(model))
 	if err != nil {
 		return response.UOCPageResponse{}, err

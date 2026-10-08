@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 
@@ -56,4 +57,29 @@ func TestGetShopEquipmentOverviewHidesRepositoryError(t *testing.T) {
 	require.Nil(t, result)
 	require.ErrorIs(t, err, ErrShopEquipmentOverviewUnavailable)
 	require.NotContains(t, err.Error(), "database host")
+}
+
+type createRepositoryStub struct {
+	Repository
+	create func(context.Context, *bootstrap.User, model.Shops) (*model.Shops, error)
+}
+
+func (stub createRepositoryStub) CreateShop(ctx context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+	return stub.create(ctx, user, shop)
+}
+
+func TestCreateShopReturnsAtomicRepositoryFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	failure := errors.New("membership insert failed")
+	repo := createRepositoryStub{create: func(received context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
+		require.Same(t, ctx, received)
+		require.Equal(t, "creator", shop.CreatedBy)
+		require.NotEmpty(t, shop.ID)
+		require.True(t, shop.AdminOnlyLists)
+		return nil, failure
+	}}
+	result, err := NewService(repo, nil).CreateShop(ctx, &bootstrap.User{UserID: "creator"}, model.Shops{Name: "shop", AdminOnlyLists: true})
+	require.Nil(t, result)
+	require.ErrorIs(t, err, failure)
 }

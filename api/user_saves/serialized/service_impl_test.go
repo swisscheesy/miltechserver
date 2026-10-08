@@ -1,6 +1,7 @@
 package serialized
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -64,7 +65,7 @@ var _ images.Repository = (*serializedImagesStub)(nil)
 func TestServiceImplGetByUserRequiresUser(t *testing.T) {
 	service := NewService(&serializedRepoStub{}, &serializedImagesStub{})
 
-	_, err := service.GetByUser(nil)
+	_, err := service.GetByUser(context.Background(), nil)
 	require.ErrorIs(t, err, shared.ErrUserNotFound)
 }
 
@@ -79,7 +80,7 @@ func TestServiceImplDeleteAllDeletesImages(t *testing.T) {
 	imagesRepo := &serializedImagesStub{}
 	service := NewService(repo, imagesRepo)
 
-	err := service.DeleteAll(&bootstrap.User{UserID: "user"})
+	err := service.DeleteAll(context.Background(), &bootstrap.User{UserID: "user"})
 	require.NoError(t, err)
 	require.True(t, repo.deleteAll)
 	require.Equal(t, []string{"one"}, imagesRepo.deletedIDs)
@@ -90,7 +91,7 @@ func TestServiceImplDeleteAllContinuesOnGetError(t *testing.T) {
 	imagesRepo := &serializedImagesStub{}
 	service := NewService(repo, imagesRepo)
 
-	err := service.DeleteAll(&bootstrap.User{UserID: "user"})
+	err := service.DeleteAll(context.Background(), &bootstrap.User{UserID: "user"})
 	require.NoError(t, err)
 	require.True(t, repo.deleteAll)
 }

@@ -27,82 +27,70 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByVehicle(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
-	result, err := handler.service.GetByVehicle(user, vehicleID)
+	result, err := handler.service.GetByVehicle(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 
-	result, err := handler.service.GetByID(user, notificationID)
+	result, err := handler.service.GetByID(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsert(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -110,11 +98,11 @@ func (handler *Handler) upsert(c *gin.Context) {
 	var notification model.UserVehicleNotifications
 	if err := c.BindJSON(&notification); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Upsert(user, notification)
+	err = handler.service.Upsert(c.Request.Context(), user, notification)
 	if err != nil {
 		c.Error(err)
 		return
@@ -126,18 +114,18 @@ func (handler *Handler) upsert(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notificationId")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification ID is required"})
+		response.Error(c, 400, "notification ID is required")
 		return
 	}
 
-	err = handler.service.Delete(user, notificationID)
+	err = handler.service.Delete(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -149,18 +137,18 @@ func (handler *Handler) delete(c *gin.Context) {
 func (handler *Handler) deleteAllByVehicle(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
-	err = handler.service.DeleteAllByVehicle(user, vehicleID)
+	err = handler.service.DeleteAllByVehicle(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return

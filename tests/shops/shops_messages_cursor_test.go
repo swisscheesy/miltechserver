@@ -15,11 +15,10 @@ func TestMessagesPaginatedCursorBefore(t *testing.T) {
 	router := newTestRouter(t)
 
 	shopID := createShop(t, router, "user-1", "Cursor Shop")
-	_ = createMessage(t, router, "user-1", shopID, "First message")
-	time.Sleep(1 * time.Millisecond)
-	_ = createMessage(t, router, "user-1", shopID, "Second message")
-	time.Sleep(1 * time.Millisecond)
+	first := createMessage(t, router, "user-1", shopID, "First message")
+	second := createMessage(t, router, "user-1", shopID, "Second message")
 	cursorMessageID := createMessage(t, router, "user-1", shopID, "Third message")
+	setLegacyMessageFixtureTimes(t, []string{first, second, cursorMessageID})
 
 	getPagedResp := doJSONRequest(
 		t,
@@ -58,8 +57,8 @@ func TestMessagesPaginatedCursorAfterIncludesAuthorUsername(t *testing.T) {
 	router := newTestRouter(t)
 	shopID := createShop(t, router, "user-1", "After Cursor Shop")
 	cursorMessageID := createMessage(t, router, "user-1", shopID, "First message")
-	time.Sleep(time.Millisecond)
-	_ = createMessage(t, router, "user-1", shopID, "Second message")
+	second := createMessage(t, router, "user-1", shopID, "Second message")
+	setLegacyMessageFixtureTimes(t, []string{cursorMessageID, second})
 
 	resp := doJSONRequest(
 		t,
@@ -75,4 +74,13 @@ func TestMessagesPaginatedCursorAfterIncludesAuthorUsername(t *testing.T) {
 	messages := data["messages"].([]interface{})
 	require.Len(t, messages, 1)
 	requireAuthorUsername(t, messages[0].(map[string]interface{}), "test-user")
+}
+
+func setLegacyMessageFixtureTimes(t *testing.T, ids []string) {
+	t.Helper()
+	base := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	for i, id := range ids {
+		_, err := testDB.Exec(`UPDATE shop_messages SET created_at=$1 WHERE id=$2`, base.Add(time.Duration(i)*time.Second), id)
+		require.NoError(t, err)
+	}
 }

@@ -1,0 +1,560 @@
+[
+  {
+    "label": "final-fix-bootstrap-green",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestBootstrapEquipmentBoundedParameters",
+      "./tests/shops"
+    ],
+    "exit": 0,
+    "seconds": 14.333,
+    "log_sha256": "b9f617a0361c3a17027641953204512d12dbf5585bbedec05a41f0e54a67ff48",
+    "top_level_pass": 1,
+    "including_subtests_pass": 1,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-capacity-red",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestNotificationUnboundedParameterCapacity",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 20.561,
+    "log_sha256": "088b4f16594e39ea29a756d34e1fb875187cabc214d6e3401f1da6db6bcf04cb",
+    "top_level_pass": 0,
+    "including_subtests_pass": 4,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-container-green",
+    "command": [
+      "python3",
+      "scripts/test-server-container-inputs-static.py"
+    ],
+    "exit": 0,
+    "seconds": 0.037,
+    "log_sha256": "2c37d50a88147ca2ebd5197d74ee37d462dab650d793512e849814c28d5a38f0",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-container-red",
+    "command": [
+      "python3",
+      "scripts/test-server-container-inputs-static.py"
+    ],
+    "exit": 1,
+    "seconds": 0.044,
+    "log_sha256": "f8fea42e046baf23a2caf71f3b160da5fb3205302afbba74bcbb80f042d8a5a4",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-docker",
+    "command": [
+      "bash",
+      "scripts/test-server-container-inputs.sh",
+      "/private/tmp/miltechserver-final-fix-container-acceptance",
+      "miltechserver-container-inputs-test:final-fix-acceptance"
+    ],
+    "exit": 3,
+    "seconds": 10.281,
+    "log_sha256": "3b6a68c7846c99294ac19671b1cc55610bac74d0d490797392104f008de713dc",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit": 0,
+    "seconds": 5.683,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-container-static",
+    "command": [
+      "python3",
+      "scripts/test-server-container-inputs-static.py"
+    ],
+    "exit": 0,
+    "seconds": 0.086,
+    "log_sha256": "7d59a8fbca92ef540f42b6883247c3844892d23f501b6cf2621d0e535813fb81",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-db-migrations",
+    "command": [
+      "env",
+      "SHOP_AGGREGATE_PERF=1",
+      "SHOP_OVERVIEW_PERF=1",
+      "SHOP_MESSAGE_WRITE_PERF=1",
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "--verify-notification-migration",
+      "--verify-message-sync-migration",
+      "--verify-remediation-migrations",
+      "--publish-candidate-generated",
+      "-v",
+      "-count=1",
+      "-timeout=10m",
+      "./tests/shops",
+      "./tests/equipment_services"
+    ],
+    "exit": 0,
+    "seconds": 172.454,
+    "log_sha256": "a1eac3a281ee22d570f73b865d9c96ad264e1094d9b77b5cee281d7f86ce7473",
+    "top_level_pass": 303,
+    "including_subtests_pass": 1002,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-db-race",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-race",
+      "-v",
+      "-count=1",
+      "-timeout=5m",
+      "-run",
+      "Test(CurrentAuthority|AggregateSingleSnapshot|AggregateListSnapshotMembership|AggregateContext|MessageAllocator|Cleanup|BatchRemovalRace|InviteAdmission|InviteRevocation|Departure|ServicePageSnapshot|CompletionHistoryCurrentAuthority|MessageMutationCancellation|ServiceUsernameLookupCancellation|LegacyAuditFailureKeepsBusinessSuccess|EquipmentDeleteCommitFailureDoesNotLogSuccess|PerformanceSamplerFinishIsIdempotent|BootstrapEquipmentBoundedParameters)",
+      "./tests/shops",
+      "./tests/equipment_services"
+    ],
+    "exit": 0,
+    "seconds": 51.991,
+    "log_sha256": "eb6ab9422bd273fede49cb6fe02da8d93a4df53993c4abcb8c3b699a3f01ac31",
+    "top_level_pass": 39,
+    "including_subtests_pass": 169,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-host-tests",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-count=1",
+      "./api/...",
+      "./bootstrap/...",
+      "./tools/...",
+      "./internal/...",
+      "."
+    ],
+    "exit": 0,
+    "seconds": 38.46,
+    "log_sha256": "cab74fab2c5b370d08fb7bf05ffd665d330515a2fd70d18cbd16a14449893063",
+    "top_level_pass": 619,
+    "including_subtests_pass": 1308,
+    "skipped_tests": [
+      "TestRepositorySearchSummaries_ReturnsResults",
+      "TestRepositorySearchSummaries_NoMatch",
+      "TestRepositorySearchSummaries_PageTwo"
+    ]
+  },
+  {
+    "label": "final-fix-final-python-guards",
+    "command": [
+      "python3",
+      "scripts/test-shops-isolated_test.py"
+    ],
+    "exit": 0,
+    "seconds": 28.367,
+    "log_sha256": "636761b36b88d8315fa2dc9d9aa91ba4ab25abd98505f068d7608821745c957d",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-python-publication",
+    "command": [
+      "python3",
+      "scripts/test-publish-shops-candidate-generated.py"
+    ],
+    "exit": 0,
+    "seconds": 4.568,
+    "log_sha256": "88e8fce6670b8cdee58892d9a675854c42be72cf4c0f1c75c54beb293f6f1e40",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-python-runner",
+    "command": [
+      "python3",
+      "scripts/apply-shops-remediation-migrations_test.py"
+    ],
+    "exit": 0,
+    "seconds": 22.317,
+    "log_sha256": "49c38e5f0c23ba3ffc8227ecc92b6541a2ebb451df0819f141f187ef561f16bb",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-unit-race",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-race",
+      "-count=1",
+      "-timeout=3m",
+      "./api/shops/...",
+      "./api/equipment_services/...",
+      "./api/shared/db",
+      "./api/middleware",
+      "./internal/testsql"
+    ],
+    "exit": 0,
+    "seconds": 28.339,
+    "log_sha256": "8408bd7f5851ff25b186b3f57f33715586efa5e3a78b745e0076e413db88d45c",
+    "top_level_pass": 147,
+    "including_subtests_pass": 437,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-final-vet",
+    "command": [
+      "go",
+      "vet",
+      "./api/...",
+      "./bootstrap/...",
+      "./tools/...",
+      "./internal/...",
+      "."
+    ],
+    "exit": 0,
+    "seconds": 3.038,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-focused-green-corrected",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestCleanup020ReverseSerializesWriters|TestLegacyAuditFailureKeepsBusinessSuccess|TestEquipmentDeleteCommitFailureDoesNotLogSuccess|TestPerformanceSamplerFinishIsIdempotent|TestCleanupDatabaseBlockingBudgetAndRecovery|TestAggregateSingleSnapshot|TestAggregateContext|TestNotificationUnboundedParameterCapacity|TestBootstrapEquipmentBoundedParameters",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 25.2,
+    "log_sha256": "00bd10ea74837dafbf609a99db43117d2eb41d1fc6d1ae2c01de744921c9a005",
+    "top_level_pass": 8,
+    "including_subtests_pass": 63,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-focused-green",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestCleanup020ReverseSerializesWriters|TestLegacyAuditFailureKeepsBusinessSuccess|TestEquipmentDeleteCommitFailureDoesNotLogSuccess|TestPerformanceSamplerFinishIsIdempotent|TestCleanupDatabaseBlockingBudgetAndRecovery|TestAggregateSingleSnapshot|TestAggregateContext|TestNotificationUnboundedParameterCapacity",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 10.413,
+    "log_sha256": "d7bf429a9a052a5afad30d0ad052add5f85dd3620b61dfbee33dadf0f14b46e4",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-frozen-build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit": 0,
+    "seconds": 15.435,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-frozen-db-migrations",
+    "command": [
+      "env",
+      "SHOP_AGGREGATE_PERF=1",
+      "SHOP_OVERVIEW_PERF=1",
+      "SHOP_MESSAGE_WRITE_PERF=1",
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "--verify-notification-migration",
+      "--verify-message-sync-migration",
+      "--verify-remediation-migrations",
+      "--publish-candidate-generated",
+      "-v",
+      "-count=1",
+      "-timeout=10m",
+      "./tests/shops",
+      "./tests/equipment_services"
+    ],
+    "exit": 0,
+    "seconds": 229.537,
+    "log_sha256": "1558c1178e8a50bb472255f330912215fb8ec40980e2b359aeea8c6590f42ae9",
+    "top_level_pass": 303,
+    "including_subtests_pass": 1002,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-frozen-db-race",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-race",
+      "-v",
+      "-count=1",
+      "-timeout=5m",
+      "-run",
+      "Test(CurrentAuthority|AggregateSingleSnapshot|AggregateListSnapshotMembership|AggregateContext|MessageAllocator|Cleanup|BatchRemovalRace|InviteAdmission|InviteRevocation|Departure|ServicePageSnapshot|CompletionHistoryCurrentAuthority|MessageMutationCancellation|ServiceUsernameLookupCancellation|LegacyAuditFailureKeepsBusinessSuccess|EquipmentDeleteCommitFailureDoesNotLogSuccess|PerformanceSamplerFinishIsIdempotent|BootstrapEquipmentBoundedParameters)",
+      "./tests/shops",
+      "./tests/equipment_services"
+    ],
+    "exit": 0,
+    "seconds": 63.373,
+    "log_sha256": "f18bcfc618e824402f6dba38c19b08abaf0555b84362eee72f4ed84a25329220",
+    "top_level_pass": 39,
+    "including_subtests_pass": 169,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-frozen-host-tests",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-count=1",
+      "./api/...",
+      "./bootstrap/...",
+      "./tools/...",
+      "./internal/...",
+      "."
+    ],
+    "exit": 0,
+    "seconds": 52.532,
+    "log_sha256": "fea8d53486556bbcba9c7c7f822f61c9beae8927acc2581c6923efd9ab53038a",
+    "top_level_pass": 619,
+    "including_subtests_pass": 1308,
+    "skipped_tests": [
+      "TestRepositorySearchSummaries_ReturnsResults",
+      "TestRepositorySearchSummaries_NoMatch",
+      "TestRepositorySearchSummaries_PageTwo"
+    ]
+  },
+  {
+    "label": "final-fix-frozen-unit-race",
+    "command": [
+      "go",
+      "test",
+      "-json",
+      "-race",
+      "-count=1",
+      "-timeout=3m",
+      "./api/shops/...",
+      "./api/equipment_services/...",
+      "./api/shared/db",
+      "./api/middleware",
+      "./internal/testsql"
+    ],
+    "exit": 0,
+    "seconds": 30.224,
+    "log_sha256": "032e6d16a0ae62096d4b9350485534b39b34b3c0a63a15a6438164e3e5aa52a5",
+    "top_level_pass": 147,
+    "including_subtests_pass": 437,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-frozen-vet",
+    "command": [
+      "go",
+      "vet",
+      "./api/...",
+      "./bootstrap/...",
+      "./tools/...",
+      "./internal/...",
+      "."
+    ],
+    "exit": 0,
+    "seconds": 6.741,
+    "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-observability-red",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestEquipmentDeleteCommitFailureDoesNotLogSuccess|TestPerformanceSamplerFinishIsIdempotent",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 14.425,
+    "log_sha256": "34fd216a73e2ab285ff6d3175c71ca1951e92eb9e43053bfc902d6500d1d6cd9",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-read-green",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestAggregateSingleSnapshot|TestAggregateContext|TestNotificationUnboundedParameterCapacity",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 27.243,
+    "log_sha256": "2929f20c20756bef51fdbbf8a8b2ebfc5df1b58cec1d3d1101c189d3cf698375",
+    "top_level_pass": 2,
+    "including_subtests_pass": 43,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-reverse-audit-red",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestCleanup020ReverseSerializesWriters|TestLegacyAuditFailureKeepsBusinessSuccess/vehicle-delete",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 17.093,
+    "log_sha256": "4efa4d5a261813e9ba1614a0473c7c0d70d91af709cf4fde6c7bae455b4ff83b",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-snapshot-red-authorized",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestAggregateSingleSnapshot/legacy",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 13.282,
+    "log_sha256": "5ac05fa13f1bc6bbec1be31e1955f03d53581f0b38a09e09bd962a32ab5f610e",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-snapshot-red-corrected",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestAggregateSingleSnapshot/legacy",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 14.446,
+    "log_sha256": "61ff011784ee2360a24159473f181ce950dfdcc2a59090fc8bb74e9e6ba3ad65",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-snapshot-red",
+    "command": [
+      "bash",
+      "scripts/test-shops-isolated.sh",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestAggregateSingleSnapshot/legacy",
+      "./tests/shops"
+    ],
+    "exit": 1,
+    "seconds": 0.092,
+    "log_sha256": "90a84f8bd251cefa509bbecc383a71c3abff7dfe9655f53e2301de2fc841cab3",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-worker-green",
+    "command": [
+      "go",
+      "test",
+      "-v",
+      "-count=1",
+      "-run",
+      "TestCleanup",
+      "./api/shops/messages"
+    ],
+    "exit": 0,
+    "seconds": 1.637,
+    "log_sha256": "1c15756d44d9b2a6a45ff5fe4134061caeb4d728324f7cd7e6e9b3d067d8db22",
+    "top_level_pass": 7,
+    "including_subtests_pass": 9,
+    "skipped_tests": []
+  },
+  {
+    "label": "final-fix-worker-red",
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "-run",
+      "TestCleanup(DatabasePhaseBudgets|MultiJobLeaseClock)",
+      "./api/shops/messages"
+    ],
+    "exit": 1,
+    "seconds": 1.908,
+    "log_sha256": "3569e650f9020956571d2d8147a7bf883d2604f1105cb6ba55767d7d01a3f1f5",
+    "top_level_pass": 0,
+    "including_subtests_pass": 0,
+    "skipped_tests": []
+  }
+]

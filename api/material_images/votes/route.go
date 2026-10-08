@@ -27,7 +27,7 @@ func RegisterRoutes(authRouter *gin.RouterGroup, service Service, imagesService 
 func (h *Handler) vote(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
@@ -35,19 +35,19 @@ func (h *Handler) vote(c *gin.Context) {
 
 	var req request.VoteImageRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid request: %v", err)})
+		response.Error(c, http.StatusBadRequest, fmt.Sprintf("Invalid request: %v", err))
 		return
 	}
 
-	err = h.service.Vote(user, imageID, req.VoteType)
+	err = h.service.Vote(c.Request.Context(), user, imageID, req.VoteType)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Vote recorded successfully"})
+		response.OK(c, gin.H{"success": true, "message": "Vote recorded successfully"})
 		return
 	}
 
@@ -63,21 +63,21 @@ func (h *Handler) vote(c *gin.Context) {
 func (h *Handler) removeVote(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "Unauthorized")
 		return
 	}
 
 	imageID := c.Param("image_id")
 
-	err = h.service.RemoveVote(user, imageID)
+	err = h.service.RemoveVote(c.Request.Context(), user, imageID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove vote"})
+		response.Error(c, http.StatusInternalServerError, "Failed to remove vote")
 		return
 	}
 
-	updatedImage, err := h.imagesService.GetByID(imageID, user)
+	updatedImage, err := h.imagesService.GetByID(c.Request.Context(), imageID, user)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": "Vote removed successfully"})
+		response.OK(c, gin.H{"success": true, "message": "Vote removed successfully"})
 		return
 	}
 

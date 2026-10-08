@@ -1,14 +1,15 @@
 package serialized
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 )
 
 type Service interface {
-	GetByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error)
-	Upsert(user *bootstrap.User, item model.UserItemsSerialized) error
-	UpsertBatch(user *bootstrap.User, items []model.UserItemsSerialized) error
-	Delete(user *bootstrap.User, item model.UserItemsSerialized) error
-	DeleteAll(user *bootstrap.User) error
+	GetByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsSerialized, error)
+	Upsert(ctx context.Context, user *bootstrap.User, item model.UserItemsSerialized) error
+	UpsertBatch(ctx context.Context, user *bootstrap.User, items []model.UserItemsSerialized) error
+	Delete(ctx context.Context, user *bootstrap.User, item model.UserItemsSerialized) error
+	DeleteAll(ctx context.Context, user *bootstrap.User) error
 }

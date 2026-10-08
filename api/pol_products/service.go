@@ -1,5 +1,7 @@
 package pol_products
 
+import "context"
+
 type Service interface {
-	GetPolProducts() (PolProductsResponse, error)
+	GetPolProducts(ctx context.Context) (PolProductsResponse, error)
 }

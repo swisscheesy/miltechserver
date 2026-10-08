@@ -251,7 +251,7 @@ func TestServiceSearchSummaries_ReturnsMatchingLines(t *testing.T) {
 	}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 1)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.NoError(t, err)
 	require.Equal(t, 1, resp.TotalCount)
@@ -264,7 +264,7 @@ func TestServiceSearchSummaries_EmptyResults(t *testing.T) {
 	stub := &repoStub{rows: nil, total: 0}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 1)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.NoError(t, err)
 	require.Equal(t, 0, resp.TotalCount)
@@ -274,7 +274,7 @@ func TestServiceSearchSummaries_EmptyResults(t *testing.T) {
 func TestServiceSearchSummaries_QueryTooShort(t *testing.T) {
 	svc := &ServiceImpl{repo: &repoStub{}}
 
-	_, err := svc.SearchSummaries("ab", 1)
+	_, err := svc.SearchSummaries(context.Background(), "ab", 1)
 
 	require.ErrorIs(t, err, ErrQueryTooShort)
 }
@@ -282,7 +282,7 @@ func TestServiceSearchSummaries_QueryTooShort(t *testing.T) {
 func TestServiceSearchSummaries_InvalidPage(t *testing.T) {
 	svc := &ServiceImpl{repo: &repoStub{}}
 
-	_, err := svc.SearchSummaries("oil", 0)
+	_, err := svc.SearchSummaries(context.Background(), "oil", 0)
 
 	require.ErrorIs(t, err, ErrInvalidPage)
 }
@@ -291,7 +291,7 @@ func TestServiceSearchSummaries_RepoError(t *testing.T) {
 	stub := &repoStub{err: errors.New("db down")}
 	svc := &ServiceImpl{repo: stub}
 
-	_, err := svc.SearchSummaries("oil", 1)
+	_, err := svc.SearchSummaries(context.Background(), "oil", 1)
 
 	require.Error(t, err)
 }
@@ -304,7 +304,7 @@ func TestServiceSearchSummaries_Pagination(t *testing.T) {
 	}
 	svc := &ServiceImpl{repo: stub}
 
-	resp, err := svc.SearchSummaries("oil", 2)
+	resp, err := svc.SearchSummaries(context.Background(), "oil", 2)
 
 	require.NoError(t, err)
 	require.Equal(t, 35, resp.TotalCount)
@@ -340,10 +340,12 @@ type analyticsStub struct {
 	err              error
 }
 
-func (a *analyticsStub) IncrementItemSearchSuccess(_, _ string) error  { return nil }
-func (a *analyticsStub) IncrementPMCSManualDownload(_, _ string) error { return nil }
-func (a *analyticsStub) IncrementCounter(_, _, _ string) error         { return nil }
-func (a *analyticsStub) IncrementPSMagDownload(filename string) error {
+func (a *analyticsStub) IncrementItemSearchSuccess(context.Context, string, string) error { return nil }
+func (a *analyticsStub) IncrementPMCSManualDownload(context.Context, string, string) error {
+	return nil
+}
+func (a *analyticsStub) IncrementCounter(context.Context, string, string, string) error { return nil }
+func (a *analyticsStub) IncrementPSMagDownload(ctx context.Context, filename string) error {
 	a.capturedFilename = filename
 	return a.err
 }
@@ -358,7 +360,7 @@ func TestTrackPSMagDownload_CallsAnalytics(t *testing.T) {
 		cache:     newIssueCache(5 * time.Minute),
 	}
 
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.NoError(t, err)
 	require.Equal(t, "PS_Magazine_Issue_004_September_1951.pdf", stub.capturedFilename)
@@ -368,7 +370,7 @@ func TestTrackPSMagDownload_NilAnalytics(t *testing.T) {
 	svc := &ServiceImpl{cache: newIssueCache(5 * time.Minute)}
 
 	// Must not panic when analytics is nil.
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.NoError(t, err)
 }
@@ -380,7 +382,7 @@ func TestTrackPSMagDownload_EmptyFilename(t *testing.T) {
 		cache:     newIssueCache(5 * time.Minute),
 	}
 
-	err := svc.trackPSMagDownload("ps-mag/")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/")
 
 	require.NoError(t, err)
 	require.Empty(t, stub.capturedFilename) // analytics must not be called for empty filename
@@ -394,7 +396,7 @@ func TestTrackPSMagDownload_AnalyticsReturnsError(t *testing.T) {
 	}
 
 	// trackPSMagDownload surfaces the error so GenerateDownloadURL can log it.
-	err := svc.trackPSMagDownload("ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
+	err := svc.trackPSMagDownload(context.Background(), "ps-mag/PS_Magazine_Issue_004_September_1951.pdf")
 
 	require.Error(t, err)
 }

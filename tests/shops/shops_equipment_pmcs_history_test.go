@@ -131,7 +131,7 @@ func TestGetEquipmentPmcsHistoryRepositoryIncludesGuideAndCustom(t *testing.T) {
 
 	queries := queryCounter.snapshot()
 	require.Len(t, queries, 4, "equipment history must stay fixed at four batched queries")
-	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_inspections"))
+	require.Equal(t, 3, countQueriesContaining(queries, "user_pmcs_inspections"), "inspection, fault and comment queries each scope through inspections")
 	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_faults"))
 	require.Equal(t, 1, countQueriesContaining(queries, "user_pmcs_inspection_comments"))
 }
@@ -271,15 +271,26 @@ func createCustomPmcsHistoryFixture(t *testing.T, db *sql.DB, equipmentID string
 }
 
 type shopHistoryQueryCounter struct {
-	mutex   sync.Mutex
-	queries []string
+	mutex      sync.Mutex
+	queries    []string
+	executions []shopHistoryQueryExecution
 }
 
-func (counter *shopHistoryQueryCounter) record(query string) {
+type shopHistoryQueryExecution struct {
+	query     string
+	arguments []any
+}
+
+func (counter *shopHistoryQueryCounter) record(query string, arguments []driver.NamedValue) {
 	counter.mutex.Lock()
 	defer counter.mutex.Unlock()
 
 	counter.queries = append(counter.queries, query)
+	values := make([]any, len(arguments))
+	for i, argument := range arguments {
+		values[i] = argument.Value
+	}
+	counter.executions = append(counter.executions, shopHistoryQueryExecution{query: query, arguments: values})
 }
 
 func (counter *shopHistoryQueryCounter) snapshot() []string {
@@ -313,12 +324,16 @@ type shopHistoryQueryCountingConnection struct {
 	counter *shopHistoryQueryCounter
 }
 
+func (connection *shopHistoryQueryCountingConnection) BeginTx(ctx context.Context, options driver.TxOptions) (driver.Tx, error) {
+	return connection.Conn.(driver.ConnBeginTx).BeginTx(ctx, options)
+}
+
 func (connection *shopHistoryQueryCountingConnection) QueryContext(ctx context.Context, query string, arguments []driver.NamedValue) (driver.Rows, error) {
 	queryer, ok := connection.Conn.(driver.QueryerContext)
 	if !ok {
 		return nil, driver.ErrSkip
 	}
-	connection.counter.record(query)
+	connection.counter.record(query, arguments)
 	return queryer.QueryContext(ctx, query, arguments)
 }
 
@@ -340,9 +355,10 @@ func newShopHistoryQueryCountingDatabase(t *testing.T) (*sql.DB, *shopHistoryQue
 
 	var databaseName string
 	require.NoError(t, database.QueryRow(`SELECT current_database()`).Scan(&databaseName))
-	require.Equal(t, "miltech_ng_test", databaseName)
+	require.Equal(t, "miltech_test_shops", databaseName)
 	counter.mutex.Lock()
 	counter.queries = nil
+	counter.executions = nil
 	counter.mutex.Unlock()
 	return database, counter
 }

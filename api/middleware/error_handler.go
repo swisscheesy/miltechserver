@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"log"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"strings"
 )
 
@@ -12,6 +13,9 @@ func ErrorHandler(c *gin.Context) {
 	c.Next()
 
 	for _, err := range c.Errors {
+		if shared.HandleContractError(c, err.Err) {
+			return
+		}
 		log.Default().Println(err)
 		if strings.Contains(err.Error(), "no item found") {
 			c.JSON(404, response.StandardResponse{

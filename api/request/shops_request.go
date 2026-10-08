@@ -36,6 +36,8 @@ type JoinShopRequest struct {
 	InviteCode string `json:"invite_code" binding:"required"`
 }
 
+// GenerateInviteCodeRequest accepts unrestricted invites only. Non-null controls
+// are rejected, including zero max_uses and empty expires_at.
 type GenerateInviteCodeRequest struct {
 	ShopID    string  `json:"shop_id" binding:"required"`
 	MaxUses   *int32  `json:"max_uses"`
@@ -76,17 +78,17 @@ type CreateShopVehicleRequest struct {
 }
 
 type UpdateShopVehicleRequest struct {
-	VehicleID      string `json:"vehicle_id" binding:"required"`
-	Admin          string `json:"admin" binding:"required"`
-	Niin           string `json:"niin"`
-	Model          string `json:"model"`
-	Serial         string `json:"serial"`
-	Uoc            string `json:"uoc"`
-	Mileage        int32  `json:"mileage"`
-	Hours          int32  `json:"hours"`
-	Comment        string `json:"comment"`
-	TrackedMileage *int32 `json:"tracked_mileage"`
-	TrackedHours   *int32 `json:"tracked_hours"`
+	VehicleID      string  `json:"vehicle_id" binding:"required"`
+	Admin          *string `json:"admin"`
+	Niin           *string `json:"niin"`
+	Model          *string `json:"model"`
+	Serial         *string `json:"serial"`
+	Uoc            *string `json:"uoc"`
+	Mileage        *int32  `json:"mileage"`
+	Hours          *int32  `json:"hours"`
+	Comment        *string `json:"comment"`
+	TrackedMileage *int32  `json:"tracked_mileage"`
+	TrackedHours   *int32  `json:"tracked_hours"`
 }
 
 type AdjustShopVehicleUsageRequest struct {
@@ -101,6 +103,7 @@ type CreateVehicleNotificationRequest struct {
 	Title            string  `json:"title" binding:"required"`
 	Description      string  `json:"description"`
 	Type             string  `json:"type" binding:"required"` // M1, PM, MW
+	Completed        bool    `json:"completed"`
 	AttachedShopList *string `json:"attached_shop_list"`
 }
 
@@ -114,15 +117,26 @@ type UpdateVehicleNotificationRequest struct {
 }
 
 type AddNotificationItemRequest struct {
-	NotificationID string `json:"notification_id" binding:"required"`
-	Niin           string `json:"niin" binding:"required"`
-	Nomenclature   string `json:"nomenclature" binding:"required"`
-	Quantity       int32  `json:"quantity" binding:"required"`
+	NotificationID string  `json:"notification_id" binding:"required"`
+	Niin           string  `json:"niin" binding:"required"`
+	Nomenclature   string  `json:"nomenclature" binding:"required"`
+	Quantity       int32   `json:"quantity" binding:"required"`
+	Nickname       *string `json:"nickname"`
+	UnitOfMeasure  *string `json:"unit_of_measure"`
+}
+
+type BulkNotificationItemInput struct {
+	NotificationID *string `json:"notification_id"`
+	Niin           string  `json:"niin"`
+	Nomenclature   string  `json:"nomenclature"`
+	Quantity       int32   `json:"quantity"`
+	Nickname       *string `json:"nickname"`
+	UnitOfMeasure  *string `json:"unit_of_measure"`
 }
 
 type AddNotificationItemListRequest struct {
-	NotificationID string                       `json:"notification_id" binding:"required"`
-	Items          []AddNotificationItemRequest `json:"items" binding:"required"`
+	NotificationID string                      `json:"notification_id" binding:"required"`
+	Items          []BulkNotificationItemInput `json:"items" binding:"required"`
 }
 
 type RemoveNotificationItemListRequest struct {
@@ -191,7 +205,7 @@ type GetShopMessagesPaginatedRequest struct {
 }
 
 type UpdateAdminOnlyListsRequest struct {
-	AdminOnlyLists bool `json:"admin_only_lists" binding:"required"`
+	AdminOnlyLists *bool `json:"admin_only_lists" binding:"required"`
 }
 
 // Unified Shop Settings
@@ -207,4 +221,37 @@ type ShopSettings struct {
 type UpdateShopSettingsRequest struct {
 	AdminOnlyLists *bool `json:"admin_only_lists,omitempty"`
 	// Future settings will be added here as optional pointers
+}
+
+// NotificationSaveRequest replaces the complete direct-item set. Linked-list
+// items are represented solely by Attachment and never copied into Items.
+type NotificationSaveRequest struct {
+	OperationID    string                     `json:"operation_id"`
+	ShopID         string                     `json:"shop_id"`
+	VehicleID      string                     `json:"vehicle_id"`
+	NotificationID *string                    `json:"notification_id"`
+	Details        NotificationSaveDetails    `json:"details"`
+	Attachment     NotificationSaveAttachment `json:"attachment"`
+	Items          []NotificationSaveItem     `json:"items"`
+}
+type NotificationSaveDetails struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Type        string `json:"type"`
+	IsCompleted bool   `json:"is_completed"`
+}
+type NotificationSaveAttachment struct {
+	Intent string  `json:"intent"`
+	ListID *string `json:"list_id"`
+}
+type NotificationSaveItem struct {
+	ID           string `json:"id"`
+	Niin         string `json:"niin"`
+	Nomenclature string `json:"nomenclature"`
+	Quantity     int32  `json:"quantity"`
+	// Released clients omit these. Nil means "leave the stored value
+	// unchanged", and omitempty keeps their operation fingerprints identical
+	// to the pre-column contract so retries spanning a deploy still replay.
+	Nickname      *string `json:"nickname,omitempty"`
+	UnitOfMeasure *string `json:"unit_of_measure,omitempty"`
 }

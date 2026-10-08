@@ -1,7 +1,9 @@
 package quick_lists
 
+import "context"
+
 type Service interface {
-	GetQuickListClothing() (QuickListsClothingResponse, error)
-	GetQuickListWheels() (QuickListsWheelsResponse, error)
-	GetQuickListBatteries() (QuickListsBatteryResponse, error)
+	GetQuickListClothing(ctx context.Context) (QuickListsClothingResponse, error)
+	GetQuickListWheels(ctx context.Context) (QuickListsWheelsResponse, error)
+	GetQuickListBatteries(ctx context.Context) (QuickListsBatteryResponse, error)
 }

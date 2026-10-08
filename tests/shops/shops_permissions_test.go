@@ -1,6 +1,7 @@
 package shops_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -68,6 +69,11 @@ func TestInvalidNotificationTypeRejected(t *testing.T) {
 		"type":        "BAD",
 	}
 
+	before := writerSnapshot(t)
 	resp := doJSONRequest(t, router, http.MethodPost, "/api/v1/auth/shops/vehicles/notifications", notificationBody, "user-1")
-	require.Equal(t, http.StatusInternalServerError, resp.Code)
+	require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &body))
+	require.Equal(t, map[string]any{"message": "invalid request", "details": "invalid request"}, body)
+	require.Equal(t, before, writerSnapshot(t), "invalid type must not write business rows, audits, retention or claims")
 }

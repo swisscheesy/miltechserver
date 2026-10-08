@@ -17,7 +17,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 			return
 		}
 
-		uocData, err := service.LookupByPage(page)
+		uocData, err := service.LookupByPage(c.Request.Context(), page)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/uoc/:uoc", func(c *gin.Context) {
 		uoc := c.Param("uoc")
 
-		uocData, err := service.LookupSpecific(uoc)
+		uocData, err := service.LookupSpecific(c.Request.Context(), uoc)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -41,7 +41,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/uoc/by-model/:model", func(c *gin.Context) {
 		model := c.Param("model")
 
-		uocData, err := service.LookupByModel(model)
+		uocData, err := service.LookupByModel(c.Request.Context(), model)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -53,7 +53,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/uoc/model/:model", func(c *gin.Context) {
 		model := c.Param("model")
 
-		uocData, err := service.LookupByModel(model)
+		uocData, err := service.LookupByModel(c.Request.Context(), model)
 		if err != nil {
 			shared.HandleError(c, err)
 			return

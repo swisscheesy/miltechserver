@@ -160,15 +160,11 @@ miltechserver
 /fire_auth_key.json
 *_gen.go
 miltech_ng/
-/Dockerfile
-/.dockerignore
 ./.DS_Store
 api/.DS_Store
 .DS_Store
 /.history
-CLAUDE.md
 .gitignore
-__debug_bin594938418
 #426,162
 .agent/
 .claude/

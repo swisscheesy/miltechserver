@@ -1,11 +1,13 @@
 package notifications
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, service Service) {
-	handler := Handler{service: service}
+func RegisterRoutes(router *gin.RouterGroup, service Service, atomicReady func(context.Context) bool) {
+	handler := Handler{service: service, atomicReady: atomicReady}
+	router.POST("/shops/vehicles/notifications/save", handler.SaveAtomic)
 	router.POST("/shops/vehicles/notifications", handler.CreateVehicleNotification)
 	router.GET("/shops/vehicles/:vehicle_id/notifications", handler.GetVehicleNotifications)
 	router.GET("/shops/vehicles/:vehicle_id/notifications-with-items", handler.GetVehicleNotificationsWithItems)

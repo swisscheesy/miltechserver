@@ -1,6 +1,7 @@
 package facade
 
 import (
+	"context"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/bootstrap"
 )
@@ -8,35 +9,35 @@ import (
 // Service provides a unified interface for user saves domains.
 type Service interface {
 	// Quick Items
-	GetQuickSaveItemsByUser(user *bootstrap.User) ([]model.UserItemsQuick, error)
-	UpsertQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error
-	UpsertQuickSaveItemListByUser(user *bootstrap.User, quickItems []model.UserItemsQuick) error
-	DeleteQuickSaveItemByUser(user *bootstrap.User, quick model.UserItemsQuick) error
-	DeleteAllQuickSaveItemsByUser(user *bootstrap.User) error
+	GetQuickSaveItemsByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsQuick, error)
+	UpsertQuickSaveItemByUser(ctx context.Context, user *bootstrap.User, quick model.UserItemsQuick) error
+	UpsertQuickSaveItemListByUser(ctx context.Context, user *bootstrap.User, quickItems []model.UserItemsQuick) error
+	DeleteQuickSaveItemByUser(ctx context.Context, user *bootstrap.User, quick model.UserItemsQuick) error
+	DeleteAllQuickSaveItemsByUser(ctx context.Context, user *bootstrap.User) error
 
 	// Serialized Items
-	GetSerializedItemsByUser(user *bootstrap.User) ([]model.UserItemsSerialized, error)
-	UpsertSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
-	UpsertSerializedSaveItemListByUser(user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
-	DeleteSerializedSaveItemByUser(user *bootstrap.User, serializedItem model.UserItemsSerialized) error
-	DeleteAllSerializedItemsByUser(user *bootstrap.User) error
+	GetSerializedItemsByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsSerialized, error)
+	UpsertSerializedSaveItemByUser(ctx context.Context, user *bootstrap.User, serializedItem model.UserItemsSerialized) error
+	UpsertSerializedSaveItemListByUser(ctx context.Context, user *bootstrap.User, serializedItems []model.UserItemsSerialized) error
+	DeleteSerializedSaveItemByUser(ctx context.Context, user *bootstrap.User, serializedItem model.UserItemsSerialized) error
+	DeleteAllSerializedItemsByUser(ctx context.Context, user *bootstrap.User) error
 
 	// Categories
-	GetItemCategoriesByUser(user *bootstrap.User) ([]model.UserItemCategory, error)
-	UpsertItemCategoryByUser(user *bootstrap.User, itemCategory model.UserItemCategory) error
-	DeleteItemCategory(user *bootstrap.User, itemCategory model.UserItemCategory) error
-	DeleteAllItemCategories(user *bootstrap.User) error
+	GetItemCategoriesByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemCategory, error)
+	UpsertItemCategoryByUser(ctx context.Context, user *bootstrap.User, itemCategory model.UserItemCategory) error
+	DeleteItemCategory(ctx context.Context, user *bootstrap.User, itemCategory model.UserItemCategory) error
+	DeleteAllItemCategories(ctx context.Context, user *bootstrap.User) error
 
 	// Categorized Items
-	GetCategorizedItemsByUser(user *bootstrap.User) ([]model.UserItemsCategorized, error)
-	GetCategorizedItemsByCategory(user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error)
-	UpsertCategorizedItemByUser(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
-	UpsertCategorizedItemListByUser(user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
-	DeleteCategorizedItemByCategoryId(user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
-	DeleteAllCategorizedItems(user *bootstrap.User) error
+	GetCategorizedItemsByUser(ctx context.Context, user *bootstrap.User) ([]model.UserItemsCategorized, error)
+	GetCategorizedItemsByCategory(ctx context.Context, user *bootstrap.User, itemCategory model.UserItemCategory) ([]model.UserItemsCategorized, error)
+	UpsertCategorizedItemByUser(ctx context.Context, user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+	UpsertCategorizedItemListByUser(ctx context.Context, user *bootstrap.User, categorizedItems []model.UserItemsCategorized) error
+	DeleteCategorizedItemByCategoryId(ctx context.Context, user *bootstrap.User, categorizedItem model.UserItemsCategorized) error
+	DeleteAllCategorizedItems(ctx context.Context, user *bootstrap.User) error
 
 	// Images
-	UploadItemImage(user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error)
-	DeleteItemImage(user *bootstrap.User, itemID string, tableType string) error
-	GetItemImage(user *bootstrap.User, itemID string, tableType string) ([]byte, string, error)
+	UploadItemImage(ctx context.Context, user *bootstrap.User, itemID string, tableType string, imageData []byte) (string, error)
+	DeleteItemImage(ctx context.Context, user *bootstrap.User, itemID string, tableType string) error
+	GetItemImage(ctx context.Context, user *bootstrap.User, itemID string, tableType string) ([]byte, string, error)
 }

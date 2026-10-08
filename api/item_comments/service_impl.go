@@ -1,6 +1,7 @@
 package item_comments
 
 import (
+	"context"
 	"strings"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -19,7 +20,7 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) GetCommentsByNiin(niin string) ([]CommentResponse, error) {
+func (service *ServiceImpl) GetCommentsByNiin(ctx context.Context, niin string) ([]CommentResponse, error) {
 	normalized, err := validateNiin(niin)
 	if err != nil {
 		return nil, err
@@ -38,7 +39,7 @@ func (service *ServiceImpl) GetCommentsByNiin(niin string) ([]CommentResponse, e
 	return result, nil
 }
 
-func (service *ServiceImpl) CreateComment(user *bootstrap.User, niin string, text string, parentID *string) (*CommentResponse, error) {
+func (service *ServiceImpl) CreateComment(ctx context.Context, user *bootstrap.User, niin string, text string, parentID *string) (*CommentResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
@@ -85,7 +86,7 @@ func (service *ServiceImpl) CreateComment(user *bootstrap.User, niin string, tex
 	return &resp, nil
 }
 
-func (service *ServiceImpl) UpdateComment(user *bootstrap.User, niin string, commentID string, text string) (*CommentResponse, error) {
+func (service *ServiceImpl) UpdateComment(ctx context.Context, user *bootstrap.User, niin string, commentID string, text string) (*CommentResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
@@ -124,7 +125,7 @@ func (service *ServiceImpl) UpdateComment(user *bootstrap.User, niin string, com
 	return &resp, nil
 }
 
-func (service *ServiceImpl) DeleteComment(user *bootstrap.User, niin string, commentID string) (*CommentResponse, error) {
+func (service *ServiceImpl) DeleteComment(ctx context.Context, user *bootstrap.User, niin string, commentID string) (*CommentResponse, error) {
 	if user == nil {
 		return nil, ErrUnauthorized
 	}
@@ -159,7 +160,7 @@ func (service *ServiceImpl) DeleteComment(user *bootstrap.User, niin string, com
 	return &resp, nil
 }
 
-func (service *ServiceImpl) FlagComment(user *bootstrap.User, niin string, commentID string) error {
+func (service *ServiceImpl) FlagComment(ctx context.Context, user *bootstrap.User, niin string, commentID string) error {
 	if user == nil {
 		return ErrUnauthorized
 	}

@@ -5,6 +5,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
@@ -22,15 +23,19 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.AddNotificationItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
+		return
+	}
+	if !shared.ValidNotificationItemFields(req.Nickname, req.UnitOfMeasure) {
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -39,15 +44,23 @@ func (handler *Handler) AddNotificationItem(c *gin.Context) {
 		Niin:           req.Niin,
 		Nomenclature:   req.Nomenclature,
 		Quantity:       req.Quantity,
+		Nickname:       req.Nickname,
+		UnitOfMeasure:  req.UnitOfMeasure,
 	}
 
 	service := handler.service
-	createdItem, err := service.AddNotificationItem(user, item)
+	createdItem, err := service.AddNotificationItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Item added successfully",
@@ -61,29 +74,25 @@ func (handler *Handler) GetNotificationItems(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notification_id")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification_id is required"})
+		response.Error(c, 400, "notification_id is required")
 		return
 	}
 
 	service := handler.service
-	items, err := service.GetNotificationItems(user, notificationID)
+	items, err := service.GetNotificationItems(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    items,
-	})
+	response.OK(c, items)
 }
 
 // GetShopNotificationItems returns all notification items for a shop
@@ -92,29 +101,25 @@ func (handler *Handler) GetShopNotificationItems(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	items, err := service.GetShopNotificationItems(user, shopID)
+	items, err := service.GetShopNotificationItems(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    items,
-	})
+	response.OK(c, items)
 }
 
 // AddNotificationItemList adds multiple items to a vehicle notification
@@ -123,36 +128,52 @@ func (handler *Handler) AddNotificationItemList(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.AddNotificationItemListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
 	var items []model.ShopNotificationItems
 	for _, reqItem := range req.Items {
+		if reqItem.NotificationID != nil && *reqItem.NotificationID != req.NotificationID {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
+		if !shared.ValidNotificationItemFields(reqItem.Nickname, reqItem.UnitOfMeasure) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		item := model.ShopNotificationItems{
-			NotificationID: reqItem.NotificationID,
+			NotificationID: req.NotificationID,
 			Niin:           reqItem.Niin,
 			Nomenclature:   reqItem.Nomenclature,
 			Quantity:       reqItem.Quantity,
+			Nickname:       reqItem.Nickname,
+			UnitOfMeasure:  reqItem.UnitOfMeasure,
 		}
 		items = append(items, item)
 	}
 
 	service := handler.service
-	createdItems, err := service.AddNotificationItemList(user, items)
+	createdItems, err := service.AddNotificationItemList(c.Request.Context(), user, items)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Items added successfully",
@@ -166,25 +187,25 @@ func (handler *Handler) RemoveNotificationItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	itemID := c.Param("item_id")
 	if itemID == "" {
-		c.JSON(400, gin.H{"message": "item_id is required"})
+		response.Error(c, 400, "item_id is required")
 		return
 	}
 
 	service := handler.service
-	err := service.RemoveNotificationItem(user, itemID)
+	err := service.RemoveNotificationItem(c.Request.Context(), user, itemID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Item removed successfully"})
+	response.OK(c, gin.H{"message": "Item removed successfully"})
 }
 
 // RemoveNotificationItemList removes multiple items from vehicle notifications
@@ -193,24 +214,27 @@ func (handler *Handler) RemoveNotificationItemList(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.RemoveNotificationItemListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.RemoveNotificationItemList(user, req.ItemIDs)
+	count, err := service.RemoveNotificationItemList(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
+	// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+	// "count") that response.OK()'s single data field cannot represent
+	// without nesting it under "data", changing this response's shape.
+	c.JSON(200, gin.H{"message": "Items removed successfully", "count": count})
 }

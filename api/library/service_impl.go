@@ -40,9 +40,7 @@ func NewService(
 }
 
 // GetPMCSVehicles retrieves all vehicle folders from the PMCS library in Azure Blob Storage.
-func (s *ServiceImpl) GetPMCSVehicles() (*PMCSVehiclesResponse, error) {
-	ctx := context.Background()
-
+func (s *ServiceImpl) GetPMCSVehicles(ctx context.Context) (*PMCSVehiclesResponse, error) {
 	slog.Info("Fetching PMCS vehicles from Azure Blob Storage",
 		"container", LibraryContainerName,
 		"prefix", PMCSPrefix)
@@ -101,9 +99,7 @@ func (s *ServiceImpl) GetPMCSVehicles() (*PMCSVehiclesResponse, error) {
 }
 
 // GetPMCSDocuments retrieves all PDF documents from a vehicle folder in Azure Blob Storage.
-func (s *ServiceImpl) GetPMCSDocuments(vehicleName string) (*DocumentsListResponse, error) {
-	ctx := context.Background()
-
+func (s *ServiceImpl) GetPMCSDocuments(ctx context.Context, vehicleName string) (*DocumentsListResponse, error) {
 	if strings.TrimSpace(vehicleName) == "" {
 		return nil, ErrEmptyVehicleName
 	}
@@ -228,7 +224,7 @@ func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) 
 		"blobPath", blobPath,
 		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
-	if analyticsErr := s.trackPMCSDownload(blobPath); analyticsErr != nil {
+	if analyticsErr := s.trackPMCSDownload(ctx, blobPath); analyticsErr != nil {
 		slog.Warn("Failed to increment analytics for PMCS download", "blobPath", blobPath, "error", analyticsErr)
 	}
 
@@ -249,7 +245,7 @@ func extractFileName(blobPath string) string {
 	return parts[len(parts)-1]
 }
 
-func (s *ServiceImpl) trackPMCSDownload(blobPath string) error {
+func (s *ServiceImpl) trackPMCSDownload(ctx context.Context, blobPath string) error {
 	if s.analytics == nil {
 		return nil
 	}
@@ -273,7 +269,7 @@ func (s *ServiceImpl) trackPMCSDownload(blobPath string) error {
 		displayName = baseName
 	}
 
-	return s.analytics.IncrementPMCSManualDownload(baseName, displayName)
+	return s.analytics.IncrementPMCSManualDownload(ctx, baseName, displayName)
 }
 
 func extractPMCSEquipmentName(blobPath string) (string, bool) {

@@ -6,6 +6,7 @@ import (
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	shopsContract "miltechserver/api/shops/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,30 +27,34 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) create(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.CreateEquipmentServiceRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request", "details": err.Error()})
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
+		shopsContract.WriteValidationError(c, "invalid request")
 		return
 	}
 
-	createdService, err := handler.service.Create(user, req)
+	createdService, err := handler.service.Create(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Equipment service created successfully",
@@ -60,7 +65,7 @@ func (handler *Handler) create(c *gin.Context) {
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -69,32 +74,28 @@ func (handler *Handler) getByID(c *gin.Context) {
 	serviceID := c.Param("service_id")
 
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	if serviceID == "" {
-		c.JSON(400, gin.H{"message": "service_id is required"})
+		response.Error(c, 400, "service_id is required")
 		return
 	}
 
-	service, err := handler.service.GetByID(user, shopID, serviceID)
+	service, err := handler.service.GetByID(c.Request.Context(), user, shopID, serviceID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *service,
-	})
+	response.OK(c, *service)
 }
 
 func (handler *Handler) update(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -103,30 +104,34 @@ func (handler *Handler) update(c *gin.Context) {
 	serviceID := c.Param("service_id")
 
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	if serviceID == "" {
-		c.JSON(400, gin.H{"message": "service_id is required"})
+		response.Error(c, 400, "service_id is required")
 		return
 	}
 
 	var req request.UpdateEquipmentServiceRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request", "details": err.Error()})
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
+		shopsContract.WriteValidationError(c, "invalid request")
 		return
 	}
 
 	req.ServiceID = serviceID
 
-	updatedService, err := handler.service.Update(user, shopID, req)
+	updatedService, err := handler.service.Update(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Equipment service updated successfully",
@@ -137,7 +142,7 @@ func (handler *Handler) update(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -146,20 +151,20 @@ func (handler *Handler) delete(c *gin.Context) {
 	serviceID := c.Param("service_id")
 
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	if serviceID == "" {
-		c.JSON(400, gin.H{"message": "service_id is required"})
+		response.Error(c, 400, "service_id is required")
 		return
 	}
 
-	err = handler.service.Delete(user, shopID, serviceID)
+	err = handler.service.Delete(c.Request.Context(), user, shopID, serviceID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Equipment service deleted successfully"})
+	response.OK(c, gin.H{"message": "Equipment service deleted successfully"})
 }

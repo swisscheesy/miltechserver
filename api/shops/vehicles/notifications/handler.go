@@ -1,17 +1,20 @@
 package notifications
 
 import (
+	"context"
 	"log/slog"
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	service Service
+	service     Service
+	atomicReady func(context.Context) bool
 }
 
 // Shop Vehicle Notification Operations
@@ -22,15 +25,15 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.CreateVehicleNotificationRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -40,17 +43,23 @@ func (handler *Handler) CreateVehicleNotification(c *gin.Context) {
 		Title:            req.Title,
 		Description:      req.Description,
 		Type:             req.Type,
-		Completed:        false,
+		Completed:        req.Completed,
 		AttachedShopList: req.AttachedShopList,
 	}
 
 	service := handler.service
-	createdNotification, err := service.CreateVehicleNotification(user, notification)
+	createdNotification, err := service.CreateVehicleNotification(c.Request.Context(), user, notification)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Notification created successfully",
@@ -64,29 +73,25 @@ func (handler *Handler) GetVehicleNotifications(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
 	service := handler.service
-	notifications, err := service.GetVehicleNotifications(user, vehicleID)
+	notifications, err := service.GetVehicleNotifications(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    notifications,
-	})
+	response.OK(c, notifications)
 }
 
 // GetVehicleNotificationsWithItems returns all notifications for a vehicle with their items
@@ -95,29 +100,25 @@ func (handler *Handler) GetVehicleNotificationsWithItems(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicle_id")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle_id is required"})
+		response.Error(c, 400, "vehicle_id is required")
 		return
 	}
 
 	service := handler.service
-	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(user, vehicleID)
+	notificationsWithItems, err := service.GetVehicleNotificationsWithItems(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    notificationsWithItems,
-	})
+	response.OK(c, notificationsWithItems)
 }
 
 // GetShopNotifications returns all notifications for a shop
@@ -126,29 +127,25 @@ func (handler *Handler) GetShopNotifications(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	notifications, err := service.GetShopNotifications(user, shopID)
+	notifications, err := service.GetShopNotifications(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    notifications,
-	})
+	response.OK(c, notifications)
 }
 
 // GetVehicleNotificationByID returns a specific notification by ID
@@ -157,29 +154,25 @@ func (handler *Handler) GetVehicleNotificationByID(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notification_id")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification_id is required"})
+		response.Error(c, 400, "notification_id is required")
 		return
 	}
 
 	service := handler.service
-	notification, err := service.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.GetVehicleNotificationByID(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *notification,
-	})
+	response.OK(c, *notification)
 }
 
 // UpdateVehicleNotification updates an existing vehicle notification
@@ -188,15 +181,15 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.UpdateVehicleNotificationRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -213,13 +206,17 @@ func (handler *Handler) UpdateVehicleNotification(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateVehicleNotification(user, update)
+	err := service.UpdateVehicleNotification(c.Request.Context(), user, update)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Notification updated successfully"})
+	response.OK(c, gin.H{"message": "Notification updated successfully"})
 }
 
 // DeleteVehicleNotification deletes a vehicle notification
@@ -228,23 +225,23 @@ func (handler *Handler) DeleteVehicleNotification(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	notificationID := c.Param("notification_id")
 	if notificationID == "" {
-		c.JSON(400, gin.H{"message": "notification_id is required"})
+		response.Error(c, 400, "notification_id is required")
 		return
 	}
 
 	service := handler.service
-	err := service.DeleteVehicleNotification(user, notificationID)
+	err := service.DeleteVehicleNotification(c.Request.Context(), user, notificationID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Notification deleted successfully"})
+	response.OK(c, gin.H{"message": "Notification deleted successfully"})
 }

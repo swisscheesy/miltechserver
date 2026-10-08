@@ -19,6 +19,7 @@ type Dependencies struct {
 }
 
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
+	router = router.Group("", shopsShared.ContractMiddleware)
 	shopAuth := shopsShared.NewShopAuthorization(deps.DB)
 	authorization := shared.NewAuthorization(deps.DB, shopAuth)
 	usernameResolver := shared.NewUsernameRepository(deps.DB)

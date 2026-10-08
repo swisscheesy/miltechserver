@@ -3,10 +3,10 @@ package eic
 import (
 	"database/sql"
 	"errors"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
@@ -38,11 +38,11 @@ func (handler *Handler) lookupByNIIN(c *gin.Context) {
 	niin := c.Param("niin")
 
 	if strings.TrimSpace(niin) == "" {
-		c.JSON(400, gin.H{"error": "NIIN parameter is required"})
+		response.Error(c, 400, "NIIN parameter is required")
 		return
 	}
 
-	consolidatedData, err := handler.service.LookupByNIIN(niin)
+	consolidatedData, err := handler.service.LookupByNIIN(c.Request.Context(), niin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -52,13 +52,9 @@ func (handler *Handler) lookupByNIIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data: response.EICSearchResponse{
-			Count: len(consolidatedData),
-			Items: consolidatedData,
-		},
+	response.OK(c, response.EICSearchResponse{
+		Count: len(consolidatedData),
+		Items: consolidatedData,
 	})
 }
 
@@ -66,11 +62,11 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 	lin := c.Param("lin")
 
 	if strings.TrimSpace(lin) == "" {
-		c.JSON(400, gin.H{"error": "LIN parameter is required"})
+		response.Error(c, 400, "LIN parameter is required")
 		return
 	}
 
-	consolidatedData, err := handler.service.LookupByLIN(lin)
+	consolidatedData, err := handler.service.LookupByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -80,32 +76,26 @@ func (handler *Handler) lookupByLIN(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data: response.EICSearchResponse{
-			Count: len(consolidatedData),
-			Items: consolidatedData,
-		},
+	response.OK(c, response.EICSearchResponse{
+		Count: len(consolidatedData),
+		Items: consolidatedData,
 	})
 }
 
 func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 	fsc := c.Param("fsc")
-	pageStr := c.DefaultQuery("page", "1")
 
 	if strings.TrimSpace(fsc) == "" {
-		c.JSON(400, gin.H{"error": "FSC parameter is required"})
+		response.Error(c, 400, "FSC parameter is required")
 		return
 	}
 
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(400, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
-	eicData, err := handler.service.LookupByFSCPaginated(fsc, page)
+	eicData, err := handler.service.LookupByFSCPaginated(c.Request.Context(), fsc, page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -115,24 +105,18 @@ func (handler *Handler) lookupByFSCPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    eicData,
-	})
+	response.OK(c, eicData)
 }
 
 func (handler *Handler) lookupAllPaginated(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
 	search := c.Query("search")
 
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(400, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
 
-	eicData, err := handler.service.LookupAllPaginated(page, search)
+	eicData, err := handler.service.LookupAllPaginated(c.Request.Context(), page, search)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(404, response.NoItemFoundResponseMessage())
@@ -142,9 +126,5 @@ func (handler *Handler) lookupAllPaginated(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    eicData,
-	})
+	response.OK(c, eicData)
 }

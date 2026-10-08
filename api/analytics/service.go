@@ -1,12 +1,15 @@
 package analytics
 
-import "database/sql"
+import (
+	"context"
+	"database/sql"
+)
 
 type Service interface {
-	IncrementItemSearchSuccess(niin string, nomenclature string) error
-	IncrementPMCSManualDownload(entityKey string, entityLabel string) error
-	IncrementPSMagDownload(filename string) error
-	IncrementCounter(eventType string, entityKey string, entityLabel string) error
+	IncrementItemSearchSuccess(ctx context.Context, niin string, nomenclature string) error
+	IncrementPMCSManualDownload(ctx context.Context, entityKey string, entityLabel string) error
+	IncrementPSMagDownload(ctx context.Context, filename string) error
+	IncrementCounter(ctx context.Context, eventType string, entityKey string, entityLabel string) error
 }
 
 func New(db *sql.DB) Service {

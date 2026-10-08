@@ -1,6 +1,7 @@
 package eic_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -44,20 +45,20 @@ func TestEICServiceTrimsAndUppercases(t *testing.T) {
 	repo := &captureRepository{}
 	svc := eic.NewService(repo)
 
-	_, err := svc.LookupByNIIN("  abcd ")
+	_, err := svc.LookupByNIIN(context.Background(), "  abcd ")
 	require.NoError(t, err)
 	require.Equal(t, "ABCD", repo.niin)
 
-	_, err = svc.LookupByLIN("  l123 ")
+	_, err = svc.LookupByLIN(context.Background(), "  l123 ")
 	require.NoError(t, err)
 	require.Equal(t, "L123", repo.lin)
 
-	_, err = svc.LookupByFSCPaginated("  fsc ", 2)
+	_, err = svc.LookupByFSCPaginated(context.Background(), "  fsc ", 2)
 	require.NoError(t, err)
 	require.Equal(t, "FSC", repo.fsc)
 	require.Equal(t, 2, repo.page)
 
-	_, err = svc.LookupAllPaginated(3, "  search  ")
+	_, err = svc.LookupAllPaginated(context.Background(), 3, "  search  ")
 	require.NoError(t, err)
 	require.Equal(t, 3, repo.page)
 	require.Equal(t, strings.TrimSpace("  search  "), repo.search)

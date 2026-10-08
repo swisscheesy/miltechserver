@@ -29,15 +29,11 @@ func registerHandlers(router *gin.RouterGroup, svc Service) {
 }
 
 func (handler *Handler) getPolProducts(c *gin.Context) {
-	data, err := handler.service.GetPolProducts()
+	data, err := handler.service.GetPolProducts(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    data,
-	})
+	response.OK(c, data)
 }

@@ -1888,6 +1888,33 @@ func newReleasedChecklistFixture(
 			checklistID,
 		)
 		require.NoError(t, cleanupError)
+		// The three deletes above only remove community-visibility rows.
+		// The checklist/revisions/models created by ownedRepository.Create
+		// and .Publish above are never deleted otherwise, which permanently
+		// leaks rows that later collide with model-name searches in other
+		// tests (e.g. TestCommunityBrowseModelFilterUsesLiteralCaseAgnosticContains).
+		// Delete child-to-parent to satisfy FKs.
+		_, cleanupError = testDB.ExecContext(
+			context.Background(),
+			`DELETE FROM user_pmcs_revision_models
+			 WHERE revision_id IN (
+			     SELECT id FROM user_pmcs_revisions WHERE checklist_id = $1
+			 )`,
+			checklistID,
+		)
+		require.NoError(t, cleanupError)
+		_, cleanupError = testDB.ExecContext(
+			context.Background(),
+			`DELETE FROM user_pmcs_revisions WHERE checklist_id = $1`,
+			checklistID,
+		)
+		require.NoError(t, cleanupError)
+		_, cleanupError = testDB.ExecContext(
+			context.Background(),
+			`DELETE FROM user_pmcs_checklists WHERE id = $1`,
+			checklistID,
+		)
+		require.NoError(t, cleanupError)
 	})
 	return &releasedChecklistFixture{
 		ownerUID:   ownerUID,

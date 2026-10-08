@@ -22,15 +22,15 @@ func (handler *Handler) CreateShopList(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.CreateShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -40,12 +40,14 @@ func (handler *Handler) CreateShopList(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdList, err := service.CreateShopList(user, list)
+	createdList, err := service.CreateShopList(c.Request.Context(), user, list)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "List created successfully",
@@ -59,29 +61,25 @@ func (handler *Handler) GetShopLists(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	lists, err := service.GetShopLists(user, shopID)
+	lists, err := service.GetShopLists(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    lists,
-	})
+	response.OK(c, lists)
 }
 
 // GetShopListByID returns a specific list by ID
@@ -90,29 +88,25 @@ func (handler *Handler) GetShopListByID(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	listID := c.Param("list_id")
 	if listID == "" {
-		c.JSON(400, gin.H{"message": "list_id is required"})
+		response.Error(c, 400, "list_id is required")
 		return
 	}
 
 	service := handler.service
-	list, err := service.GetShopListByID(user, listID)
+	list, err := service.GetShopListByID(c.Request.Context(), user, listID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    *list,
-	})
+	response.OK(c, *list)
 }
 
 // UpdateShopList updates an existing shop list
@@ -121,15 +115,15 @@ func (handler *Handler) UpdateShopList(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.UpdateShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
@@ -139,13 +133,13 @@ func (handler *Handler) UpdateShopList(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateShopList(user, list)
+	err := service.UpdateShopList(c.Request.Context(), user, list)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "List updated successfully"})
+	response.OK(c, gin.H{"message": "List updated successfully"})
 }
 
 // DeleteShopList deletes a shop list
@@ -154,24 +148,24 @@ func (handler *Handler) DeleteShopList(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.DeleteShopListRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.DeleteShopList(user, req.ListID)
+	err := service.DeleteShopList(c.Request.Context(), user, req.ListID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "List deleted successfully"})
+	response.OK(c, gin.H{"message": "List deleted successfully"})
 }

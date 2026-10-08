@@ -15,12 +15,15 @@ type Application struct {
 	BlobClient *azblob.Client
 }
 
-func App(ctx context.Context, env *Env) Application {
+func App(ctx context.Context, env *Env) (Application, error) {
 	slog.Info("Starting application, or not, we'll see.")
-	app := &Application{}
+	authClient, err := NewFireAuth(ctx)
+	if err != nil {
+		return Application{}, err
+	}
+	app := &Application{FireAuth: authClient}
 	app.Db = NewSqlClient(env)
-	app.FireAuth = NewFireAuth(ctx)
 	app.BlobClient = NewAzureBlobClient(env)
 
-	return *app
+	return *app, nil
 }

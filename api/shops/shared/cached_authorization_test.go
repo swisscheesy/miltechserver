@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -21,7 +22,7 @@ type fakeAuthorization struct {
 	roleVal     string
 }
 
-func (auth *fakeAuthorization) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *fakeAuthorization) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	auth.memberCalls++
 	if auth.memberErr != nil {
 		return false, auth.memberErr
@@ -29,7 +30,7 @@ func (auth *fakeAuthorization) IsUserMemberOfShop(user *bootstrap.User, shopID s
 	return auth.memberVal, nil
 }
 
-func (auth *fakeAuthorization) IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error) {
+func (auth *fakeAuthorization) IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	auth.adminCalls++
 	if auth.adminErr != nil {
 		return false, auth.adminErr
@@ -37,7 +38,7 @@ func (auth *fakeAuthorization) IsUserShopAdmin(user *bootstrap.User, shopID stri
 	return auth.adminVal, nil
 }
 
-func (auth *fakeAuthorization) GetUserRoleInShop(user *bootstrap.User, shopID string) (string, error) {
+func (auth *fakeAuthorization) GetUserRoleInShop(ctx context.Context, user *bootstrap.User, shopID string) (string, error) {
 	auth.roleCalls++
 	if auth.roleErr != nil {
 		return "", auth.roleErr
@@ -45,23 +46,23 @@ func (auth *fakeAuthorization) GetUserRoleInShop(user *bootstrap.User, shopID st
 	return auth.roleVal, nil
 }
 
-func (auth *fakeAuthorization) CanUserModifyVehicle(user *bootstrap.User, vehicleID string) (bool, error) {
+func (auth *fakeAuthorization) CanUserModifyVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) (bool, error) {
 	return false, nil
 }
 
-func (auth *fakeAuthorization) CanUserModifyList(user *bootstrap.User, listID string) (bool, error) {
+func (auth *fakeAuthorization) CanUserModifyList(ctx context.Context, user *bootstrap.User, listID string) (bool, error) {
 	return false, nil
 }
 
-func (auth *fakeAuthorization) CanUserModifyNotification(user *bootstrap.User, notificationID string) (bool, error) {
+func (auth *fakeAuthorization) CanUserModifyNotification(ctx context.Context, user *bootstrap.User, notificationID string) (bool, error) {
 	return false, nil
 }
 
-func (auth *fakeAuthorization) RequireShopMember(user *bootstrap.User, shopID string) error {
+func (auth *fakeAuthorization) RequireShopMember(ctx context.Context, user *bootstrap.User, shopID string) error {
 	return nil
 }
 
-func (auth *fakeAuthorization) RequireShopAdmin(user *bootstrap.User, shopID string) error {
+func (auth *fakeAuthorization) RequireShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) error {
 	return nil
 }
 
@@ -75,21 +76,21 @@ func TestCachedAuthorizationCachesSuccessfulCalls(t *testing.T) {
 	cached := NewCachedAuthorization(inner)
 	user := &bootstrap.User{UserID: "user-1"}
 
-	val, err := cached.IsUserMemberOfShop(user, "shop-1")
+	val, err := cached.IsUserMemberOfShop(context.Background(), user, "shop-1")
 	require.NoError(t, err)
 	require.True(t, val)
 
-	val, err = cached.IsUserMemberOfShop(user, "shop-1")
+	val, err = cached.IsUserMemberOfShop(context.Background(), user, "shop-1")
 	require.NoError(t, err)
 	require.True(t, val)
 
 	require.Equal(t, 1, inner.memberCalls)
 
-	role, err := cached.GetUserRoleInShop(user, "shop-1")
+	role, err := cached.GetUserRoleInShop(context.Background(), user, "shop-1")
 	require.NoError(t, err)
 	require.Equal(t, "admin", role)
 
-	role, err = cached.GetUserRoleInShop(user, "shop-1")
+	role, err = cached.GetUserRoleInShop(context.Background(), user, "shop-1")
 	require.NoError(t, err)
 	require.Equal(t, "admin", role)
 
@@ -104,10 +105,10 @@ func TestCachedAuthorizationDoesNotCacheErrors(t *testing.T) {
 	cached := NewCachedAuthorization(inner)
 	user := &bootstrap.User{UserID: "user-1"}
 
-	_, err := cached.IsUserMemberOfShop(user, "shop-1")
+	_, err := cached.IsUserMemberOfShop(context.Background(), user, "shop-1")
 	require.Error(t, err)
 
-	_, err = cached.IsUserMemberOfShop(user, "shop-1")
+	_, err = cached.IsUserMemberOfShop(context.Background(), user, "shop-1")
 	require.Error(t, err)
 
 	require.Equal(t, 2, inner.memberCalls)

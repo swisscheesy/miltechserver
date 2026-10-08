@@ -40,7 +40,7 @@ func TestSetupShopVehicleUsageUnauthorizedResponsesUseStandardEnvelope(t *testin
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			router := gin.New()
-			Setup(nil, router, nil, nil, nil)
+			require.NotPanics(t, func() { Setup(nil, router, nil, nil, nil) })
 
 			request := httptest.NewRequest(
 				http.MethodPatch,
@@ -74,7 +74,7 @@ func TestSetupRegistersPmcsSbsInspectionScopedFaultRoutesUnderAuth(t *testing.T)
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	Setup(nil, router, nil, nil, nil)
+	require.NotPanics(t, func() { Setup(nil, router, nil, nil, nil) })
 
 	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id")
 	requireRouteRegistered(t, router, http.MethodPut, "/api/v1/auth/pmcs-sbs/equipment/:equipment_id/pmcs/:pmcs_id/faults")
@@ -86,7 +86,7 @@ func TestSetupRegistersPmcsSbsImageRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	Setup(nil, router, nil, nil, nil)
+	require.NotPanics(t, func() { Setup(nil, router, nil, nil, nil) })
 
 	requireRouteRegistered(t, router, http.MethodGet, "/api/v1/library/pmcs-sbs/image")
 }
@@ -95,7 +95,7 @@ func TestSetupRegistersUserPmcsRoutesOnApprovedGroups(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
-	Setup(nil, router, nil, nil, nil)
+	require.NotPanics(t, func() { Setup(nil, router, nil, nil, nil) })
 
 	routes := []struct {
 		method string

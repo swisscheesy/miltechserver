@@ -1,6 +1,7 @@
 package changes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"miltechserver/api/response"
@@ -15,20 +16,18 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) GetNotificationChangeHistory(
-	user *bootstrap.User,
-	notificationID string,
-) ([]response.NotificationChangeWithUsername, error) {
+func (service *ServiceImpl) GetNotificationChangeHistory(ctx context.Context, user *bootstrap.User,
+	notificationID string) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	notification, err := service.repo.GetVehicleNotificationByID(user, notificationID)
+	notification, err := service.repo.GetVehicleNotificationByID(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, notification.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, notification.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -37,7 +36,7 @@ func (service *ServiceImpl) GetNotificationChangeHistory(
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChanges(user, notificationID)
+	changes, err := service.repo.GetNotificationChanges(ctx, user, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification changes: %w", err)
 	}
@@ -45,16 +44,14 @@ func (service *ServiceImpl) GetNotificationChangeHistory(
 	return changes, nil
 }
 
-func (service *ServiceImpl) GetShopNotificationChanges(
-	user *bootstrap.User,
+func (service *ServiceImpl) GetShopNotificationChanges(ctx context.Context, user *bootstrap.User,
 	shopID string,
-	limit int,
-) ([]response.NotificationChangeWithUsername, error) {
+	limit int) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, shopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, shopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -63,7 +60,7 @@ func (service *ServiceImpl) GetShopNotificationChanges(
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChangesByShop(user, shopID, limit)
+	changes, err := service.repo.GetNotificationChangesByShop(ctx, user, shopID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notification changes: %w", err)
 	}
@@ -71,20 +68,18 @@ func (service *ServiceImpl) GetShopNotificationChanges(
 	return changes, nil
 }
 
-func (service *ServiceImpl) GetVehicleNotificationChanges(
-	user *bootstrap.User,
-	vehicleID string,
-) ([]response.NotificationChangeWithUsername, error) {
+func (service *ServiceImpl) GetVehicleNotificationChanges(ctx context.Context, user *bootstrap.User,
+	vehicleID string) ([]response.NotificationChangeWithUsername, error) {
 	if user == nil {
 		return nil, errors.New("unauthorized user")
 	}
 
-	vehicle, err := service.repo.GetShopVehicleByID(user, vehicleID)
+	vehicle, err := service.repo.GetShopVehicleByID(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle: %w", err)
 	}
 
-	isMember, err := service.repo.IsUserMemberOfShop(user, vehicle.ShopID)
+	isMember, err := service.repo.IsUserMemberOfShop(ctx, user, vehicle.ShopID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify membership: %w", err)
 	}
@@ -93,7 +88,7 @@ func (service *ServiceImpl) GetVehicleNotificationChanges(
 		return nil, errors.New("access denied: user is not a member of this shop")
 	}
 
-	changes, err := service.repo.GetNotificationChangesByVehicle(user, vehicleID)
+	changes, err := service.repo.GetNotificationChangesByVehicle(ctx, user, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notification changes: %w", err)
 	}

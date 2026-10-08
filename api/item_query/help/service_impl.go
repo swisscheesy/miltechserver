@@ -1,6 +1,7 @@
 package help
 
 import (
+	"context"
 	"strings"
 
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -14,7 +15,7 @@ func NewService(repo Repository) *ServiceImpl {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) FindByCode(code string) (model.Help, error) {
+func (service *ServiceImpl) FindByCode(ctx context.Context, code string) (model.Help, error) {
 	normalizedCode := strings.ToUpper(strings.TrimSpace(code))
 	if normalizedCode == "" {
 		return model.Help{}, ErrInvalidCode

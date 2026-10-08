@@ -7,12 +7,14 @@ import (
 // Service provides methods for accessing PMCS and BII library documents.
 type Service interface {
 	// GetPMCSVehicles returns a list of all vehicle folders in the PMCS library.
-	GetPMCSVehicles() (*PMCSVehiclesResponse, error)
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
+	GetPMCSVehicles(ctx context.Context) (*PMCSVehiclesResponse, error)
 
 	// GetPMCSDocuments returns all PDF documents for a specific vehicle folder.
 	// Returns empty array if vehicle folder has no PDFs or doesn't exist.
 	// Returns error only if Azure Blob Storage operation fails.
-	GetPMCSDocuments(vehicleName string) (*DocumentsListResponse, error)
+	// ctx should be the request context so Azure calls are cancelled on client disconnect.
+	GetPMCSDocuments(ctx context.Context, vehicleName string) (*DocumentsListResponse, error)
 
 	// GenerateDownloadURL creates a time-limited SAS URL for downloading a blob.
 	// ctx should be the request context so Azure calls are cancelled on client disconnect.

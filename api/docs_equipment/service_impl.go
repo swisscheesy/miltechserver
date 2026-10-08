@@ -34,19 +34,19 @@ func NewService(repo Repository, blobClient *azblob.Client) Service {
 	return &serviceImpl{repo: repo, blobClient: blobClient}
 }
 
-func (s *serviceImpl) GetAllPaginated(page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceImpl) GetAllPaginated(ctx context.Context, page int) (EquipmentDetailsPageResponse, error) {
 	return s.repo.GetAllPaginated(page)
 }
 
-func (s *serviceImpl) GetFamilies() (FamiliesResponse, error) {
+func (s *serviceImpl) GetFamilies(ctx context.Context) (FamiliesResponse, error) {
 	return s.repo.GetFamilies()
 }
 
-func (s *serviceImpl) GetByFamilyPaginated(family string, page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceImpl) GetByFamilyPaginated(ctx context.Context, family string, page int) (EquipmentDetailsPageResponse, error) {
 	return s.repo.GetByFamilyPaginated(strings.TrimSpace(family), page)
 }
 
-func (s *serviceImpl) SearchPaginated(query string, page int) (EquipmentDetailsPageResponse, error) {
+func (s *serviceImpl) SearchPaginated(ctx context.Context, query string, page int) (EquipmentDetailsPageResponse, error) {
 	return s.repo.SearchPaginated(strings.TrimSpace(query), page)
 }
 
@@ -55,8 +55,7 @@ func isImageFile(name string) bool {
 	return allowedImageExts[ext]
 }
 
-func (s *serviceImpl) ListImageFamilies() (*ImageFamiliesResponse, error) {
-	ctx := context.Background()
+func (s *serviceImpl) ListImageFamilies(ctx context.Context) (*ImageFamiliesResponse, error) {
 	containerClient := s.blobClient.ServiceClient().NewContainerClient(containerName)
 	prefix := imagePrefix
 	pager := containerClient.NewListBlobsHierarchyPager("/", &container.ListBlobsHierarchyOptions{
@@ -91,11 +90,10 @@ func (s *serviceImpl) ListImageFamilies() (*ImageFamiliesResponse, error) {
 	return &ImageFamiliesResponse{Families: families, Count: len(families)}, nil
 }
 
-func (s *serviceImpl) ListFamilyImages(family string) (*FamilyImagesResponse, error) {
+func (s *serviceImpl) ListFamilyImages(ctx context.Context, family string) (*FamilyImagesResponse, error) {
 	if strings.TrimSpace(family) == "" {
 		return nil, ErrEmptyParam
 	}
-	ctx := context.Background()
 	containerClient := s.blobClient.ServiceClient().NewContainerClient(containerName)
 	prefix := imagePrefix + strings.TrimSpace(family) + "/"
 	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
@@ -154,7 +152,7 @@ func (s *serviceImpl) GetFamilyImageURLs(ctx context.Context, family string) (*F
 	}
 
 	// Step 1: List all image blobs in the family folder (one Azure Storage call).
-	imageList, err := s.ListFamilyImages(family)
+	imageList, err := s.ListFamilyImages(ctx, family)
 	if err != nil {
 		return nil, err
 	}

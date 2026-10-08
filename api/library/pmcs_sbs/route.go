@@ -44,14 +44,12 @@ func (h *Handler) getFolders(c *gin.Context) {
 	folders, err := h.service.GetFolders(c.Request.Context())
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS SBS folders", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve PMCS SBS folders",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve PMCS SBS folders")
 		return
 	}
 
 	slog.Info("Successfully retrieved PMCS SBS folders", "count", folders.Count)
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: folders})
+	response.OK(c, folders)
 }
 
 // getFiles returns all JSON files in a specific PMCS SBS folder.
@@ -63,23 +61,19 @@ func (h *Handler) getFiles(c *gin.Context) {
 
 	if strings.TrimSpace(folderName) == "" {
 		slog.Warn("GetPMCSSBSFiles called with empty folder name")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Folder name is required",
-		})
+		response.Error(c, http.StatusBadRequest, "Folder name is required")
 		return
 	}
 
 	files, err := h.service.GetFiles(c.Request.Context(), folderName)
 	if err != nil {
 		slog.Error("Failed to retrieve PMCS SBS files", "error", err, "folder", folderName)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to retrieve PMCS SBS files",
-		})
+		response.Error(c, http.StatusInternalServerError, "Failed to retrieve PMCS SBS files")
 		return
 	}
 
 	slog.Info("Successfully retrieved PMCS SBS files", "count", files.Count, "folder", folderName)
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: files})
+	response.OK(c, files)
 }
 
 // getFileContent fetches a JSON blob from Azure and returns its raw content.
@@ -91,9 +85,7 @@ func (h *Handler) getFileContent(c *gin.Context) {
 
 	if strings.TrimSpace(blobPath) == "" {
 		slog.Warn("GetPMCSSBSFileContent called with empty blob_path")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "blob_path query parameter is required",
-		})
+		response.Error(c, http.StatusBadRequest, "blob_path query parameter is required")
 		return
 	}
 
@@ -102,27 +94,29 @@ func (h *Handler) getFileContent(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrFileNotFound):
 			slog.Warn("PMCS SBS file not found", "blobPath", blobPath, "error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "File not found",
 				"details": "The requested file does not exist or is not accessible",
 			})
 		case errors.Is(err, ErrEmptyBlobPath), errors.Is(err, ErrInvalidBlobPath), errors.Is(err, ErrInvalidFileType):
 			slog.Warn("Invalid blob path for PMCS SBS content", "blobPath", blobPath, "error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid request",
 				"details": err.Error(),
 			})
 		default:
 			slog.Error("Failed to retrieve PMCS SBS file content", "error", err, "blobPath", blobPath)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to retrieve file content",
-			})
+			response.Error(c, http.StatusInternalServerError, "Failed to retrieve file content")
 		}
 		return
 	}
 
 	slog.Info("Successfully retrieved PMCS SBS file content", "blobPath", blobPath)
-	c.JSON(http.StatusOK, response.StandardResponse{Status: 200, Message: "", Data: content})
+	response.OK(c, content)
 }
 
 // getImage fetches a guide item PNG from Azure and streams its raw bytes.
@@ -135,6 +129,11 @@ func (h *Handler) getImage(c *gin.Context) {
 
 	if strings.TrimSpace(blobPath) == "" {
 		slog.Warn("GetPMCSSBSImage called with empty blob_path", "imageName", imageName)
+		// Kept as a raw gin.H{"error": ...} response (not response.Error()):
+		// tests/library/pmcs_sbs/route_test.go's TestGetImageMissingBlobPath
+		// asserts the exact body {"error":"blob_path query parameter is
+		// required"}; response.Error() writes the message under "message"
+		// instead, which would break that assertion.
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "blob_path query parameter is required",
 		})
@@ -143,6 +142,11 @@ func (h *Handler) getImage(c *gin.Context) {
 
 	if strings.TrimSpace(imageName) == "" {
 		slog.Warn("GetPMCSSBSImage called with empty image_name", "blobPath", blobPath)
+		// Kept as a raw gin.H{"error": ...} response (not response.Error()):
+		// tests/library/pmcs_sbs/route_test.go's TestGetImageMissingImageName
+		// asserts the exact body {"error":"image_name query parameter is
+		// required"}; response.Error() writes the message under "message"
+		// instead, which would break that assertion.
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "image_name query parameter is required",
 		})
@@ -154,6 +158,8 @@ func (h *Handler) getImage(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrFileNotFound):
 			slog.Warn("PMCS SBS image not found", "blobPath", blobPath, "imageName", imageName, "error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusNotFound, gin.H{
 				"error":   "Image not found",
 				"details": "The requested image does not exist or is not accessible",
@@ -164,12 +170,19 @@ func (h *Handler) getImage(c *gin.Context) {
 			errors.Is(err, ErrEmptyImageName),
 			errors.Is(err, ErrInvalidImageName):
 			slog.Warn("Invalid request for PMCS SBS image", "blobPath", blobPath, "imageName", imageName, "error", err)
+			// Kept as a raw gin.H{} response: flat multi-field body ("error" +
+			// "details") that response.Error()'s single message string cannot represent.
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Invalid request",
 				"details": err.Error(),
 			})
 		default:
 			slog.Error("Failed to retrieve PMCS SBS image", "error", err, "blobPath", blobPath, "imageName", imageName)
+			// Kept as a raw gin.H{"error": ...} response (not response.Error()):
+			// tests/library/pmcs_sbs/route_test.go's TestGetImageGenericError
+			// asserts the exact body {"error":"Failed to retrieve image"};
+			// response.Error() writes the message under "message" instead,
+			// which would break that assertion.
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to retrieve image",
 			})
@@ -178,6 +191,12 @@ func (h *Handler) getImage(c *gin.Context) {
 	}
 	if image == nil || image.Body == nil {
 		slog.Error("PMCS SBS image download returned empty response", "blobPath", blobPath, "imageName", imageName)
+		// Kept as a raw gin.H{"error": ...} response (not response.Error()):
+		// tests/library/pmcs_sbs/route_test.go's
+		// TestGetImageNilDownloadResponseReturnsGenericError asserts the exact
+		// body {"error":"Failed to retrieve image"}; response.Error() writes
+		// the message under "message" instead, which would break that
+		// assertion.
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to retrieve image",
 		})

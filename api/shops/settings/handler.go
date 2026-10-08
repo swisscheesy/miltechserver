@@ -21,24 +21,26 @@ func (handler *Handler) GetShopAdminOnlyListsSetting(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	adminOnlyLists, err := service.GetShopAdminOnlyListsSetting(user, shopID)
+	adminOnlyLists, err := service.GetShopAdminOnlyListsSetting(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Shop admin_only_lists setting retrieved successfully",
@@ -55,37 +57,39 @@ func (handler *Handler) UpdateShopAdminOnlyListsSetting(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.UpdateAdminOnlyListsRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.UpdateShopAdminOnlyListsSetting(user, shopID, req.AdminOnlyLists)
+	err := service.UpdateShopAdminOnlyListsSetting(c.Request.Context(), user, shopID, *req.AdminOnlyLists)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Shop admin_only_lists setting updated successfully",
 		Data: gin.H{
 			"shop_id":          shopID,
-			"admin_only_lists": req.AdminOnlyLists,
+			"admin_only_lists": *req.AdminOnlyLists,
 		},
 	})
 }
@@ -96,24 +100,26 @@ func (handler *Handler) CheckUserIsShopAdmin(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	isAdmin, err := service.IsUserShopAdmin(user, shopID)
+	isAdmin, err := service.IsUserShopAdmin(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Admin status checked successfully",
@@ -133,24 +139,26 @@ func (handler *Handler) GetShopSettings(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	service := handler.service
-	settings, err := service.GetShopSettings(user, shopID)
+	settings, err := service.GetShopSettings(c.Request.Context(), user, shopID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Shop settings retrieved successfully",
@@ -164,38 +172,40 @@ func (handler *Handler) UpdateShopSettings(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	shopID := c.Param("shop_id")
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	var req request.UpdateShopSettingsRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	// Validate that at least one setting is being updated
 	if req.AdminOnlyLists == nil {
 		// Future settings will be checked here with OR conditions
-		c.JSON(400, gin.H{"message": "at least one setting must be provided"})
+		response.Error(c, 400, "at least one setting must be provided")
 		return
 	}
 
 	service := handler.service
-	updatedSettings, err := service.UpdateShopSettings(user, shopID, req)
+	updatedSettings, err := service.UpdateShopSettings(c.Request.Context(), user, shopID, req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Shop settings updated successfully",

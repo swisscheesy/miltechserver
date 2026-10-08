@@ -6,6 +6,7 @@ import (
 	"miltechserver/api/equipment_services/shared"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	shopsContract "miltechserver/api/shops/shared"
 
 	"github.com/gin-gonic/gin"
 )
@@ -23,7 +24,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) complete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -32,28 +33,32 @@ func (handler *Handler) complete(c *gin.Context) {
 	serviceID := c.Param("service_id")
 
 	if shopID == "" {
-		c.JSON(400, gin.H{"message": "shop_id is required"})
+		response.Error(c, 400, "shop_id is required")
 		return
 	}
 
 	if serviceID == "" {
-		c.JSON(400, gin.H{"message": "service_id is required"})
+		response.Error(c, 400, "service_id is required")
 		return
 	}
 
 	var req request.CompleteEquipmentServiceRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request", "details": err.Error()})
+		// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+		// "details") that response.Error()'s single message string cannot represent.
+		shopsContract.WriteValidationError(c, "invalid request")
 		return
 	}
 
-	completedService, err := handler.service.Complete(user, shopID, serviceID, req)
+	completedService, err := handler.service.Complete(c.Request.Context(), user, shopID, serviceID, req)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(200, response.StandardResponse{
 		Status:  200,
 		Message: "Equipment service completed successfully",

@@ -10,7 +10,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/cage/:cage", func(c *gin.Context) {
 		cage := c.Param("cage")
 
-		cageData, err := service.LookupByCode(cage)
+		cageData, err := service.LookupByCode(c.Request.Context(), cage)
 		if err != nil {
 			shared.HandleError(c, err)
 			return

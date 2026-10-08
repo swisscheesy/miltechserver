@@ -2,25 +2,34 @@ package bootstrap
 
 import (
 	"database/sql"
-	"fmt"
+	"errors"
 	"log/slog"
 	"miltechserver/helper"
+	"net"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
 )
 
 func NewSqlClient(env *Env) *sql.DB {
-	dsnStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s", env.Host, env.Port, env.Username, env.Password, env.DBName, env.SslMode)
+	dsnStr, err := DatabaseDSN(env)
+	helper.PanicOnError(err)
 	slog.Info("Connecting to Database")
 	db, err := sql.Open("postgres", dsnStr)
-	helper.PanicOnError(err)
+	if err != nil {
+		panic("invalid database connection configuration")
+	}
 
 	err = db.Ping()
 
 	if err != nil {
-		slog.Error("Unable to connect to database", "error", err)
-		panic(err)
+		_ = db.Close()
+		slog.Error("Unable to connect to database")
+		panic("unable to connect to database")
 	}
 
 	slog.Info("Connected to Database!")
@@ -38,4 +47,26 @@ func NewSqlClient(env *Env) *sql.DB {
 		"connMaxIdleTime", "1m")
 
 	return db
+}
+
+var databaseSchemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+
+// DatabaseDSN is shared by all application connections; URL escaping preserves credentials literally.
+func DatabaseDSN(env *Env) (string, error) {
+	if env == nil {
+		return "", errors.New("invalid database configuration")
+	}
+	port, err := strconv.Atoi(env.Port)
+	if err != nil || port < 1 || port > 65535 || env.Host == "" || env.Username == "" || env.DBName == "" || !databaseSchemaName.MatchString(env.DBSchema) || strings.ContainsAny(env.Host, "/ ?#") {
+		return "", errors.New("invalid database configuration")
+	}
+	switch env.SslMode {
+	case "disable", "require", "verify-ca", "verify-full":
+	default:
+		return "", errors.New("invalid database TLS configuration")
+	}
+	u := url.URL{Scheme: "postgresql", Host: net.JoinHostPort(env.Host, env.Port), Path: "/" + env.DBName, User: url.UserPassword(env.Username, env.Password)}
+	query := url.Values{"sslmode": {env.SslMode}, "search_path": {env.DBSchema}}
+	u.RawQuery = query.Encode()
+	return u.String(), nil
 }

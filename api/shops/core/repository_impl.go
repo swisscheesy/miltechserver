@@ -9,122 +9,134 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	. "miltechserver/.gen/miltech_ng/public/table"
 	"miltechserver/api/response"
+	dbutil "miltechserver/api/shared/db"
+	"miltechserver/api/shops/messages"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
-	"sync/atomic"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	. "github.com/go-jet/jet/v2/postgres"
-	"golang.org/x/sync/errgroup"
-)
-
-const (
-	shopMessageImagesContainer = "shop-message-images"
-	blobOperationTimeout       = 30 * time.Second
-	maxConcurrentBlobDeletes   = 10
 )
 
 type RepositoryImpl struct {
 	db         *sql.DB
 	blobClient *azblob.Client
 	env        *bootstrap.Env
+	assets     messages.AssetRepository
 }
 
 func NewRepository(db *sql.DB, blobClient *azblob.Client, env *bootstrap.Env) *RepositoryImpl {
+	storage := messages.AssetStorage{Container: "shop-message-images"}
+	if env != nil {
+		storage.Account = env.BlobAccountName
+	}
 	return &RepositoryImpl{
 		db:         db,
 		blobClient: blobClient,
 		env:        env,
+		assets:     messages.NewAssetRepository(db, storage),
 	}
 }
 
-func (repo *RepositoryImpl) CreateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
-	stmt := Shops.INSERT(
-		Shops.ID,
-		Shops.Name,
-		Shops.Details,
-		Shops.CreatedBy,
-		Shops.CreatedAt,
-		Shops.UpdatedAt,
-	).MODEL(shop).RETURNING(Shops.AllColumns)
-
+func (repo *RepositoryImpl) CreateShop(ctx context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
 	var createdShop model.Shops
-	err := stmt.Query(repo.db, &createdShop)
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		stmt := Shops.INSERT(
+			Shops.ID, Shops.Name, Shops.Details, Shops.CreatedBy,
+			Shops.CreatedAt, Shops.UpdatedAt, Shops.AdminOnlyLists,
+		).MODEL(shop).RETURNING(Shops.AllColumns)
+		if err := stmt.QueryContext(ctx, tx, &createdShop); err != nil {
+			return fmt.Errorf("failed to create shop: %w", err)
+		}
+		now := time.Now().UTC()
+		member := model.ShopMembers{
+			ID:     fmt.Sprintf("%s_%s", shop.ID, user.UserID),
+			ShopID: shop.ID, UserID: user.UserID, Role: "admin", JoinedAt: &now,
+		}
+		memberStmt := ShopMembers.INSERT(
+			ShopMembers.ID, ShopMembers.ShopID, ShopMembers.UserID,
+			ShopMembers.Role, ShopMembers.JoinedAt,
+		).MODEL(member)
+		if _, err := memberStmt.ExecContext(ctx, tx); err != nil {
+			return fmt.Errorf("failed to add creator as admin to shop: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create shop: %w", err)
+		return nil, err
 	}
-
 	slog.Info("Shop created in database", "shop_id", shop.ID, "created_by", user.UserID)
 	return &createdShop, nil
 }
 
-func (repo *RepositoryImpl) UpdateShop(user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
-	now := time.Now()
-	shop.UpdatedAt = &now
-
-	updateStmt := Shops.UPDATE(
-		Shops.Name,
-		Shops.UpdatedAt,
-	).SET(
-		Shops.Name.SET(String(shop.Name)),
-		Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
-		Shops.AdminOnlyLists.SET(Bool(shop.AdminOnlyLists)),
-	)
-
-	if shop.Details != nil {
-		updateStmt = Shops.UPDATE(
-			Shops.Name,
-			Shops.Details,
-			Shops.UpdatedAt,
-		).SET(
-			Shops.Name.SET(String(shop.Name)),
-			Shops.Details.SET(String(*shop.Details)),
-			Shops.UpdatedAt.SET(TimestampzT(*shop.UpdatedAt)),
-			Shops.AdminOnlyLists.SET(Bool(shop.AdminOnlyLists)),
-		)
-	}
-
-	stmt := updateStmt.WHERE(
-		Shops.ID.EQ(String(shop.ID)).
-			AND(Shops.CreatedBy.EQ(String(user.UserID))),
-	).RETURNING(Shops.AllColumns)
-
+func (repo *RepositoryImpl) UpdateShop(ctx context.Context, user *bootstrap.User, shop model.Shops) (*model.Shops, error) {
 	var updatedShop model.Shops
-	err := stmt.Query(repo.db, &updatedShop)
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		admin, _, err := shared.LockShopMutation(ctx, tx, shop.ID, user.UserID)
+		if err != nil {
+			return err
+		}
+		if !admin {
+			return shared.ErrShopAdminRequired
+		}
+		now := time.Now()
+		updateStmt := Shops.UPDATE(Shops.Name, Shops.UpdatedAt).SET(
+			Shops.Name.SET(String(shop.Name)), Shops.UpdatedAt.SET(TimestampzT(now)),
+		)
+		// Omitted/null details preserve the existing value, as in the released contract.
+		if shop.Details != nil {
+			updateStmt = Shops.UPDATE(Shops.Name, Shops.Details, Shops.UpdatedAt).SET(
+				Shops.Name.SET(String(shop.Name)), Shops.Details.SET(String(*shop.Details)), Shops.UpdatedAt.SET(TimestampzT(now)),
+			)
+		}
+		stmt := updateStmt.WHERE(Shops.ID.EQ(String(shop.ID))).RETURNING(Shops.AllColumns)
+		if err := stmt.QueryContext(ctx, tx, &updatedShop); err != nil {
+			return fmt.Errorf("failed to update shop: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to update shop: %w", err)
+		return nil, err
 	}
-
 	slog.Info("Shop updated in database", "shop_id", shop.ID, "updated_by", user.UserID)
 	return &updatedShop, nil
 }
 
-func (repo *RepositoryImpl) DeleteShop(user *bootstrap.User, shopID string) error {
-	stmt := Shops.DELETE().WHERE(
-		Shops.ID.EQ(String(shopID)).
-			AND(Shops.CreatedBy.EQ(String(user.UserID))),
-	)
-
-	result, err := stmt.Exec(repo.db)
+func (repo *RepositoryImpl) DeleteShop(ctx context.Context, user *bootstrap.User, shopID string) error {
+	if user == nil {
+		return errors.New("unauthorized user")
+	}
+	err := dbutil.WithTxContext(ctx, repo.db, func(tx *sql.Tx) error {
+		if _, _, err := shared.LockShopMutation(ctx, tx, shopID, user.UserID); err != nil {
+			return err
+		}
+		// Current membership and original creation, not current admin role, grant deletion.
+		if err := repo.assets.EnqueueShopCleanup(ctx, tx, shopID); err != nil {
+			return err
+		}
+		stmt := Shops.DELETE().WHERE(Shops.ID.EQ(String(shopID)).AND(Shops.CreatedBy.EQ(String(user.UserID))))
+		result, err := stmt.ExecContext(ctx, tx)
+		if err != nil {
+			return fmt.Errorf("failed to delete shop: %w", err)
+		}
+		affected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if affected != 1 {
+			return shared.ErrShopCreatorOnly
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("failed to delete shop: %w", err)
+		return err
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return errors.New("shop not found or user not authorized to delete")
-	}
-
 	slog.Info("Shop deleted from database", "shop_id", shopID, "deleted_by", user.UserID)
 	return nil
 }
 
-func (repo *RepositoryImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops, error) {
+func (repo *RepositoryImpl) GetShopsByUser(ctx context.Context, user *bootstrap.User) ([]model.Shops, error) {
 	stmt := SELECT(Shops.AllColumns).
 		FROM(
 			Shops.
@@ -134,7 +146,7 @@ func (repo *RepositoryImpl) GetShopsByUser(user *bootstrap.User) ([]model.Shops,
 		ORDER_BY(Shops.CreatedAt.DESC())
 
 	var shops []model.Shops
-	err := stmt.Query(repo.db, &shops)
+	err := stmt.QueryContext(ctx, repo.db, &shops)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shops for user: %w", err)
 	}
@@ -182,7 +194,7 @@ func (repo *RepositoryImpl) GetShopEquipmentOverview(
 	return shops, nil
 }
 
-func (repo *RepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
+func (repo *RepositoryImpl) GetShopByID(ctx context.Context, user *bootstrap.User, shopID string) (*response.ShopDetailResponse, error) {
 	rawSQL := `
 		SELECT
 			s.id,
@@ -224,7 +236,7 @@ func (repo *RepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*r
 	`
 
 	var result response.ShopDetailResponse
-	err := repo.db.QueryRow(rawSQL, shopID, user.UserID).Scan(
+	err := repo.db.QueryRowContext(ctx, rawSQL, shopID, user.UserID).Scan(
 		&result.ID,
 		&result.Name,
 		&result.Details,
@@ -244,7 +256,7 @@ func (repo *RepositoryImpl) GetShopByID(user *bootstrap.User, shopID string) (*r
 	return &result, nil
 }
 
-func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]response.ShopWithStats, error) {
+func (repo *RepositoryImpl) GetShopsWithStatsForUser(ctx context.Context, user *bootstrap.User) ([]response.ShopWithStats, error) {
 	rawSQL := `
 		WITH user_shops AS (
 			SELECT
@@ -289,7 +301,7 @@ func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]re
 		ORDER BY us.created_at DESC
 	`
 
-	rows, err := repo.db.Query(rawSQL, user.UserID)
+	rows, err := repo.db.QueryContext(ctx, rawSQL, user.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shops with stats: %w", err)
 	}
@@ -332,95 +344,4 @@ func (repo *RepositoryImpl) GetShopsWithStatsForUser(user *bootstrap.User) ([]re
 
 	slog.Info("Shops with stats retrieved for user", "user_id", user.UserID, "count", len(results))
 	return results, nil
-}
-
-func (repo *RepositoryImpl) AddMemberToShop(user *bootstrap.User, shopID string, role string) error {
-	curTime := time.Now().UTC()
-	member := model.ShopMembers{
-		ID:       fmt.Sprintf("%s_%s", shopID, user.UserID),
-		ShopID:   shopID,
-		UserID:   user.UserID,
-		Role:     role,
-		JoinedAt: &curTime,
-	}
-
-	stmt := ShopMembers.INSERT(
-		ShopMembers.ID,
-		ShopMembers.ShopID,
-		ShopMembers.UserID,
-		ShopMembers.Role,
-		ShopMembers.JoinedAt,
-	).MODEL(member).
-		ON_CONFLICT(ShopMembers.ShopID, ShopMembers.UserID).
-		DO_UPDATE(SET(ShopMembers.Role.SET(String(role))))
-
-	_, err := stmt.Exec(repo.db)
-	if err != nil {
-		return fmt.Errorf("failed to add member to shop: %w", err)
-	}
-
-	slog.Info("Member added to shop", "shop_id", shopID, "user_id", user.UserID, "role", role)
-	return nil
-}
-
-func (repo *RepositoryImpl) DeleteShopMessageBlobs(shopID string) error {
-	if repo.blobClient == nil {
-		return nil
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), blobOperationTimeout)
-	defer cancel()
-
-	containerClient := repo.blobClient.ServiceClient().NewContainerClient(shopMessageImagesContainer)
-
-	prefix := fmt.Sprintf("%s/", shopID)
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Prefix: &prefix,
-	})
-
-	var deletedCount int64
-	var errorCount int64
-	group, groupCtx := errgroup.WithContext(ctx)
-	group.SetLimit(maxConcurrentBlobDeletes)
-
-	for pager.More() {
-		page, err := pager.NextPage(groupCtx)
-		if err != nil {
-			slog.Warn("Failed to list blobs for shop deletion", "shop_id", shopID, "error", err)
-			break
-		}
-
-		for _, blob := range page.Segment.BlobItems {
-			if blob.Name == nil {
-				continue
-			}
-
-			blobName := *blob.Name
-			group.Go(func() error {
-				_, err := repo.blobClient.DeleteBlob(groupCtx, shopMessageImagesContainer, blobName, nil)
-				if err != nil {
-					slog.Warn("Failed to delete shop message blob",
-						"shop_id", shopID,
-						"blob_name", blobName,
-						"error", err)
-					atomic.AddInt64(&errorCount, 1)
-					return nil
-				}
-
-				atomic.AddInt64(&deletedCount, 1)
-				return nil
-			})
-		}
-	}
-
-	if err := group.Wait(); err != nil {
-		slog.Warn("Blob deletion group exited with error", "shop_id", shopID, "error", err)
-	}
-
-	slog.Info("Shop message blobs cleanup completed",
-		"shop_id", shopID,
-		"deleted_count", deletedCount,
-		"error_count", errorCount)
-
-	return nil
 }

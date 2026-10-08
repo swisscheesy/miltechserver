@@ -20,11 +20,11 @@ type serviceStub struct {
 	downloadErr  error
 }
 
-func (s *serviceStub) GetPMCSVehicles() (*PMCSVehiclesResponse, error) {
+func (s *serviceStub) GetPMCSVehicles(_ context.Context) (*PMCSVehiclesResponse, error) {
 	return s.vehiclesResp, s.vehiclesErr
 }
 
-func (s *serviceStub) GetPMCSDocuments(vehicleName string) (*DocumentsListResponse, error) {
+func (s *serviceStub) GetPMCSDocuments(_ context.Context, vehicleName string) (*DocumentsListResponse, error) {
 	return s.docsResp, s.docsErr
 }
 

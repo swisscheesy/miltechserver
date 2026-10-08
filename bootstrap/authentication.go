@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,27 +21,33 @@ type User struct {
 
 func NewFirebaseApp(ctx context.Context) (*firebase.App, error) {
 	accountKey := os.Getenv("FIREBASE_AUTH_KEY")
-
-	opt := option.WithCredentialsFile(accountKey)
+	if accountKey == "" {
+		return nil, errors.New("FIREBASE_AUTH_KEY is required")
+	}
+	// Read the runtime mount before initialization so missing credentials fail before other clients start.
+	credentials, err := os.ReadFile(accountKey)
+	if err != nil {
+		return nil, errors.New("unable to read Firebase credentials")
+	}
+	opt := option.WithCredentialsJSON(credentials)
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		return nil, fmt.Errorf("firebase initialization error: %v", err)
+		return nil, errors.New("firebase initialization failed")
 	}
 	return app, nil
 }
 
-// NewFireAuth creates a returns a new firebase auth client
-func NewFireAuth(ctx context.Context) *auth.Client {
+// NewFireAuth creates a Firebase auth client or returns its initialization error.
+func NewFireAuth(ctx context.Context) (*auth.Client, error) {
 	slog.Info("Creating Firebase Auth client")
 	fireApp, err := NewFirebaseApp(ctx)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	authClient, err := fireApp.Auth(ctx)
 	if err != nil {
-		slog.Error("error getting auth client", "error", err)
-		return nil
+		return nil, fmt.Errorf("firebase auth client initialization error: %w", err)
 	}
 	slog.Info("Firebase Auth client created")
-	return authClient
+	return authClient, nil
 }

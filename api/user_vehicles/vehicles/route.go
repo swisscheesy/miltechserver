@@ -26,55 +26,47 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) getByID(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
-	result, err := handler.service.GetByID(user, vehicleID)
+	result, err := handler.service.GetByID(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsert(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -82,11 +74,11 @@ func (handler *Handler) upsert(c *gin.Context) {
 	var vehicle model.UserVehicle
 	if err := c.BindJSON(&vehicle); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Upsert(user, vehicle)
+	err = handler.service.Upsert(c.Request.Context(), user, vehicle)
 	if err != nil {
 		c.Error(err)
 		return
@@ -98,18 +90,18 @@ func (handler *Handler) upsert(c *gin.Context) {
 func (handler *Handler) delete(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	vehicleID := c.Param("vehicleId")
 	if vehicleID == "" {
-		c.JSON(400, gin.H{"message": "vehicle ID is required"})
+		response.Error(c, 400, "vehicle ID is required")
 		return
 	}
 
-	err = handler.service.Delete(user, vehicleID)
+	err = handler.service.Delete(c.Request.Context(), user, vehicleID)
 	if err != nil {
 		c.Error(err)
 		return
@@ -121,12 +113,12 @@ func (handler *Handler) delete(c *gin.Context) {
 func (handler *Handler) deleteAll(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return

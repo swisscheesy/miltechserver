@@ -1,7 +1,10 @@
 package cage
 
-import "miltechserver/.gen/miltech_ng/public/model"
+import (
+	"context"
+	"miltechserver/.gen/miltech_ng/public/model"
+)
 
 type Service interface {
-	LookupByCode(cage string) ([]model.CageAddress, error)
+	LookupByCode(ctx context.Context, cage string) ([]model.CageAddress, error)
 }

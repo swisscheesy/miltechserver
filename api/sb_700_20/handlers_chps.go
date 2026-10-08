@@ -3,193 +3,187 @@ package sb_700_20
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"miltechserver/api/response"
+	"miltechserver/api/shared/pagination"
 
 	"github.com/gin-gonic/gin"
 )
 
 func (h *Handler) listChp4(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
-	data, err := h.service.GetChp4Paginated(page)
+	data, err := h.service.GetChp4Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrInvalidPage) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+			response.Error(c, http.StatusBadRequest, "Invalid page number")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) searchChp4(c *gin.Context) {
 	lin := c.Param("lin")
 	if strings.TrimSpace(lin) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	item, err := h.service.GetChp4ByLIN(lin)
+	item, err := h.service.GetChp4ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+			response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: item})
+	response.OK(c, item)
 }
 
 func (h *Handler) listChp6(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
-	data, err := h.service.GetChp6Paginated(page)
+	data, err := h.service.GetChp6Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrInvalidPage) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+			response.Error(c, http.StatusBadRequest, "Invalid page number")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) searchChp6(c *gin.Context) {
 	lin := c.Param("lin")
 	if strings.TrimSpace(lin) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	items, err := h.service.GetChp6ByLIN(lin)
+	items, err := h.service.GetChp6ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+			response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+	response.OK(c, items)
 }
 
 func (h *Handler) listChp8(c *gin.Context) {
-	pageStr := c.DefaultQuery("page", "1")
-	page, err := strconv.Atoi(pageStr)
-	if err != nil || page < 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+	page, ok := pagination.ParsePage(c)
+	if !ok {
 		return
 	}
-	data, err := h.service.GetChp8Paginated(page)
+	data, err := h.service.GetChp8Paginated(c.Request.Context(), page)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrInvalidPage) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid page number"})
+			response.Error(c, http.StatusBadRequest, "Invalid page number")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: data})
+	response.OK(c, data)
 }
 
 func (h *Handler) searchChp8(c *gin.Context) {
 	lin := c.Param("lin")
 	if strings.TrimSpace(lin) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+		response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		return
 	}
-	items, err := h.service.GetChp8ByLIN(lin)
+	items, err := h.service.GetChp8ByLIN(c.Request.Context(), lin)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "lin parameter is required"})
+			response.Error(c, http.StatusBadRequest, "lin parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+	response.OK(c, items)
 }
 
 func (h *Handler) searchChp4ByRIC(c *gin.Context) {
 	ric := c.Param("ric")
 	if strings.TrimSpace(ric) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp4ByRIC(ric)
+	items, err := h.service.GetChp4ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+			response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+	response.OK(c, items)
 }
 
 func (h *Handler) searchChp6ByRIC(c *gin.Context) {
 	ric := c.Param("ric")
 	if strings.TrimSpace(ric) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp6ByRIC(ric)
+	items, err := h.service.GetChp6ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+			response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+	response.OK(c, items)
 }
 
 func (h *Handler) searchChp8ByRIC(c *gin.Context) {
 	ric := c.Param("ric")
 	if strings.TrimSpace(ric) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+		response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		return
 	}
-	items, err := h.service.GetChp8ByRIC(ric)
+	items, err := h.service.GetChp8ByRIC(c.Request.Context(), ric)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
 		} else if errors.Is(err, ErrEmptyParam) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "ric parameter is required"})
+			response.Error(c, http.StatusBadRequest, "ric parameter is required")
 		} else {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		}
 		return
 	}
-	c.JSON(http.StatusOK, response.StandardResponse{Status: http.StatusOK, Data: items})
+	response.OK(c, items)
 }

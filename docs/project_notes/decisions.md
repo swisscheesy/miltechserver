@@ -256,7 +256,9 @@ Based on the current project setup:
 - Existing API contract remains unchanged while internal architecture is simplified
 - Full suite verification was required due wide route wiring changes (`go test ./...`)
 
-### ADR-011: Shops Performance Optimization Refactor (2026-02-01)
+### ADR-022: Shops Performance Optimization Refactor (2026-02-01)
+
+*(Originally numbered ADR-011; renumbered 2026-08-31 to resolve a duplicate heading. No content changed.)*
 
 **Context:**
 - Shops endpoints executed repeated authorization checks per request and used COUNT-based membership queries
@@ -617,3 +619,136 @@ Based on the current project setup:
   decision or migration execution
 - Historical migrations and ADRs retain the table names that were correct when
   those records were written
+
+### ADR-022: Shops Message Sync Numbering by Trigger, Gated by Flag and Probe (2026-09-29)
+
+**Context:**
+- Message synchronization needs a per-shop, commit-ordered `insertion_number` so
+  clients can catch up from a watermark without missing a message
+- Released clients and older server binaries insert messages and must keep
+  working against the expanded schema; the `/shops/capabilities` answer must not
+  promise sync before the schema exists
+- Historical context at ADR-022 adoption: `response.ShopMessageResponse` embedded
+  the Jet model. The explicit DTO decision below supersedes that implementation;
+  the legacy JSON key set remains a compatibility contract
+
+**Decision:**
+- Migration 018 adds `shop_messages.insertion_number`, a `shop_message_counters`
+  table and a `BEFORE INSERT` trigger that is the **sole allocator**; it
+  overwrites any supplied value, so every writer (old binaries, ad-hoc SQL) is
+  numbered and application code never sets it
+- `message_sync` is advertised only when `SHOPS_MESSAGE_SYNC_ENABLED=true` and a
+  catalog probe finds the counter table and an enabled trigger (capability =
+  flag AND probe); the probe is not backfill or fleet proof, so rollout gates
+  stay operator-verified
+- Superseded on 2026-10-03: `response.ShopMessageResponse` now explicitly owns
+  the nine legacy fields, and legacy reads/readback select explicit columns.
+  Regenerate after every authorized migration/data repair through
+  `tools/jetregen`; `insertion_number` keeps its normal generated JSON tag but
+  cannot leak through the message DTO. Sync and aggregates use the same DTO.
+- Startup still requires tagged Jet generation before route registration, using
+  the application's actual database pool/port. The shared generator validates
+  legacy message column types/nullability, allowing pre/post-018 and compatible
+  extra columns, and publishes staged canonical `miltech_ng/<schema>` output
+  under a cross-process lock with backup/rollback. Publication uses two renames,
+  not an atomic exchange for readers outside that lock.
+- The generation manifest records the real source identity and schema catalog
+  digest separately from the canonical namespace. Runtime generation does not
+  rebuild or certify the running binary; release builds must use intended schema
+  inputs and pass the later migration/function/grant readiness gates. The
+  disposable fixture lacks `LookupLinNiinMat`, so its focused message probe is
+  not evidence of a complete freshly generated application build.
+- The migration takes `shops` then `shop_messages` locks (the cascading-delete
+  order) and adds the counter foreign key after seeding; it is applied to live
+  databases only through a checksum-pinned runner, `miltech_ng_test` first
+- `insertion_number` stays nullable (optional `NOT NULL` hardening deferred
+  until production is verified)
+
+**Alternatives considered:**
+- Application-side counter increment (rejected: older binaries and other writers
+  would bypass it)
+- A sequence per shop or a global sequence (rejected: sequences are not
+  commit-ordered, so a watermark could skip a later-committing lower number)
+- Regenerating the jet model (rejected: adds `insertion_number` to every legacy
+  response)
+- Extra `(shop_id, id)` index for reconcile (not added: about 0.4 ms saved per
+  100-ID chunk, an eighth index on every insert; revisit as migration 019)
+
+**Consequences:**
+- Not zero downtime: message reads and writes block for the migration's hold
+  (about 1.1 s at 100,000 rows on a laptop; production row counts unknown)
+- Accepted residual deadlock: a transaction that touches `shop_messages` and then
+  writes `shops` deadlocks with the migration; the migration is the victim, is
+  atomic and can be re-run; none found in the repositories checked (not an
+  exhaustive audit)
+- Every message insert now also writes `shop_message_counters` under the
+  invoker's privileges; the application role must be verified on
+  `miltech_ng_test` before production
+- The migration must be applied before the flag is turned on; the flag must be
+  uniform across the fleet
+- Runner pre-018 schema checksums are unpinned until the operator records them
+- Details: `docs/testing/shops-database.md`,
+  `docs/testing/shops-message-sync-measurements.md`,
+  `docs/testing/shops-release-contracts.md`
+
+### Shops remediation operational checkpoint (2026-10-04)
+
+The 019–023 runner takes one explicitly authorized forward action and stops for
+mandatory tagged generation. Named targets stay UNPINNED pending separate owner
+identity/source/schema/data and actual DB_USERNAME proof, test first then production.
+Every later action requires hash-pinned preceding target/schema/source generation
+evidence with all 32 PMCS hashes unchanged. No automatic reverse or repair. See
+[the release gate sheet](../testing/shops-server-remediation-release.md). This
+adds operational constraints without rewriting historical ADR evidence.
+
+Task 22 late-commit legacy cursor and numeric restore ABA limitations remain OPEN.
+C06 owner population/fleet/edge budget remains unknown; no numeric limit is assumed.
+
+### Shop message image upload limit raised to 15 MiB (2026-10-04)
+
+`maxImageSize` (`api/shops/messages/service_impl.go`) is 15 MiB, up from 5 MiB.
+The whole-body `MaxBytesReader` bound is now derived as `maxUploadRequestBytes =
+maxImageSize + 1 MiB` (was a separate literal 6 MiB) so the two cannot drift.
+The 5 MiB / 6 MiB figures in the 2026-10-02 audit (F25), the 2026-10-03
+remediation spec/plan and `shops-server-refactor-final-report.md` are historical.
+Cost: each in-flight upload holds up to 15 MiB of file bytes in heap (plus a
+multipart temp file on disk above 1 MiB), 3× the previous ceiling. The 30 s
+`UploadOperationTimeout` covers only the Azure PUT, which starts after the client
+body has been read. Other image endpoints (`user_saves`, `material_images`) have
+no size limit and were not changed.
+
+### ADR-023: Register Pre-020 Message Images with an Unattributed Uploader (2026-10-05)
+
+**Context:**
+- Migration 020 left images uploaded before it unregistered ("unknown historical
+  targets remain protected"), so deleting or editing an old message never cleaned up
+  its blob, and the discard endpoint refused old images
+- The 020 design allowed historical registration only through an explicit
+  owner-approved mapping and forbade inferring the uploader from the message author
+
+**Decision:**
+- Owner-approved mapping is migration 024 (data only). It registers every canonical
+  `[IMAGE:…/shop-message-images/{shop}/{uuid}{ext}]` marker: upload ID is the key's
+  UUID (the pre-020 key shape already equals the worker's `{shop}/{id}{ext}` rule),
+  `state='ready'`, and one reference per (message, image)
+- `uploader_id='legacy:unattributed'`: it gates only discard of an unreferenced
+  image, and every backfilled image starts referenced, so no capability is lost
+  and no ownership is guessed
+- Refuse, never repair: any non-canonical mention, cross-Shop path, conflicting
+  identity, or UUID appearing outside a canonical marker aborts the whole migration
+  so no message can keep showing a blob the worker deletes
+- Reverse removes only `legacy:unattributed` rows and refuses once any of their
+  cleanup has started
+
+**Alternatives considered:**
+- Uploader = message author: rejected by the 020 design rule; no practical gain
+- Skip unsafe images instead of refusing: silent partial adoption hides the problem
+  from the owner; refusal matches 020–023
+- Leave historical images unregistered: blobs accumulate until Shop deletion
+
+**Consequences:**
+- After 024, deleting an old message really deletes its blob; environments sharing a
+  storage account with production must not test deletions with the worker running
+- Images copied across Shops, or orphan blobs no message references, stay
+  unregistered and are cleaned up only by Shop deletion
+- Details: `docs/migrations/shop_message_legacy_image_registration.md`

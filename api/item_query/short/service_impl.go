@@ -1,6 +1,7 @@
 package short
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"strings"
@@ -31,15 +32,17 @@ func NewService(repo Repository, analytics shared.AnalyticsTracker) *ServiceImpl
 }
 
 // processAnalytics runs in the background, processing analytics events without blocking requests.
+// It uses context.Background() rather than the originating request's context because events are
+// queued asynchronously and processed after the request has already returned to the caller.
 func (s *ServiceImpl) processAnalytics() {
 	for event := range s.analyticsQ {
-		if err := s.analytics.IncrementItemSearchSuccess(event.niin, event.nomenclature); err != nil {
+		if err := s.analytics.IncrementItemSearchSuccess(context.Background(), event.niin, event.nomenclature); err != nil {
 			slog.Warn("Failed to increment analytics for item search", "niin", event.niin, "error", err)
 		}
 	}
 }
 
-func (service *ServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByNiin(ctx context.Context, niin string) (model.NiinLookup, error) {
 	val, err := service.repo.ShortItemSearchNiin(niin)
 	if err != nil {
 		return model.NiinLookup{}, err
@@ -51,7 +54,7 @@ func (service *ServiceImpl) FindShortByNiin(niin string) (model.NiinLookup, erro
 	return val, nil
 }
 
-func (service *ServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByPart(ctx context.Context, part string) ([]model.NiinLookup, error) {
 	results, err := service.repo.ShortItemSearchPart(part)
 	if err != nil {
 		return []model.NiinLookup{}, err
@@ -82,7 +85,7 @@ func (service *ServiceImpl) FindShortByPart(part string) ([]model.NiinLookup, er
 // Only when the primary search finds nothing does it fall back to querying
 // nsn.cancelled_niin for the given NIIN, then re-queries niin_lookup for
 // each unique canonical NIIN found there.
-func (service *ServiceImpl) FindShortByNiinCancelled(niin string) ([]model.NiinLookup, error) {
+func (service *ServiceImpl) FindShortByNiinCancelled(ctx context.Context, niin string) ([]model.NiinLookup, error) {
 	// Step 1: Primary niin_lookup search — identical to FindShortByNiin.
 	val, err := service.repo.ShortItemSearchNiin(niin)
 	if err == nil {

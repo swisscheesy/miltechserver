@@ -1,6 +1,7 @@
 package docs_equipment
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestServiceTrimsFamily(t *testing.T) {
 	repo := &captureRepo{}
 	svc := NewService(repo, nil)
 
-	_, err := svc.GetByFamilyPaginated("  aircraft  ", 1)
+	_, err := svc.GetByFamilyPaginated(context.Background(), "  aircraft  ", 1)
 	require.NoError(t, err)
 	require.Equal(t, "aircraft", repo.family)
 }
@@ -45,7 +46,7 @@ func TestServiceTrimsSearch(t *testing.T) {
 	repo := &captureRepo{}
 	svc := NewService(repo, nil)
 
-	_, err := svc.SearchPaginated("  AH-64  ", 2)
+	_, err := svc.SearchPaginated(context.Background(), "  AH-64  ", 2)
 	require.NoError(t, err)
 	require.Equal(t, strings.TrimSpace("  AH-64  "), repo.query)
 	require.Equal(t, 2, repo.page)
@@ -55,7 +56,7 @@ func TestServiceDelegatesGetAll(t *testing.T) {
 	repo := &captureRepo{}
 	svc := NewService(repo, nil)
 
-	_, err := svc.GetAllPaginated(3)
+	_, err := svc.GetAllPaginated(context.Background(), 3)
 	require.NoError(t, err)
 	require.Equal(t, 3, repo.page)
 }

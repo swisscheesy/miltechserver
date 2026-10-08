@@ -1,6 +1,7 @@
 package changes
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"miltechserver/.gen/miltech_ng/public/model"
@@ -19,7 +20,7 @@ func NewRepository(db *sql.DB) *RepositoryImpl {
 	return &RepositoryImpl{db: db}
 }
 
-func (repo *RepositoryImpl) GetNotificationChanges(user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error) {
+func (repo *RepositoryImpl) GetNotificationChanges(ctx context.Context, user *bootstrap.User, notificationID string) ([]response.NotificationChangeWithUsername, error) {
 	rawSQL := `
 		SELECT
 			c.id,
@@ -31,19 +32,19 @@ func (repo *RepositoryImpl) GetNotificationChanges(user *bootstrap.User, notific
 			c.changed_at,
 			c.change_type,
 			c.field_changes,
-			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			COALESCE(c.notification_title, n.title, 'Deleted Notification') as notification_title,
 			c.notification_type,
-			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			COALESCE(c.vehicle_admin, v.admin) as vehicle_admin,
 			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
 		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.notification_id = $1
-		ORDER BY c.changed_at DESC
+		ORDER BY c.changed_at DESC, c.id ASC
 	`
 
-	rows, err := repo.db.Query(rawSQL, notificationID)
+	rows, err := repo.db.QueryContext(ctx, rawSQL, notificationID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notification changes: %w", err)
 	}
@@ -88,7 +89,7 @@ func (repo *RepositoryImpl) GetNotificationChanges(user *bootstrap.User, notific
 	return changes, nil
 }
 
-func (repo *RepositoryImpl) GetNotificationChangesByShop(user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
+func (repo *RepositoryImpl) GetNotificationChangesByShop(ctx context.Context, user *bootstrap.User, shopID string, limit int) ([]response.NotificationChangeWithUsername, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -107,20 +108,20 @@ func (repo *RepositoryImpl) GetNotificationChangesByShop(user *bootstrap.User, s
 			c.changed_at,
 			c.change_type,
 			c.field_changes,
-			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			COALESCE(c.notification_title, n.title, 'Deleted Notification') as notification_title,
 			c.notification_type,
-			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			COALESCE(c.vehicle_admin, v.admin) as vehicle_admin,
 			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
 		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.shop_id = $1
-		ORDER BY c.changed_at DESC
+		ORDER BY c.changed_at DESC, c.id ASC
 		LIMIT $2
 	`
 
-	rows, err := repo.db.Query(rawSQL, shopID, limit)
+	rows, err := repo.db.QueryContext(ctx, rawSQL, shopID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get shop notification changes: %w", err)
 	}
@@ -165,7 +166,7 @@ func (repo *RepositoryImpl) GetNotificationChangesByShop(user *bootstrap.User, s
 	return changes, nil
 }
 
-func (repo *RepositoryImpl) GetNotificationChangesByVehicle(user *bootstrap.User, vehicleID string) ([]response.NotificationChangeWithUsername, error) {
+func (repo *RepositoryImpl) GetNotificationChangesByVehicle(ctx context.Context, user *bootstrap.User, vehicleID string) ([]response.NotificationChangeWithUsername, error) {
 	rawSQL := `
 		SELECT
 			c.id,
@@ -177,19 +178,19 @@ func (repo *RepositoryImpl) GetNotificationChangesByVehicle(user *bootstrap.User
 			c.changed_at,
 			c.change_type,
 			c.field_changes,
-			COALESCE(n.title, c.notification_title, 'Deleted Notification') as notification_title,
+			COALESCE(c.notification_title, n.title, 'Deleted Notification') as notification_title,
 			c.notification_type,
-			COALESCE(v.admin, c.vehicle_admin) as vehicle_admin,
+			COALESCE(c.vehicle_admin, v.admin) as vehicle_admin,
 			CASE WHEN c.notification_id IS NULL OR c.vehicle_id IS NULL THEN true ELSE false END as is_deleted
 		FROM shop_vehicle_notification_changes c
 		LEFT JOIN users u ON c.changed_by = u.uid
 		LEFT JOIN shop_vehicle_notifications n ON c.notification_id = n.id
 		LEFT JOIN shop_vehicle v ON c.vehicle_id = v.id
 		WHERE c.vehicle_id = $1
-		ORDER BY c.changed_at DESC
+		ORDER BY c.changed_at DESC, c.id ASC
 	`
 
-	rows, err := repo.db.Query(rawSQL, vehicleID)
+	rows, err := repo.db.QueryContext(ctx, rawSQL, vehicleID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get vehicle notification changes: %w", err)
 	}
@@ -234,13 +235,13 @@ func (repo *RepositoryImpl) GetNotificationChangesByVehicle(user *bootstrap.User
 	return changes, nil
 }
 
-func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
+func (repo *RepositoryImpl) GetVehicleNotificationByID(ctx context.Context, user *bootstrap.User, notificationID string) (*model.ShopVehicleNotifications, error) {
 	stmt := SELECT(ShopVehicleNotifications.AllColumns).
 		FROM(ShopVehicleNotifications).
 		WHERE(ShopVehicleNotifications.ID.EQ(String(notificationID)))
 
 	var notification model.ShopVehicleNotifications
-	err := stmt.Query(repo.db, &notification)
+	err := stmt.QueryContext(ctx, repo.db, &notification)
 	if err != nil {
 		return nil, fmt.Errorf("vehicle notification not found: %w", err)
 	}
@@ -248,13 +249,13 @@ func (repo *RepositoryImpl) GetVehicleNotificationByID(user *bootstrap.User, not
 	return &notification, nil
 }
 
-func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
+func (repo *RepositoryImpl) GetShopVehicleByID(ctx context.Context, user *bootstrap.User, vehicleID string) (*model.ShopVehicle, error) {
 	stmt := SELECT(ShopVehicle.AllColumns).
 		FROM(ShopVehicle).
 		WHERE(ShopVehicle.ID.EQ(String(vehicleID)))
 
 	var vehicle model.ShopVehicle
-	err := stmt.Query(repo.db, &vehicle)
+	err := stmt.QueryContext(ctx, repo.db, &vehicle)
 	if err != nil {
 		return nil, fmt.Errorf("shop vehicle not found: %w", err)
 	}
@@ -262,7 +263,7 @@ func (repo *RepositoryImpl) GetShopVehicleByID(user *bootstrap.User, vehicleID s
 	return &vehicle, nil
 }
 
-func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error) {
+func (repo *RepositoryImpl) IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error) {
 	stmt := SELECT(COUNT(ShopMembers.ID).AS("count")).
 		FROM(ShopMembers).
 		WHERE(
@@ -273,7 +274,7 @@ func (repo *RepositoryImpl) IsUserMemberOfShop(user *bootstrap.User, shopID stri
 	var result struct {
 		Count int64 `sql:"primary_key"`
 	}
-	err := stmt.Query(repo.db, &result)
+	err := stmt.QueryContext(ctx, repo.db, &result)
 	if err != nil {
 		return false, fmt.Errorf("failed to check membership: %w", err)
 	}

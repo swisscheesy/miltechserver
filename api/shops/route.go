@@ -1,8 +1,10 @@
 package shops
 
 import (
+	"context"
 	"database/sql"
 	"miltechserver/api/shops/aggregates"
+	"miltechserver/api/shops/capabilities"
 	"miltechserver/api/shops/core"
 	"miltechserver/api/shops/lists"
 	listitems "miltechserver/api/shops/lists/items"
@@ -28,6 +30,18 @@ type Dependencies struct {
 }
 
 func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
+	router = router.Group("", shared.ContractMiddleware)
+	var atomicNotificationSaveEnabled, messageSyncEnabled bool
+	if deps.Env != nil {
+		atomicNotificationSaveEnabled = deps.Env.ShopsAtomicNotificationSaveEnabled
+		messageSyncEnabled = deps.Env.ShopsMessageSyncEnabled
+	}
+	atomicReady := func(ctx context.Context) bool { return capabilities.AtomicReady(ctx, deps.DB) }
+	capabilities.RegisterRoutes(router, capabilities.Flags{
+		AtomicNotificationSave:  atomicNotificationSaveEnabled,
+		AtomicNotificationReady: atomicReady,
+		MessageSyncReady:        messages.SyncReadiness(deps.DB, messageSyncEnabled),
+	})
 	authorization := shared.NewShopAuthorization(deps.DB)
 
 	aggregatesRepository := aggregates.NewRepository(deps.DB)
@@ -50,7 +64,7 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	inviteService := invites.NewService(inviteRepository, authorization)
 	listsService := lists.NewService(listRepository, settingsRepository, authorization)
 	listItemsService := listitems.NewService(listItemsRepository, listRepository, settingsRepository, authorization)
-	messagesService := messages.NewService(messagesRepository, authorization)
+	messagesService := messages.NewService(messagesRepository, authorization).WithBlobStore(messages.NewAzureBlobStore(deps.BlobClient, messageStorage(deps.Env))).WithMessageSync(messageSyncEnabled)
 	vehiclesService := vehicles.NewService(vehiclesRepository, authorization)
 	notificationsService := notifications.NewService(notificationsRepository, authorization)
 	notificationItemsService := notificationitems.NewService(notificationItemsRepository)
@@ -63,9 +77,28 @@ func RegisterRoutes(deps Dependencies, router *gin.RouterGroup) {
 	invites.RegisterRoutes(router, inviteService)
 	messages.RegisterRoutes(router, messagesService)
 	vehicles.RegisterRoutes(router, vehiclesService)
-	notifications.RegisterRoutes(router, notificationsService)
+	notifications.RegisterRoutes(router, notificationsService, atomicReady)
 	notificationitems.RegisterRoutes(router, notificationItemsService)
 	notificationchanges.RegisterRoutes(router, notificationChangesService)
 	lists.RegisterRoutes(router, listsService)
 	listitems.RegisterRoutes(router, listItemsService)
+}
+
+func messageStorage(env *bootstrap.Env) messages.AssetStorage {
+	storage := messages.AssetStorage{Container: "shop-message-images"}
+	if env != nil {
+		storage.Account = env.BlobAccountName
+	}
+	return storage
+}
+
+// Feature lifecycle construction stays outside bootstrap to avoid a dependency cycle.
+func NewCleanupWorker(deps Dependencies) (*messages.CleanupWorker, error) {
+	cfg := messages.DefaultCleanupConfig()
+	storage := messageStorage(deps.Env)
+	repo, err := messages.NewCleanupRepository(deps.DB, storage, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return messages.NewCleanupWorker(repo, messages.NewAzureBlobStore(deps.BlobClient, storage), cfg)
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"miltechserver/api/auth"
+	"miltechserver/api/response"
 	"miltechserver/api/user_pmcs/persistence"
 	"miltechserver/bootstrap"
 )
@@ -41,18 +42,18 @@ func (handler *Handler) upsertUser(c *gin.Context) {
 	userDto := auth.UserDto{}
 
 	if err := c.ShouldBindJSON(&userDto); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request body"})
+		response.Error(c, 400, "invalid request body")
 		slog.Info("Invalid request body", "error", err)
 		return
 	}
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	if err := handler.service.UpsertUser(user, userDto); err != nil {
+	if err := handler.service.UpsertUser(c.Request.Context(), user, userDto); err != nil {
 		c.Error(err)
 		return
 	}
@@ -65,7 +66,7 @@ func (handler *Handler) deleteUser(c *gin.Context) {
 	currentUser, ok := value.(*bootstrap.User)
 	if !exists || !ok || currentUser == nil ||
 		strings.TrimSpace(currentUser.UserID) == "" {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -75,7 +76,7 @@ func (handler *Handler) deleteUser(c *gin.Context) {
 		currentUser.UserID,
 	); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			c.JSON(404, gin.H{"message": "user not found"})
+			response.Error(c, 404, "user not found")
 			slog.Info("User not found", "uid", currentUser.UserID)
 			return
 		}
@@ -83,23 +84,23 @@ func (handler *Handler) deleteUser(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "user deleted successfully"})
+	response.OK(c, gin.H{"message": "user deleted successfully"})
 	slog.Info("User deleted successfully", "uid", currentUser.UserID)
 }
 
 func (handler *Handler) updateUserDisplayName(c *gin.Context) {
 	var displayNameRequest DisplayNameChangeRequest
 	if err := c.ShouldBindJSON(&displayNameRequest); err != nil {
-		c.JSON(404, gin.H{"message": "invalid request"})
+		response.Error(c, 404, "invalid request")
 		slog.Info("Invalid request body", "error", err)
 		return
 	}
 
-	if err := handler.service.UpdateUserDisplayName(displayNameRequest.UID, displayNameRequest.DisplayName); err != nil {
+	if err := handler.service.UpdateUserDisplayName(c.Request.Context(), displayNameRequest.UID, displayNameRequest.DisplayName); err != nil {
 		if errors.Is(err, ErrUserNotFound) {
 			slog.Info("User not found", "uid", displayNameRequest.UID)
 		}
-		c.JSON(404, gin.H{"message": "failed to update display name"})
+		response.Error(c, 404, "failed to update display name")
 		slog.Info("Failed to update display name", "uid", displayNameRequest.UID, "error", err)
 		return
 	}

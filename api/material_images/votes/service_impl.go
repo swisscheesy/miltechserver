@@ -1,6 +1,7 @@
 package votes
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -22,7 +23,7 @@ func NewService(repo Repository, imagesRepo images.Repository) Service {
 	}
 }
 
-func (s *ServiceImpl) Vote(user *bootstrap.User, imageID string, voteType string) error {
+func (s *ServiceImpl) Vote(ctx context.Context, user *bootstrap.User, imageID string, voteType string) error {
 	if voteType != "upvote" && voteType != "downvote" {
 		return fmt.Errorf("invalid vote type: %s", voteType)
 	}
@@ -60,7 +61,7 @@ func (s *ServiceImpl) Vote(user *bootstrap.User, imageID string, voteType string
 	return nil
 }
 
-func (s *ServiceImpl) RemoveVote(user *bootstrap.User, imageID string) error {
+func (s *ServiceImpl) RemoveVote(ctx context.Context, user *bootstrap.User, imageID string) error {
 	err := s.repo.Delete(imageID, user.UserID)
 	if err != nil {
 		return fmt.Errorf("failed to remove vote: %w", err)

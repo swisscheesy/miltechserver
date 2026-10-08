@@ -1,10 +1,13 @@
 package eic
 
-import "miltechserver/api/response"
+import (
+	"context"
+	"miltechserver/api/response"
+)
 
 type Service interface {
-	LookupByNIIN(niin string) ([]response.EICConsolidatedItem, error)
-	LookupByLIN(lin string) ([]response.EICConsolidatedItem, error)
-	LookupByFSCPaginated(fsc string, page int) (response.EICPageResponse, error)
-	LookupAllPaginated(page int, search string) (response.EICPageResponse, error)
+	LookupByNIIN(ctx context.Context, niin string) ([]response.EICConsolidatedItem, error)
+	LookupByLIN(ctx context.Context, lin string) ([]response.EICConsolidatedItem, error)
+	LookupByFSCPaginated(ctx context.Context, fsc string, page int) (response.EICPageResponse, error)
+	LookupAllPaginated(ctx context.Context, page int, search string) (response.EICPageResponse, error)
 }

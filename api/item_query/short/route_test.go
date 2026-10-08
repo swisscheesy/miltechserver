@@ -1,6 +1,7 @@
 package short
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -23,15 +24,15 @@ type serviceStub struct {
 	cancelledErr  error
 }
 
-func (s *serviceStub) FindShortByNiin(string) (model.NiinLookup, error) {
+func (s *serviceStub) FindShortByNiin(context.Context, string) (model.NiinLookup, error) {
 	return s.niinResp, s.niinErr
 }
 
-func (s *serviceStub) FindShortByPart(string) ([]model.NiinLookup, error) {
+func (s *serviceStub) FindShortByPart(context.Context, string) ([]model.NiinLookup, error) {
 	return s.partResp, s.partErr
 }
 
-func (s *serviceStub) FindShortByNiinCancelled(string) ([]model.NiinLookup, error) {
+func (s *serviceStub) FindShortByNiinCancelled(context.Context, string) ([]model.NiinLookup, error) {
 	return s.cancelledResp, s.cancelledErr
 }
 

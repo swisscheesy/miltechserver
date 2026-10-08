@@ -15,7 +15,7 @@ func NewService(repo Repository) Service {
 	return &ServiceImpl{repo: repo}
 }
 
-func (service *ServiceImpl) UpsertUser(user *bootstrap.User, userDto auth.UserDto) error {
+func (service *ServiceImpl) UpsertUser(ctx context.Context, user *bootstrap.User, userDto auth.UserDto) error {
 	return service.repo.UpsertUser(user, userDto)
 }
 
@@ -26,6 +26,6 @@ func (service *ServiceImpl) DeleteUser(
 	return service.repo.DeleteUser(ctx, uid)
 }
 
-func (service *ServiceImpl) UpdateUserDisplayName(uid string, displayName string) error {
+func (service *ServiceImpl) UpdateUserDisplayName(ctx context.Context, uid string, displayName string) error {
 	return service.repo.UpdateUserDisplayName(uid, displayName)
 }

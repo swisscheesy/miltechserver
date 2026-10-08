@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
+
+	"miltechserver/api/response"
 )
 
 // ipLimiter holds a per-IP token-bucket rate limiter.
@@ -37,8 +39,13 @@ func RateLimiter() gin.HandlerFunc {
 
 		if !limiter.Allow() {
 			slog.Warn("Rate limit exceeded", "ip", ip, "path", c.FullPath())
-			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "Too many requests. Please wait before retrying.",
+			// Built as a raw StandardResponse literal (not response.Error()):
+			// response.Error() only calls c.JSON, and this handler needs
+			// AbortWithStatusJSON to stop the middleware chain, matching the
+			// pattern in api/middleware/authentication.go.
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, response.StandardResponse{
+				Status:  http.StatusTooManyRequests,
+				Message: "Too many requests. Please wait before retrying.",
 			})
 			return
 		}

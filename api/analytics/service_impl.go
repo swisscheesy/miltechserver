@@ -1,6 +1,9 @@
 package analytics
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 const (
 	analyticsEventItemSearchSuccess  = "item_search_success"
@@ -12,7 +15,7 @@ type ServiceImpl struct {
 	repo Repository
 }
 
-func (service *ServiceImpl) IncrementItemSearchSuccess(niin string, nomenclature string) error {
+func (service *ServiceImpl) IncrementItemSearchSuccess(ctx context.Context, niin string, nomenclature string) error {
 	normalizedKey := normalizeAnalyticsKey(niin)
 	normalizedLabel := normalizeAnalyticsKey(nomenclature)
 	if normalizedKey == "" {
@@ -21,10 +24,10 @@ func (service *ServiceImpl) IncrementItemSearchSuccess(niin string, nomenclature
 	if normalizedLabel == "" {
 		normalizedLabel = normalizedKey
 	}
-	return service.IncrementCounter(analyticsEventItemSearchSuccess, normalizedKey, normalizedLabel)
+	return service.IncrementCounter(ctx, analyticsEventItemSearchSuccess, normalizedKey, normalizedLabel)
 }
 
-func (service *ServiceImpl) IncrementPMCSManualDownload(entityKey string, entityLabel string) error {
+func (service *ServiceImpl) IncrementPMCSManualDownload(ctx context.Context, entityKey string, entityLabel string) error {
 	normalizedKey := normalizeAnalyticsKey(sanitizePMCSKey(entityKey))
 	normalizedLabel := normalizeAnalyticsKey(entityLabel)
 	if normalizedKey == "" {
@@ -33,10 +36,10 @@ func (service *ServiceImpl) IncrementPMCSManualDownload(entityKey string, entity
 	if normalizedLabel == "" {
 		normalizedLabel = normalizedKey
 	}
-	return service.IncrementCounter(analyticsEventPMCSManualDownload, normalizedKey, normalizedLabel)
+	return service.IncrementCounter(ctx, analyticsEventPMCSManualDownload, normalizedKey, normalizedLabel)
 }
 
-func (service *ServiceImpl) IncrementCounter(eventType string, entityKey string, entityLabel string) error {
+func (service *ServiceImpl) IncrementCounter(ctx context.Context, eventType string, entityKey string, entityLabel string) error {
 	if strings.TrimSpace(eventType) == "" {
 		return nil
 	}
@@ -66,7 +69,7 @@ func formatPSMagLabel(filename string) string {
 // filename. The raw filename is uppercased and used as the entity key; the
 // entity label is derived by stripping the "PS_Magazine_" prefix and file
 // extension, replacing underscores with spaces, and uppercasing the result.
-func (service *ServiceImpl) IncrementPSMagDownload(filename string) error {
+func (service *ServiceImpl) IncrementPSMagDownload(ctx context.Context, filename string) error {
 	normalizedKey := normalizeAnalyticsKey(filename)
 	if normalizedKey == "" {
 		return nil
@@ -75,7 +78,7 @@ func (service *ServiceImpl) IncrementPSMagDownload(filename string) error {
 	if label == "" {
 		label = normalizedKey
 	}
-	return service.IncrementCounter(analyticsEventPSMagDownload, normalizedKey, label)
+	return service.IncrementCounter(ctx, analyticsEventPSMagDownload, normalizedKey, label)
 }
 
 func sanitizePMCSKey(value string) string {

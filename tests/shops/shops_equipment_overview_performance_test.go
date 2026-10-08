@@ -73,7 +73,8 @@ func TestShopEquipmentOverviewPerformance(t *testing.T) {
 	}
 	require.NoError(t, planRows.Err())
 
-	router := newTestRouter(t)
+	router, database, counter := newPerformanceRouter(t)
+	finish := measurePerformanceResources(t, database, counter)
 	const measuredRequests = 100
 	durations := make([]time.Duration, 0, measuredRequests)
 	responseSize := 0
@@ -113,7 +114,8 @@ func TestShopEquipmentOverviewPerformance(t *testing.T) {
 	}
 	sort.Slice(compressedDurations, func(i, j int) bool { return compressedDurations[i] < compressedDurations[j] })
 	compressedP95 := compressedDurations[94]
-	t.Logf("warm-cache p50=%s p95=%s compressed_p95=%s uncompressed_bytes=%d compressed_bytes=%d", p50, p95, compressedP95, responseSize, compressedSize)
+	t.Logf("warm-cache p50=%s p95=%s p99=%s compressed_p50=%s compressed_p95=%s compressed_p99=%s uncompressed_bytes=%d compressed_bytes=%d", p50, p95, durations[98], compressedDurations[49], compressedP95, compressedDurations[98], responseSize, compressedSize)
+	finish("overview_100_shops_25000_equipment_202_requests")
 	require.Less(t, p95, time.Second, fmt.Sprintf("p95 target missed: %s", p95))
 	require.Less(t, compressedP95, time.Second, fmt.Sprintf("compressed p95 target missed: %s", compressedP95))
 }

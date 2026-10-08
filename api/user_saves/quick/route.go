@@ -26,28 +26,24 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 func (handler *Handler) getQuickSaveItemsByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	result, err := handler.service.GetByUser(user)
+	result, err := handler.service.GetByUser(c.Request.Context(), user)
 	if err != nil {
 		c.JSON(404, response.EmptyResponseMessage())
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }
 
 func (handler *Handler) upsertQuickSaveItemByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
@@ -55,11 +51,11 @@ func (handler *Handler) upsertQuickSaveItemByUser(c *gin.Context) {
 	var quick model.UserItemsQuick
 	if err := c.BindJSON(&quick); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Upsert(user, quick)
+	err = handler.service.Upsert(c.Request.Context(), user, quick)
 	if err != nil {
 		c.Error(err)
 		return
@@ -71,18 +67,18 @@ func (handler *Handler) upsertQuickSaveItemByUser(c *gin.Context) {
 func (handler *Handler) deleteQuickSaveItemByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var quick model.UserItemsQuick
 	if err := c.BindJSON(&quick); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.Delete(user, quick)
+	err = handler.service.Delete(c.Request.Context(), user, quick)
 	if err != nil {
 		c.Error(err)
 		return
@@ -94,12 +90,12 @@ func (handler *Handler) deleteQuickSaveItemByUser(c *gin.Context) {
 func (handler *Handler) deleteAllQuickSaveItemsByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
-	err = handler.service.DeleteAll(user)
+	err = handler.service.DeleteAll(c.Request.Context(), user)
 	if err != nil {
 		c.Error(err)
 		return
@@ -111,18 +107,18 @@ func (handler *Handler) deleteAllQuickSaveItemsByUser(c *gin.Context) {
 func (handler *Handler) upsertQuickSaveItemListByUser(c *gin.Context) {
 	user, err := shared.GetUserFromContext(c)
 	if err != nil {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var quickItems []model.UserItemsQuick
 	if err := c.BindJSON(&quickItems); err != nil {
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
-	err = handler.service.UpsertBatch(user, quickItems)
+	err = handler.service.UpsertBatch(c.Request.Context(), user, quickItems)
 	if err != nil {
 		c.Error(err)
 		return

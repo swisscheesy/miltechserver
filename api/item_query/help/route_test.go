@@ -1,6 +1,7 @@
 package help
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -18,7 +19,7 @@ type serviceStub struct {
 	err  error
 }
 
-func (s *serviceStub) FindByCode(string) (model.Help, error) {
+func (s *serviceStub) FindByCode(context.Context, string) (model.Help, error) {
 	return s.resp, s.err
 }
 

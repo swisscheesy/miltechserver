@@ -24,11 +24,11 @@ func registerHandlers(router *gin.RouterGroup, service Service) {
 
 func (handler *Handler) findByCode(c *gin.Context) {
 	code := c.Query("code")
-	result, err := handler.service.FindByCode(code)
+	result, err := handler.service.FindByCode(c.Request.Context(), code)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidCode):
-			c.JSON(http.StatusBadRequest, gin.H{"message": "code is required"})
+			response.Error(c, http.StatusBadRequest, "code is required")
 		case errors.Is(err, ErrHelpNotFound):
 			c.JSON(http.StatusNotFound, response.EmptyResponseMessage())
 		default:
@@ -37,9 +37,5 @@ func (handler *Handler) findByCode(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, response.StandardResponse{
-		Status:  http.StatusOK,
-		Message: "",
-		Data:    result,
-	})
+	response.OK(c, result)
 }

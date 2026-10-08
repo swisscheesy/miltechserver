@@ -13,6 +13,9 @@ func NewDebugRouter(env *bootstrap.Env, timeout time.Duration, db *sql.DB, group
 
 	group.GET("/ping", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "user")
+		// Kept as a raw gin.H{} response: a flat debug body, not the
+		// response.OK()/response.Error() envelope shape; wrapping it would
+		// nest it under "data", changing this diagnostic route's body.
 		ctx.JSON(200, gin.H{
 			"message": "pong",
 		})

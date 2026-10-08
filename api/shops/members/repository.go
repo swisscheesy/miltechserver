@@ -1,18 +1,17 @@
 package members
 
 import (
+	"context"
 	"miltechserver/api/response"
 	"miltechserver/bootstrap"
 )
 
 type Repository interface {
-	IsUserShopAdmin(user *bootstrap.User, shopID string) (bool, error)
-	IsUserMemberOfShop(user *bootstrap.User, shopID string) (bool, error)
-	AddMemberToShop(user *bootstrap.User, shopID string, role string) error
-	RemoveMemberFromShop(user *bootstrap.User, shopID string, targetUserID string) error
-	UpdateMemberRole(user *bootstrap.User, shopID string, targetUserID string, role string) error
-	GetShopMembers(user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error)
-	GetShopMemberCount(user *bootstrap.User, shopID string) (int64, error)
-	DeleteShop(user *bootstrap.User, shopID string) error
-	DeleteShopMessageBlobs(shopID string) error
+	IsUserShopAdmin(ctx context.Context, user *bootstrap.User, shopID string) (bool, error)
+	IsUserMemberOfShop(ctx context.Context, user *bootstrap.User, shopID string) (bool, error)
+	JoinViaInvite(ctx context.Context, user *bootstrap.User, code string) error
+	LeaveShop(ctx context.Context, user *bootstrap.User, shopID string) error
+	RemoveMemberFromShop(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string) error
+	UpdateMemberRole(ctx context.Context, user *bootstrap.User, shopID string, targetUserID string, role string) error
+	GetShopMembers(ctx context.Context, user *bootstrap.User, shopID string) ([]response.ShopMemberWithUsername, error)
 }

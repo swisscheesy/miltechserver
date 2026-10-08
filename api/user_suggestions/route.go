@@ -54,12 +54,14 @@ func (h *Handler) listSuggestions(c *gin.Context) {
 		}
 	}
 
-	suggestions, err := h.service.GetAllSuggestions(currentUser)
+	suggestions, err := h.service.GetAllSuggestions(c.Request.Context(), currentUser)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Suggestions retrieved",
@@ -75,11 +77,11 @@ func (h *Handler) createSuggestion(c *gin.Context) {
 
 	var req CreateSuggestionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		response.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	suggestion, err := h.service.CreateSuggestion(currentUser, req.Title, req.Description)
+	suggestion, err := h.service.CreateSuggestion(c.Request.Context(), currentUser, req.Title, req.Description)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -88,6 +90,8 @@ func (h *Handler) createSuggestion(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusCreated, response.StandardResponse{
 		Status:  http.StatusCreated,
 		Message: "Suggestion created",
@@ -105,11 +109,11 @@ func (h *Handler) updateSuggestion(c *gin.Context) {
 
 	var req UpdateSuggestionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		response.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	suggestion, err := h.service.UpdateSuggestion(currentUser, suggestionID, req.Title, req.Description)
+	suggestion, err := h.service.UpdateSuggestion(c.Request.Context(), currentUser, suggestionID, req.Title, req.Description)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -118,6 +122,8 @@ func (h *Handler) updateSuggestion(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Suggestion updated",
@@ -133,7 +139,7 @@ func (h *Handler) deleteSuggestion(c *gin.Context) {
 
 	suggestionID := c.Param("id")
 
-	err := h.service.DeleteSuggestion(currentUser, suggestionID)
+	err := h.service.DeleteSuggestion(c.Request.Context(), currentUser, suggestionID)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -142,6 +148,8 @@ func (h *Handler) deleteSuggestion(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Suggestion deleted",
@@ -158,11 +166,11 @@ func (h *Handler) vote(c *gin.Context) {
 
 	var req VoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid request body"})
+		response.Error(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	err := h.service.Vote(currentUser, suggestionID, req.Direction)
+	err := h.service.Vote(c.Request.Context(), currentUser, suggestionID, req.Direction)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -171,6 +179,8 @@ func (h *Handler) vote(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Vote recorded",
@@ -185,7 +195,7 @@ func (h *Handler) removeVote(c *gin.Context) {
 
 	suggestionID := c.Param("id")
 
-	err := h.service.RemoveVote(currentUser, suggestionID)
+	err := h.service.RemoveVote(c.Request.Context(), currentUser, suggestionID)
 	if err != nil {
 		if respondError(c, err) {
 			return
@@ -194,6 +204,8 @@ func (h *Handler) removeVote(c *gin.Context) {
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Vote removed",
@@ -203,13 +215,13 @@ func (h *Handler) removeVote(c *gin.Context) {
 func getUser(c *gin.Context) (*bootstrap.User, bool) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
 	currentUser, ok := user.(*bootstrap.User)
 	if !ok || currentUser == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return nil, false
 	}
 
@@ -235,7 +247,7 @@ var errorMappings = []errorMapping{
 func respondError(c *gin.Context, err error) bool {
 	for _, em := range errorMappings {
 		if errors.Is(err, em.target) {
-			c.JSON(em.status, gin.H{"message": em.message})
+			response.Error(c, em.status, em.message)
 			return true
 		}
 	}

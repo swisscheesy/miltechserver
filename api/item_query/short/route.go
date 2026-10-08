@@ -32,7 +32,7 @@ func (handler *Handler) findShort(c *gin.Context) {
 		// When cancelled=true, use the two-step fallback path. Any other value
 		// (absent, "false", etc.) falls through to the original behaviour.
 		if c.Query("cancelled") == "true" {
-			results, err := handler.service.FindShortByNiinCancelled(value)
+			results, err := handler.service.FindShortByNiinCancelled(c.Request.Context(), value)
 			if err != nil {
 				if errors.Is(err, shared.ErrNoItemsFound) {
 					c.JSON(http.StatusNotFound, response.EmptyResponseMessage())
@@ -41,16 +41,12 @@ func (handler *Handler) findShort(c *gin.Context) {
 				c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 				return
 			}
-			c.JSON(http.StatusOK, response.StandardResponse{
-				Status:  http.StatusOK,
-				Message: "",
-				Data:    results,
-			})
+			response.OK(c, results)
 			return
 		}
 
 		// Original path — unchanged.
-		result, err := handler.service.FindShortByNiin(value)
+		result, err := handler.service.FindShortByNiin(c.Request.Context(), value)
 		if err != nil {
 			if errors.Is(err, shared.ErrNoItemsFound) {
 				c.JSON(http.StatusNotFound, response.EmptyResponseMessage())
@@ -59,14 +55,10 @@ func (handler *Handler) findShort(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 			return
 		}
-		c.JSON(http.StatusOK, response.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "",
-			Data:    result,
-		})
+		response.OK(c, result)
 
 	case "part":
-		result, err := handler.service.FindShortByPart(value)
+		result, err := handler.service.FindShortByPart(c.Request.Context(), value)
 		if err != nil {
 			if errors.Is(err, shared.ErrNoItemsFound) {
 				c.JSON(http.StatusNotFound, response.NoItemFoundResponseMessage())
@@ -75,10 +67,6 @@ func (handler *Handler) findShort(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, response.InternalErrorResponseMessage())
 			return
 		}
-		c.JSON(http.StatusOK, response.StandardResponse{
-			Status:  http.StatusOK,
-			Message: "",
-			Data:    result,
-		})
+		response.OK(c, result)
 	}
 }

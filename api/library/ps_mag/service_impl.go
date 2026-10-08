@@ -214,7 +214,7 @@ func (s *ServiceImpl) ListIssues(ctx context.Context, page int, order string, ye
 
 // SearchSummaries returns a paginated list of PS Magazine issues whose summaries
 // contain query. Only the lines matching query are returned per file.
-func (s *ServiceImpl) SearchSummaries(query string, page int) (*PSMagSearchResponse, error) {
+func (s *ServiceImpl) SearchSummaries(ctx context.Context, query string, page int) (*PSMagSearchResponse, error) {
 	if len(strings.TrimSpace(query)) < 3 {
 		return nil, ErrQueryTooShort
 	}
@@ -301,7 +301,7 @@ func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) 
 		"blobPath", blobPath,
 		"expiresAt", sasResult.ExpiresAt.Format(time.RFC3339))
 
-	if trackErr := s.trackPSMagDownload(blobPath); trackErr != nil {
+	if trackErr := s.trackPSMagDownload(ctx, blobPath); trackErr != nil {
 		slog.Warn("Failed to track PS Mag download analytics",
 			"blobPath", blobPath,
 			"error", trackErr)
@@ -316,7 +316,7 @@ func (s *ServiceImpl) GenerateDownloadURL(ctx context.Context, blobPath string) 
 
 // trackPSMagDownload extracts the filename from blobPath and records a download
 // event via the analytics service. It is a no-op when analytics is nil.
-func (s *ServiceImpl) trackPSMagDownload(blobPath string) error {
+func (s *ServiceImpl) trackPSMagDownload(ctx context.Context, blobPath string) error {
 	if s.analytics == nil {
 		return nil
 	}
@@ -325,5 +325,5 @@ func (s *ServiceImpl) trackPSMagDownload(blobPath string) error {
 	if strings.TrimSpace(filename) == "" {
 		return nil
 	}
-	return s.analytics.IncrementPSMagDownload(filename)
+	return s.analytics.IncrementPSMagDownload(ctx, filename)
 }

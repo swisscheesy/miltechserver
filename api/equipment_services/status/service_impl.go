@@ -1,6 +1,7 @@
 package status
 
 import (
+	"context"
 	"fmt"
 
 	"miltechserver/api/equipment_services/shared"
@@ -23,16 +24,16 @@ func NewService(repo Repository, authorization *shared.Authorization, usernameRe
 	}
 }
 
-func (service *ServiceImpl) GetOverdue(user *bootstrap.User, shopID string, req request.GetOverdueServicesRequest) (*response.OverdueServicesResponse, error) {
+func (service *ServiceImpl) GetOverdue(ctx context.Context, user *bootstrap.User, shopID string, req request.GetOverdueServicesRequest) (*response.OverdueServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	if err := service.authorization.RequireShopMember(user, shopID); err != nil {
+	if err := service.authorization.RequireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 
-	overdueServices, err := service.repo.GetOverdue(user, shopID, req.EquipmentID, req.Limit)
+	overdueServices, err := service.repo.GetOverdue(ctx, user, shopID, req.EquipmentID, req.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get overdue services: %w", err)
 	}
@@ -40,7 +41,10 @@ func (service *ServiceImpl) GetOverdue(user *bootstrap.User, shopID string, req 
 	usernameCache := shared.NewUsernameCache(service.usernameResolver)
 	responses := make([]response.OverdueServiceResponse, len(overdueServices))
 	for i, svc := range overdueServices {
-		username, _ := usernameCache.GetUsernameByUserID(svc.CreatedBy)
+		username, err := usernameCache.GetUsernameByUserID(ctx, svc.CreatedBy)
+		if err != nil {
+			return nil, fmt.Errorf("resolve equipment service username: %w", err)
+		}
 		responses[i] = response.OverdueServiceResponse{
 			EquipmentServiceResponse: shared.MapServiceToResponse(svc.EquipmentServices, username),
 			DaysOverdue:              svc.DaysCount,
@@ -53,16 +57,20 @@ func (service *ServiceImpl) GetOverdue(user *bootstrap.User, shopID string, req 
 	}, nil
 }
 
-func (service *ServiceImpl) GetDueSoon(user *bootstrap.User, shopID string, req request.GetDueSoonServicesRequest) (*response.DueSoonServicesResponse, error) {
+func (service *ServiceImpl) GetDueSoon(ctx context.Context, user *bootstrap.User, shopID string, req request.GetDueSoonServicesRequest) (*response.DueSoonServicesResponse, error) {
 	if user == nil {
 		return nil, shared.ErrUnauthorizedUser
 	}
 
-	if err := service.authorization.RequireShopMember(user, shopID); err != nil {
+	if req.DaysAhead < 1 || req.DaysAhead > 30 {
+		return nil, shared.ErrInvalidDaysAhead
+	}
+
+	if err := service.authorization.RequireShopMember(ctx, user, shopID); err != nil {
 		return nil, err
 	}
 
-	dueSoonServices, err := service.repo.GetDueSoon(user, shopID, req.DaysAhead, req.EquipmentID, req.Limit)
+	dueSoonServices, err := service.repo.GetDueSoon(ctx, user, shopID, req.DaysAhead, req.EquipmentID, req.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get due soon services: %w", err)
 	}
@@ -70,7 +78,10 @@ func (service *ServiceImpl) GetDueSoon(user *bootstrap.User, shopID string, req 
 	usernameCache := shared.NewUsernameCache(service.usernameResolver)
 	responses := make([]response.DueSoonServiceResponse, len(dueSoonServices))
 	for i, svc := range dueSoonServices {
-		username, _ := usernameCache.GetUsernameByUserID(svc.CreatedBy)
+		username, err := usernameCache.GetUsernameByUserID(ctx, svc.CreatedBy)
+		if err != nil {
+			return nil, fmt.Errorf("resolve equipment service username: %w", err)
+		}
 		responses[i] = response.DueSoonServiceResponse{
 			EquipmentServiceResponse: shared.MapServiceToResponse(svc.EquipmentServices, username),
 			DaysUntilDue:             svc.DaysCount,

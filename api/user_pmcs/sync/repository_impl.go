@@ -87,6 +87,12 @@ func (repository *RepositoryImpl) loadDeltaSnapshot(
 		)
 	}()
 
+	// Intentionally not migrated to db.WithTx (Task 13): this snapshot read
+	// requires RepeatableRead isolation plus ReadOnly, so the multiple
+	// SELECTs below (account version, delta roots, account changes) see a
+	// single consistent view. db.WithTx only supports plain conn.Begin()
+	// with default sql.TxOptions, so adopting it here would silently drop
+	// isolation and read-only guarantees this method depends on.
 	tx, err := repository.store.DB.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelRepeatableRead,
 		ReadOnly:  true,

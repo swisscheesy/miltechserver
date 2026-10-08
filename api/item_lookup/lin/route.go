@@ -17,7 +17,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 			return
 		}
 
-		linData, err := service.LookupByPage(page)
+		linData, err := service.LookupByPage(c.Request.Context(), page)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/lin/by-niin/:niin", func(c *gin.Context) {
 		niin := c.Param("niin")
 
-		linData, err := service.LookupByNIIN(niin)
+		linData, err := service.LookupByNIIN(c.Request.Context(), niin)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -41,7 +41,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/lin/lin/:niin", func(c *gin.Context) {
 		niin := c.Param("niin")
 
-		linData, err := service.LookupByNIIN(niin)
+		linData, err := service.LookupByNIIN(c.Request.Context(), niin)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -53,7 +53,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/niin/by-lin/:lin", func(c *gin.Context) {
 		lin := c.Param("lin")
 
-		niinData, err := service.LookupNIINByLIN(lin)
+		niinData, err := service.LookupNIINByLIN(c.Request.Context(), lin)
 		if err != nil {
 			shared.HandleError(c, err)
 			return
@@ -65,7 +65,7 @@ func RegisterRoutes(router *gin.RouterGroup, service Service) {
 	router.GET("/lookup/lin/niin/:lin", func(c *gin.Context) {
 		lin := c.Param("lin")
 
-		niinData, err := service.LookupNIINByLIN(lin)
+		niinData, err := service.LookupNIINByLIN(c.Request.Context(), lin)
 		if err != nil {
 			shared.HandleError(c, err)
 			return

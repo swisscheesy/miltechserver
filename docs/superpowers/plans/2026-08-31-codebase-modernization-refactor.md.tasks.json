@@ -1,0 +1,150 @@
+{
+  "planPath": "docs/superpowers/plans/2026-08-31-codebase-modernization-refactor.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Delete dead auth_service.go only",
+      "status": "completed",
+      "description": "**Goal:** Remove api/service/auth_service.go, a fully orphaned stub with zero external references.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Fix duplicate ADR-011 numbering",
+      "status": "completed",
+      "description": "**Goal:** Fix duplicate ADR-011 numbering in decisions.md.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Remove dead DSN read in item_lookup main_test.go",
+      "status": "completed",
+      "description": "**Goal:** Remove the dead TestMain() TEST_DATABASE_URL read in tests/item_lookup/main_test.go.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: Add response.OK/Error helpers, alias redundant types",
+      "status": "completed",
+      "blockedBy": [],
+      "description": "**Goal:** Add response.OK/Error helpers, alias redundant types.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Extract shared pagination.ParsePage helper",
+      "status": "completed",
+      "description": "**Goal:** Extract shared pagination.ParsePage helper from the 5 real source domains.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: Adopt pagination helper in 5 domains",
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
+      "description": "**Goal:** Adopt pagination.ParsePage in 4 domains directly; ps_mag gets its own local helper preserving its distinct response body.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 6,
+      "subject": "Task 7: Response consolidation - material_images",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** Response consolidation for material_images.\n\nComplete \u2014 see ledger. Note: getFlags permanently excluded/unwrapped (approved exception)."
+    },
+    {
+      "id": 7,
+      "subject": "Task 8: Response consolidation - pmcs_sbs_progress",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** Response consolidation for pmcs_sbs_progress (2/26 sites fit the envelope; 24 documented exceptions).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 8,
+      "subject": "Task 9: Response consolidation - shops",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** Response consolidation for shops (0/7 sites fit the envelope; all 7 documented, non-empty Message fields).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 9,
+      "subject": "Task 10: Response consolidation - tmde, item_lookup, eic",
+      "status": "completed",
+      "blockedBy": [
+        3,
+        5,
+        6
+      ],
+      "description": "**Goal:** Response consolidation for tmde/item_lookup/eic (eic fully migrated, 1 tmde exception documented).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 10,
+      "subject": "Task 11: Response consolidation - remaining domains sweep",
+      "status": "completed",
+      "blockedBy": [
+        6,
+        7,
+        8,
+        9
+      ],
+      "description": "**Goal:** Response consolidation sweep across remaining 14 domains, including shops (found not pre-covered by Task 9).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 11,
+      "subject": "Task 12: Promote WithWriteTx to shared db package",
+      "status": "completed",
+      "description": "**Goal:** Add shared db.WithTx transaction helper.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 12,
+      "subject": "Task 13: Adopt WithTx in 6 manual-transaction repos",
+      "status": "completed",
+      "blockedBy": [
+        11
+      ],
+      "description": "**Goal:** Adopt db.WithTx in 5/6 repos (user_pmcs/sync documented exception).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 13,
+      "subject": "Task 14: Split shops/aggregates/repository_impl.go",
+      "status": "completed",
+      "description": "**Goal:** Split shops/aggregates/repository_impl.go by concern.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 14,
+      "subject": "Task 15: Split pmcs_sbs_progress/service_impl.go",
+      "status": "completed",
+      "description": "**Goal:** Split pmcs_sbs_progress/service_impl.go into service_impl.go/validation.go/mapping.go.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 15,
+      "subject": "Task 16: Split user_pmcs/community/repository_impl.go",
+      "status": "completed",
+      "description": "**Goal:** Split user_pmcs/community/repository_impl.go into repository_impl.go/repository_voting.go/repository_browse.go.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 16,
+      "subject": "Task 17: Thread context.Context through remaining 47 service files",
+      "status": "completed",
+      "blockedBy": [
+        12
+      ],
+      "description": "**Goal:** Thread context.Context through 41 service_impl.go files.\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 17,
+      "subject": "Task 18: Extract shared testutil package",
+      "status": "completed",
+      "description": "**Goal:** Extract shared tests/testutil package (DSN + fake-auth middleware, 12 domains migrated).\n\nComplete \u2014 see ledger."
+    },
+    {
+      "id": 18,
+      "subject": "Task 19: Remove vestigial shops_route.go indirection",
+      "status": "completed",
+      "description": "**Goal:** Remove vestigial shops_route.go indirection.\n\nComplete \u2014 see ledger."
+    }
+  ],
+  "lastUpdated": "2026-09-02T21:03:26.180038+00:00"
+}

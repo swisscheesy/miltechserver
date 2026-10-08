@@ -5,6 +5,7 @@ import (
 	"miltechserver/.gen/miltech_ng/public/model"
 	"miltechserver/api/request"
 	"miltechserver/api/response"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
 
 	"github.com/gin-gonic/gin"
@@ -22,15 +23,15 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.AddListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -44,12 +45,18 @@ func (handler *Handler) AddListItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItem, err := service.AddListItem(user, item)
+	createdItem, err := service.AddListItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Item added successfully",
@@ -63,29 +70,25 @@ func (handler *Handler) GetListItems(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	listID := c.Param("list_id")
 	if listID == "" {
-		c.JSON(400, gin.H{"message": "list_id is required"})
+		response.Error(c, 400, "list_id is required")
 		return
 	}
 
 	service := handler.service
-	items, err := service.GetListItems(user, listID)
+	items, err := service.GetListItems(c.Request.Context(), user, listID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, response.StandardResponse{
-		Status:  200,
-		Message: "",
-		Data:    items,
-	})
+	response.OK(c, items)
 }
 
 // UpdateListItem updates an existing list item
@@ -94,15 +97,15 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.UpdateListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -116,13 +119,17 @@ func (handler *Handler) UpdateListItem(c *gin.Context) {
 	}
 
 	service := handler.service
-	err := service.UpdateListItem(user, item)
+	err := service.UpdateListItem(c.Request.Context(), user, item)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Item updated successfully"})
+	response.OK(c, gin.H{"message": "Item updated successfully"})
 }
 
 // RemoveListItem removes an item from a list
@@ -131,26 +138,26 @@ func (handler *Handler) RemoveListItem(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.RemoveListItemRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.RemoveListItem(user, req.ItemID)
+	err := service.RemoveListItem(c.Request.Context(), user, req.ItemID)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Item removed successfully"})
+	response.OK(c, gin.H{"message": "Item removed successfully"})
 }
 
 // AddListItemBatch adds multiple items to a list
@@ -159,15 +166,15 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.AddListItemBatchRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		shared.WriteValidationError(c, "invalid request")
 		return
 	}
 
@@ -185,12 +192,18 @@ func (handler *Handler) AddListItemBatch(c *gin.Context) {
 	}
 
 	service := handler.service
-	createdItems, err := service.AddListItemBatch(user, items)
+	createdItems, err := service.AddListItemBatch(c.Request.Context(), user, items)
 	if err != nil {
+		if shared.IsValidationError(err) {
+			shared.WriteValidationError(c, "invalid request")
+			return
+		}
 		c.Error(err)
 		return
 	}
 
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(201, response.StandardResponse{
 		Status:  201,
 		Message: "Items added successfully",
@@ -204,24 +217,27 @@ func (handler *Handler) RemoveListItemBatch(c *gin.Context) {
 	user, _ := ctxUser.(*bootstrap.User)
 
 	if !ok {
-		c.JSON(401, gin.H{"message": "unauthorized"})
+		response.Error(c, 401, "unauthorized")
 		slog.Info("Unauthorized request")
 		return
 	}
 
 	var req request.RemoveListItemBatchRequest
-	if err := c.BindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Info("invalid request", "error", err)
-		c.JSON(400, gin.H{"message": "invalid request"})
+		response.Error(c, 400, "invalid request")
 		return
 	}
 
 	service := handler.service
-	err := service.RemoveListItemBatch(user, req.ItemIDs)
+	count, err := service.RemoveListItemBatch(c.Request.Context(), user, req.ItemIDs)
 	if err != nil {
 		c.Error(err)
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Items removed successfully", "count": len(req.ItemIDs)})
+	// Kept as a raw gin.H{} response: flat multi-field body ("message" +
+	// "count") that response.OK()'s single data field cannot represent
+	// without nesting it under "data", changing this response's shape.
+	c.JSON(200, gin.H{"message": "Items removed successfully", "count": count})
 }

@@ -1,38 +1,48 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
-	"strings"
 
 	"firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
 )
 
-// OptionalAuthMiddleware attempts to verify the Bearer token.
-// If valid, sets *bootstrap.User in context via ProcessToken. If missing or invalid, continues without user.
+// OptionalAuthMiddleware accepts anonymous requests and invalid optional tokens.
+// Verified tokens must pass the same current-account checks as required auth.
 func OptionalAuthMiddleware(client *auth.Client) gin.HandlerFunc {
+	if client == nil {
+		return optionalAuthMiddleware(nil)
+	}
+	return optionalAuthMiddleware(client)
+}
+
+func optionalAuthMiddleware(client identityClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.Request.Header.Get("Authorization")
-		if header == "" {
+		tokenID, hasBearer := bearerToken(c.GetHeader("Authorization"))
+		if !hasBearer {
 			c.Next()
 			return
 		}
-
-		parts := strings.Split(header, "Bearer ")
-		if len(parts) != 2 {
-			c.Next()
+		if client == nil {
+			abortIdentityError(c, errIdentityUnavailable)
 			return
 		}
-
-		tokenID := parts[1]
-		token, err := client.VerifyIDToken(context.Background(), tokenID)
+		token, err := client.VerifyIDToken(c.Request.Context(), tokenID)
 		if err != nil {
-			slog.Debug("Optional auth: invalid token", "error", err)
+			if classifyIdentityError(err) == errIdentityUnavailable {
+				abortIdentityError(c, errIdentityUnavailable)
+				return
+			}
+			slog.Debug("Optional auth: invalid token")
 			c.Next()
 			return
 		}
-
-		ProcessToken(c, client, token)
+		user, err := processToken(c.Request.Context(), client, token)
+		if err != nil {
+			abortIdentityError(c, err)
+			return
+		}
+		c.Set("user", user)
+		c.Next()
 	}
 }

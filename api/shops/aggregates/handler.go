@@ -25,7 +25,7 @@ func getUser(c *gin.Context) (*bootstrap.User, bool) {
 func (handler Handler) getListsWithItems(c *gin.Context) {
 	user, ok := getUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -40,6 +40,8 @@ func (handler Handler) getListsWithItems(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shop lists with items retrieved successfully",
@@ -50,7 +52,7 @@ func (handler Handler) getListsWithItems(c *gin.Context) {
 func (handler Handler) getVehicleMaintenanceSnapshot(c *gin.Context) {
 	user, ok := getUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -65,6 +67,8 @@ func (handler Handler) getVehicleMaintenanceSnapshot(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Vehicle maintenance snapshot retrieved successfully",
@@ -75,7 +79,7 @@ func (handler Handler) getVehicleMaintenanceSnapshot(c *gin.Context) {
 func (handler Handler) getShopSnapshot(c *gin.Context) {
 	user, ok := getUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -90,6 +94,8 @@ func (handler Handler) getShopSnapshot(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shop snapshot retrieved successfully",
@@ -100,7 +106,7 @@ func (handler Handler) getShopSnapshot(c *gin.Context) {
 func (handler Handler) getBootstrap(c *gin.Context) {
 	user, ok := getUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -115,6 +121,8 @@ func (handler Handler) getBootstrap(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Shops bootstrap retrieved successfully",
@@ -125,7 +133,7 @@ func (handler Handler) getBootstrap(c *gin.Context) {
 func (handler Handler) getEquipmentPmcsHistory(c *gin.Context) {
 	user, ok := getUser(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -134,6 +142,8 @@ func (handler Handler) getEquipmentPmcsHistory(c *gin.Context) {
 		writeAggregateError(c, err)
 		return
 	}
+	// Kept as a raw StandardResponse literal: response.OK hardcodes an empty
+	// Message and has no parameter to carry this success text.
 	c.JSON(http.StatusOK, response.StandardResponse{
 		Status:  http.StatusOK,
 		Message: "Equipment PMCS history retrieved successfully",
@@ -286,16 +296,12 @@ func parseOptionalIntQuery(c *gin.Context, key string) (int, error) {
 func writeAggregateError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, ErrUnauthorized):
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "unauthorized"})
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
 	case errors.Is(err, ErrAccessDenied):
-		c.JSON(http.StatusForbidden, gin.H{"message": "access denied"})
+		response.Error(c, http.StatusForbidden, "access denied")
 	case errors.Is(err, ErrInvalidLimit), errors.Is(err, ErrInvalidInclude):
-		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+		response.Error(c, http.StatusBadRequest, err.Error())
 	default:
-		c.JSON(http.StatusInternalServerError, response.StandardResponse{
-			Status:  http.StatusInternalServerError,
-			Message: ErrAggregateUnavailable.Error(),
-			Data:    nil,
-		})
+		response.Error(c, http.StatusInternalServerError, ErrAggregateUnavailable.Error())
 	}
 }

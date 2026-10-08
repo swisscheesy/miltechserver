@@ -12,7 +12,9 @@ import (
 
 	"miltechserver/api/middleware"
 	"miltechserver/api/shops"
+	"miltechserver/api/shops/shared"
 	"miltechserver/bootstrap"
+	"miltechserver/tests/testutil"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/gin-gonic/gin"
@@ -27,19 +29,27 @@ type standardResponse struct {
 }
 
 func newTestRouter(t *testing.T) *gin.Engine {
+	return newTestRouterWithAtomicCapability(t, false)
+}
+
+func newTestRouterWithAtomicCapability(t *testing.T, enabled bool) *gin.Engine {
+	return newTestRouterWithFlags(t, enabled, false)
+}
+
+func newTestRouterWithFlags(t *testing.T, atomic, messageSync bool) *gin.Engine {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(middleware.ErrorHandler)
-	router.Use(testUserMiddleware())
+	router.Use(testutil.FakeAuthMiddleware())
 
 	group := router.Group("/api/v1/auth")
 
 	deps := shops.Dependencies{
 		DB:         testDB,
 		BlobClient: (*azblob.Client)(nil),
-		Env:        &bootstrap.Env{BlobAccountName: "test-account"},
+		Env:        &bootstrap.Env{BlobAccountName: "test-account", ShopsAtomicNotificationSaveEnabled: atomic, ShopsMessageSyncEnabled: messageSync},
 	}
 
 	shops.RegisterRoutes(deps, group)
@@ -47,34 +57,20 @@ func newTestRouter(t *testing.T) *gin.Engine {
 	return router
 }
 
-func testUserMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		userID := c.GetHeader("X-User-ID")
-		if userID == "" {
-			c.Next()
-			return
-		}
-
-		user := &bootstrap.User{
-			UserID:   userID,
-			Username: c.GetHeader("X-User-Name"),
-			Email:    c.GetHeader("X-User-Email"),
-			Role:     "user",
-		}
-
-		if user.Username == "" {
-			user.Username = "test-user"
-		}
-		if user.Email == "" {
-			user.Email = userID + "@example.com"
-		}
-
-		c.Set("user", user)
-		c.Next()
-	}
+func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+	return doJSONRequestWithHeaders(t, router, method, path, body, userID, nil)
 }
 
-func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
+// doContractRequest sends the contract-2 selector that the additive Shops
+// routes (for example messages-v2) require; doJSONRequest stays header-free
+// so it keeps modelling released clients.
+func doContractRequest(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string) *httptest.ResponseRecorder {
+	t.Helper()
+	return doJSONRequestWithHeaders(t, router, method, path, body, userID, map[string]string{shared.ContractHeader: "2"})
+}
+
+func doJSONRequestWithHeaders(t *testing.T, router *gin.Engine, method string, path string, body interface{}, userID string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	var reader *strings.Reader
@@ -92,6 +88,9 @@ func doJSONRequest(t *testing.T, router *gin.Engine, method string, path string,
 	req.Header.Set("Content-Type", "application/json")
 	if userID != "" {
 		req.Header.Set("X-User-ID", userID)
+	}
+	for name, value := range headers {
+		req.Header.Set(name, value)
 	}
 
 	w := httptest.NewRecorder()
@@ -159,12 +158,18 @@ func clearShopTables(t *testing.T, db *sql.DB) {
 
 	_, err := db.Exec(
 		`TRUNCATE TABLE
+ shop_message_blob_cleanup_jobs,
+ shop_message_asset_references,
+ shop_message_uploads,
+			shop_notification_operations,
+            shop_notification_item_metadata,
 			shop_notification_items,
 			shop_vehicle_notification_changes,
 			shop_vehicle_notifications,
 			shop_vehicle,
 			shop_list_items,
 			shop_lists,
+			shop_message_counters,
 			shop_messages,
 			shop_invite_codes,
 			shop_members,

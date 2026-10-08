@@ -3,6 +3,9 @@ package shops_test
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,12 +13,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
+	"miltechserver/api/middleware"
+	"miltechserver/api/response"
+	"miltechserver/api/shops"
+	"miltechserver/bootstrap"
+	"miltechserver/tests/testutil"
 )
 
 const (
@@ -39,27 +51,55 @@ func TestShopsAggregatePerformance(t *testing.T) {
 	createShopsAggregatePerformanceFixture(t)
 	logBootstrapCoreQueryPlan(t)
 
-	router := newTestRouter(t)
+	router, database, counter := newPerformanceRouter(t)
 
 	bootstrapPath := "/api/v1/auth/shops/bootstrap"
+	finishBootstrap := measurePerformanceResources(t, database, counter)
 	bootstrapStats := measureAggregateEndpoint(t, router, bootstrapPath, aggregatePerfUserID, assertBootstrapWarmupPayload)
 	t.Logf(
-		"/shops/bootstrap p50=%s p95=%s uncompressed_bytes=%d gzip_bytes=%d",
+		"/shops/bootstrap p50=%s p95=%s p99=%s uncompressed_bytes=%d gzip_bytes=%d",
 		bootstrapStats.p50,
 		bootstrapStats.p95,
+		bootstrapStats.p99,
 		bootstrapStats.uncompressedBytes,
 		bootstrapStats.gzipBytes,
 	)
 
+	finishBootstrap("bootstrap")
 	snapshotPath := "/api/v1/auth/shops/" + aggregatePerfSnapshotID + "/snapshot"
+	finishSnapshot := measurePerformanceResources(t, database, counter)
 	snapshotStats := measureAggregateEndpoint(t, router, snapshotPath, aggregatePerfUserID, assertShopSnapshotWarmupPayload)
 	t.Logf(
-		"/shops/:shop_id/snapshot p50=%s p95=%s uncompressed_bytes=%d gzip_bytes=%d",
+		"/shops/:shop_id/snapshot p50=%s p95=%s p99=%s uncompressed_bytes=%d gzip_bytes=%d",
 		snapshotStats.p50,
 		snapshotStats.p95,
+		snapshotStats.p99,
 		snapshotStats.uncompressedBytes,
 		snapshotStats.gzipBytes,
 	)
+	finishSnapshot("snapshot_unlimited")
+	_, err := testDB.Exec(`INSERT INTO shop_messages (id,shop_id,user_id,message,created_at,updated_at,is_edited)
+ SELECT 'aggregate-message-'||n,$1,$2,repeat('x',256),now()+n*interval '1 second',now(),false FROM generate_series(1,120) n`, aggregatePerfSnapshotID, aggregatePerfUserID)
+	require.NoError(t, err)
+	for _, query := range []string{"?include=vehicles,lists,messages,notifications,services", "?include=vehicles,lists,messages&vehicles_limit=2&lists_limit=2&message_limit=2"} {
+		finish := measurePerformanceResources(t, database, counter)
+		stats := measureAggregateEndpoint(t, router, snapshotPath+query, aggregatePerfUserID, func(t *testing.T, body []byte) {
+			payload := decodeMap(t, decodeStandardResponse(t, bytes.NewBuffer(body)).Data)
+			expectedVehicles, expectedMessages := 10, 120
+			if strings.Contains(query, "vehicles_limit") {
+				expectedVehicles, expectedMessages = 2, 2
+			}
+			require.Len(t, payload["vehicles"].([]interface{}), expectedVehicles)
+			require.Len(t, payload["lists"].([]interface{}), expectedVehicles)
+			returnedMessages := payload["messages"].([]interface{})
+			require.Len(t, returnedMessages, expectedMessages)
+			for _, raw := range returnedMessages {
+				require.Len(t, raw.(map[string]interface{}), 9)
+			}
+		})
+		t.Logf("snapshot%s p50=%s p95=%s p99=%s uncompressed_bytes=%d gzip_bytes=%d", query, stats.p50, stats.p95, stats.p99, stats.uncompressedBytes, stats.gzipBytes)
+		finish(query)
+	}
 }
 
 func deleteAggregatePerformanceUser(t *testing.T) {
@@ -286,6 +326,7 @@ ORDER BY s.created_at DESC NULLS LAST, s.id DESC`, aggregatePerfUserID)
 type aggregateEndpointStats struct {
 	p50               time.Duration
 	p95               time.Duration
+	p99               time.Duration
 	uncompressedBytes int
 	gzipBytes         int
 }
@@ -320,6 +361,7 @@ func measureAggregateEndpoint(
 	return aggregateEndpointStats{
 		p50:               percentileDuration(uncompressedDurations, 0.50),
 		p95:               percentileDuration(uncompressedDurations, 0.95),
+		p99:               percentileDuration(uncompressedDurations, 0.99),
 		uncompressedBytes: uncompressedBytes,
 		gzipBytes:         gzipBytes,
 	}
@@ -484,4 +526,152 @@ func percentileDuration(values []time.Duration, percentile float64) time.Duratio
 		index = len(sortedValues) - 1
 	}
 	return sortedValues[index]
+}
+
+// Performance instrumentation lives only in tests. Statement counts exclude
+// BEGIN/COMMIT and SQL executed inside triggers; timings include rows acquisition.
+type performanceCounter struct {
+	mutex             sync.Mutex
+	statements        int
+	shopLockDurations []time.Duration
+}
+type performanceConnector struct {
+	driver.Connector
+	counter *performanceCounter
+}
+type performanceConnection struct {
+	driver.Conn
+	counter *performanceCounter
+}
+
+func (connector performanceConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	connection, err := connector.Connector.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return performanceConnection{Conn: connection, counter: connector.counter}, nil
+}
+func (connection performanceConnection) BeginTx(ctx context.Context, options driver.TxOptions) (driver.Tx, error) {
+	return connection.Conn.(driver.ConnBeginTx).BeginTx(ctx, options)
+}
+func (connection performanceConnection) record(query string, started time.Time) {
+	connection.counter.mutex.Lock()
+	defer connection.counter.mutex.Unlock()
+	connection.counter.statements++
+	if strings.Contains(strings.ToUpper(query), "FOR UPDATE") && strings.Contains(strings.ToLower(query), "shops") {
+		connection.counter.shopLockDurations = append(connection.counter.shopLockDurations, time.Since(started))
+	}
+}
+func (connection performanceConnection) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	started := time.Now()
+	rows, err := connection.Conn.(driver.QueryerContext).QueryContext(ctx, query, args)
+	connection.record(query, started)
+	return rows, err
+}
+func (connection performanceConnection) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	started := time.Now()
+	result, err := connection.Conn.(driver.ExecerContext).ExecContext(ctx, query, args)
+	connection.record(query, started)
+	return result, err
+}
+func newPerformanceRouter(t *testing.T) (*gin.Engine, *sql.DB, *performanceCounter) {
+	t.Helper()
+	connector, err := pq.NewConnector(os.Getenv("TEST_DATABASE_URL"))
+	require.NoError(t, err)
+	counter := &performanceCounter{}
+	database := sql.OpenDB(performanceConnector{Connector: connector, counter: counter})
+	database.SetMaxOpenConns(8)
+	database.SetMaxIdleConns(8)
+	t.Cleanup(func() { require.NoError(t, database.Close()) })
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(middleware.ErrorHandler, testutil.FakeAuthMiddleware())
+	shops.RegisterRoutes(shops.Dependencies{DB: database, Env: &bootstrap.Env{BlobAccountName: "test-account"}}, router.Group("/api/v1/auth"))
+	return router, database, counter
+}
+func measurePerformanceResources(t *testing.T, database *sql.DB, counter *performanceCounter) func(string) {
+	t.Helper()
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+	poolBefore := database.Stats()
+	counter.mutex.Lock()
+	statementsBefore, lockBefore := counter.statements, len(counter.shopLockDurations)
+	counter.mutex.Unlock()
+	started := time.Now()
+	stop, stopped := make(chan struct{}), make(chan struct{})
+	var samples, lockSamples, maxWaiting int
+	var samplerErr error
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				var waiting int
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				err := testDB.QueryRowContext(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'`).Scan(&waiting)
+				cancel()
+				if err != nil {
+					samplerErr = err
+					return
+				}
+				samples++
+				if waiting > 0 {
+					lockSamples++
+				}
+				if waiting > maxWaiting {
+					maxWaiting = waiting
+				}
+			}
+		}
+	}()
+	var stopOnce sync.Once
+	stopAndWait := func() { stopOnce.Do(func() { close(stop) }); <-stopped }
+	t.Cleanup(stopAndWait)
+	return func(label string) {
+		stopAndWait()
+		require.NoError(t, samplerErr)
+		var after runtime.MemStats
+		runtime.ReadMemStats(&after)
+		poolAfter := database.Stats()
+		counter.mutex.Lock()
+		statements := counter.statements - statementsBefore
+		locks := append([]time.Duration(nil), counter.shopLockDurations[lockBefore:]...)
+		counter.mutex.Unlock()
+		t.Logf("resources %s wall=%s statement_count=%d max_open=%d pool_wait_count=%d pool_wait_duration=%s pool_open=%d total_alloc_bytes=%d heap_before_bytes=%d heap_after_bytes=%d lock_samples=%d/%d max_waiting_sessions=%d sampling_interval=5ms", label, time.Since(started), statements, poolAfter.MaxOpenConnections, poolAfter.WaitCount-poolBefore.WaitCount, poolAfter.WaitDuration-poolBefore.WaitDuration, poolAfter.OpenConnections, after.TotalAlloc-before.TotalAlloc, before.HeapAlloc, after.HeapAlloc, lockSamples, samples, maxWaiting)
+		if len(locks) > 0 {
+			t.Logf("Shop_lock_query_duration %s n=%d p50=%s p95=%s p99=%s includes_execution=true", label, len(locks), percentileDuration(locks, .5), percentileDuration(locks, .95), percentileDuration(locks, .99))
+		}
+	}
+}
+
+func TestPmcsFullHistoryPerformance(t *testing.T) {
+	if os.Getenv("SHOP_AGGREGATE_PERF") != "1" {
+		t.Skip("set SHOP_AGGREGATE_PERF=1 for complete PMCS payload measurements")
+	}
+	seedPmcsHistoryCapacity(t, 65536)
+	router, database, counter := newPerformanceRouter(t)
+	path := "/api/v1/auth/shops/equipment-pmcs-history"
+	warmup := doJSONRequest(t, router, http.MethodGet, path, nil, pmcsCapacityUserID)
+	require.Equal(t, http.StatusOK, warmup.Code)
+	var payload response.EquipmentPmcsHistoryResponse
+	require.NoError(t, json.Unmarshal(decodeStandardResponse(t, warmup.Body).Data, &payload))
+	assertPmcsHistoryCapacity(t, payload.Equipment, 65536)
+	const runs = 20
+	durations := make([]time.Duration, 0, runs)
+	finish := measurePerformanceResources(t, database, counter)
+	responseBytes := 0
+	for i := 0; i < runs; i++ {
+		started := time.Now()
+		result := doJSONRequest(t, router, http.MethodGet, path, nil, pmcsCapacityUserID)
+		durations = append(durations, time.Since(started))
+		require.Equal(t, http.StatusOK, result.Code)
+		responseBytes = result.Body.Len()
+	}
+	finish("PMCS_65536_full_history_20_requests")
+	t.Logf("PMCS_full_history runs=%d inspections=65536 p50=%s p95=%s p99=%s uncompressed_bytes=%d", runs, percentileDuration(durations, .5), percentileDuration(durations, .95), percentileDuration(durations, .99), responseBytes)
 }
