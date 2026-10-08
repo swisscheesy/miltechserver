@@ -31,7 +31,7 @@ func SetupEngine() *gin.Engine {
 	var app bootstrap.Application
 	server, err := setupEngine(ctx, env, jetgen.Generate, func(ctx context.Context, env *bootstrap.Env) (bootstrap.Application, error) {
 		var err error
-		app, err = bootstrap.App(ctx, env)
+		app = bootstrap.App(ctx, env)
 		return app, err
 	})
 	if err != nil {
