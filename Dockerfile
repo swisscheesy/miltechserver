@@ -41,8 +41,13 @@
     
     # Copy the built binary and necessary files from backend builder
     COPY --from=backend-builder /app/server .
-    COPY --from=backend-builder /app/.gen ./ .gen/
     COPY --from=backend-builder /app/fire_auth_key.json ./
+
+    # Startup regenerates .gen and publishes it by renaming directories. A
+    # directory shipped in an image layer cannot be renamed on overlayfs (EXDEV:
+    # "required startup Jet generation failed"), so .gen must start empty. The
+    # generated sources are compiled into ./server and are not read at runtime.
+    RUN mkdir -p /app/.gen
     
     # Copy the built frontend from frontend builder
     COPY --from=frontend-builder /app/frontend/build ./static/

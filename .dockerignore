@@ -1,7 +1,6 @@
 # Runtime secrets must be mounted, never sent to a builder.
 **/.env
 **/.env.*
-**/fire_auth_key*.json
 **/service-account*.json
 **/service_account*.json
 **/credentials*.json

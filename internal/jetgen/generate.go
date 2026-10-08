@@ -231,13 +231,15 @@ func inspectSource(ctx context.Context, db *sql.DB, schema string) (Manifest, er
 
 // The digest covers relation/column definitions, defaults, constraints, indexes,
 // functions, triggers, enums and sequences; it is provenance, not an exact-match gate.
+// relkind and tgenabled are the internal "char" type: text || "char" is ambiguous
+// on Postgres 15+ ("operator is not unique"), so both need an explicit ::text.
 const catalogQuery = `SELECT COALESCE(string_agg(record,E'\n' ORDER BY record),'') FROM (
  SELECT 'column:'||c.relname||':'||a.attnum||':'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull||':'||COALESCE(pg_get_expr(d.adbin,d.adrelid),'') record FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum WHERE n.nspname=$1 AND a.attnum>0 AND NOT a.attisdropped
- UNION ALL SELECT 'relation:'||c.relname||':'||c.relkind||':'||CASE WHEN c.relkind IN ('v','m') THEN pg_get_viewdef(c.oid) ELSE '' END FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1
+ UNION ALL SELECT 'relation:'||c.relname||':'||c.relkind::text||':'||CASE WHEN c.relkind IN ('v','m') THEN pg_get_viewdef(c.oid) ELSE '' END FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1
  UNION ALL SELECT 'constraint:'||c.conname||':'||pg_get_constraintdef(c.oid) FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname=$1
  UNION ALL SELECT 'index:'||indexname||':'||indexdef FROM pg_indexes WHERE schemaname=$1
  UNION ALL SELECT 'function:'||p.proname||':'||pg_get_functiondef(p.oid) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1 AND p.prokind IN ('f','p')
- UNION ALL SELECT 'trigger:'||c.relname||':'||t.tgenabled||':'||pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND NOT t.tgisinternal
+ UNION ALL SELECT 'trigger:'||c.relname||':'||t.tgenabled::text||':'||pg_get_triggerdef(t.oid) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND NOT t.tgisinternal
  UNION ALL SELECT 'enum:'||t.typname||':'||e.enumsortorder||':'||e.enumlabel FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace JOIN pg_enum e ON e.enumtypid=t.oid WHERE n.nspname=$1
  UNION ALL SELECT 'sequence:'||sequencename||':'||data_type||':'||start_value||':'||min_value||':'||max_value||':'||increment_by||':'||cycle FROM pg_sequences WHERE schemaname=$1
  ) catalog`
